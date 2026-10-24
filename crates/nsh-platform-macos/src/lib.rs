@@ -37,6 +37,8 @@ mod file_drop;
 mod file_requests;
 mod fps;
 mod global_shortcut;
+#[cfg(feature = "gpui-agent")]
+mod gpui_agent;
 mod gpu;
 mod image;
 mod input;
@@ -57,7 +59,9 @@ mod sight;
 // Shared with iOS.
 use nsh_platform_apple::{audio, notifications, speech};
 mod surface;
-#[cfg(feature = "dev")]
+// The test agent and the gpui-agent host are synth's only callers; the
+// helpers it uses in input are gated the same way.
+#[cfg(any(feature = "dev", feature = "gpui-agent"))]
 mod synth;
 mod system;
 mod text;
