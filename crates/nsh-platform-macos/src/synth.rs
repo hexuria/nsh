@@ -68,6 +68,7 @@ pub(crate) fn timestamp() -> f64 {
 /// `CGMomentumScrollPhase` (`0`: none), stamped `at` (seconds since the
 /// system started).
 #[allow(clippy::too_many_arguments)]
+#[cfg(any(feature = "dev", test))]
 pub(crate) fn wheel_with(
     window: &NSWindow,
     x: f64,
