@@ -121,7 +121,10 @@ fn handle(surface: &Rc<Surface>, request: &Request) -> Response {
             synth::key(window, binding);
         }),
         Op::Assert { spec } => assert_spec(surface, spec),
-        Op::Invoke { name, .. } => Err(format!("unknown invoke: {name}")),
+        Op::Invoke { name, args } => match name.as_str() {
+            "drag" => drag(surface, args),
+            _ => Err(format!("unknown invoke: {name}")),
+        },
         Op::Screenshot { path, mode, .. } => screenshot(surface, path.as_deref(), *mode),
         Op::Shutdown => with_window(surface, |window| window.close()),
         Op::Keybindings => Ok(DispatchResult::json(serde_json::json!([]))),
@@ -421,6 +424,49 @@ fn click(
     expect_fingerprint: Option<u64>,
 ) -> Result<DispatchResult, String> {
     with_focused(surface, target, delivery, expect_fingerprint, |_| {})
+}
+
+/// `invoke("drag", {target, dx, dy, expect_fingerprint?})` — a user's
+/// drag on `target`: hover, down at its centre, a run of dragged steps
+/// to centre + `(dx, dy)` (pan gestures need a travel, not one jump),
+/// up at the end. Points are content points, top-left origin.
+fn drag(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchResult, String> {
+    let target = args.get("target").and_then(|v| v.as_str()).unwrap_or_default();
+    let dx = args.get("dx").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let dy = args.get("dy").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let expect = args.get("expect_fingerprint").and_then(|v| v.as_u64());
+    if let Some(err) = stale(surface, target, expect) {
+        return Err(err);
+    }
+    let Some(window) = surface.root.ns().window() else {
+        return Err("the window is gone".into());
+    };
+    let Some(view) = resolve(surface, target) else {
+        return Err(format!("target_gone: {target}"));
+    };
+    let Some(bounds) = in_window(view.ns(), view.ns().bounds(), &window) else {
+        return Err(format!("in_viewport_unavailable: {target} is not in the window"));
+    };
+    let (x0, y0) = (
+        f64::from(bounds.origin.x.0) + f64::from(bounds.size.width.0) / 2.0,
+        f64::from(bounds.origin.y.0) + f64::from(bounds.size.height.0) / 2.0,
+    );
+    activate(&window);
+    synth::mouse(&window, NSEventType::MouseMoved, x0, y0, 0);
+    synth::mouse(&window, NSEventType::LeftMouseDown, x0, y0, 1);
+    const STEPS: usize = 6;
+    for i in 1..=STEPS {
+        let t = i as f64 / STEPS as f64;
+        synth::mouse(
+            &window,
+            NSEventType::LeftMouseDragged,
+            x0 + dx * t,
+            y0 + dy * t,
+            1,
+        );
+    }
+    synth::mouse(&window, NSEventType::LeftMouseUp, x0 + dx, y0 + dy, 1);
+    Ok(DispatchResult::empty())
 }
 
 fn screenshot(
