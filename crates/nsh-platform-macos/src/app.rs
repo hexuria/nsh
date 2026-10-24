@@ -373,6 +373,8 @@ impl AppView {
         if view.options.borrow().fps || nsh_engine::perf::enabled_by_env() {
             view.set_fps_monitor(true);
         }
+        #[cfg(feature = "gpui-agent")]
+        crate::gpui_agent::install(&view.surface);
         view
     }
 
