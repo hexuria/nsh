@@ -1946,6 +1946,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpui-agent"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71bd3fba3da2ba2253b47d1970ed91ea51df3c1d9d359194fa79914b4ddcf721"
+dependencies = [
+ "hmac 0.12.1",
+ "png 0.17.16",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "graphene-rs"
 version = "0.22.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3445,6 +3459,7 @@ dependencies = [
  "block2",
  "crossbeam-channel",
  "dispatch2",
+ "gpui-agent",
  "libc",
  "log",
  "nsh-base",
