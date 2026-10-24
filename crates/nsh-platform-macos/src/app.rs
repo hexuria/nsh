@@ -238,6 +238,8 @@ impl AppView {
         if view.options.borrow().fps {
             view.set_fps_monitor(true);
         }
+        #[cfg(feature = "gpui-agent")]
+        crate::gpui_agent::install(&view.surface);
         view
     }
 

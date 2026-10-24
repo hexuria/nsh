@@ -813,7 +813,7 @@ pub(crate) fn us_key(code: u16) -> Option<char> {
 
 /// The virtual key code of the key typing `c` on the US layout (without
 /// Shift), for synthesized key events.
-#[cfg(feature = "dev")]
+#[cfg(any(feature = "dev", feature = "gpui-agent"))]
 pub(crate) fn us_key_code(c: char) -> Option<u16> {
     let c = u8::try_from(c.to_ascii_lowercase())
         .ok()

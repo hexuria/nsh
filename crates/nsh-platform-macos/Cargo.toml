@@ -18,6 +18,9 @@ default = ["js"]
 js = ["nsh-engine/js"]
 # Development support: dev server client, log forwarding, error overlay.
 dev = ["js", "dep:nsh-dev", "dep:nsh-testing"]
+# The gpui-agent control plane (`GPUI_AGENT=1`): snapshot/click/type over
+# TCP for the `gpui-agent` CLI.
+gpui-agent = ["dep:gpui-agent"]
 
 [dependencies]
 log.workspace = true
@@ -44,3 +47,4 @@ serde_json.workspace = true
 libc.workspace = true
 nsh-dev = { workspace = true, features = ["client"], optional = true }
 nsh-testing = { workspace = true, features = ["agent"], optional = true }
+gpui-agent = { version = "0.1.0", optional = true }
