@@ -123,6 +123,7 @@ fn handle(surface: &Rc<Surface>, request: &Request) -> Response {
         Op::Assert { spec } => assert_spec(surface, spec),
         Op::Invoke { name, args } => match name.as_str() {
             "drag" => drag(surface, args),
+            "scroll" => scroll(surface, args),
             _ => Err(format!("unknown invoke: {name}")),
         },
         Op::Screenshot { path, mode, .. } => screenshot(surface, path.as_deref(), *mode),
@@ -466,6 +467,99 @@ fn drag(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchResul
         );
     }
     synth::mouse(&window, NSEventType::LeftMouseUp, x0 + dx, y0 + dy, 1);
+    Ok(DispatchResult::empty())
+}
+
+/// `invoke("scroll", {dx, dy, x?, y?, target?})` — a trackpad scroll
+/// gesture of `(dx, dy)` points at `x,y` (or `target`'s centre, or the
+/// window's): began, a run of changed deltas a gesture apart, ended —
+/// the same shape `agent::scroll` feeds the headless driver.
+fn scroll(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchResult, String> {
+    let dx = args.get("dx").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let dy = args.get("dy").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let Some(window) = surface.root.ns().window() else {
+        return Err("the window is gone".into());
+    };
+    let (x, y) = if let (Some(x), Some(y)) = (
+        args.get("x").and_then(|v| v.as_f64()),
+        args.get("y").and_then(|v| v.as_f64()),
+    ) {
+        (x, y)
+    } else if let Some(target) = args.get("target").and_then(|v| v.as_str()) {
+        let Some(view) = resolve(surface, target) else {
+            return Err(format!("target_gone: {target}"));
+        };
+        let Some(bounds) = in_window(view.ns(), view.ns().bounds(), &window) else {
+            return Err(format!("in_viewport_unavailable: {target} is not in the window"));
+        };
+        (
+            f64::from(bounds.origin.x.0) + f64::from(bounds.size.width.0) / 2.0,
+            f64::from(bounds.origin.y.0) + f64::from(bounds.size.height.0) / 2.0,
+        )
+    } else {
+        let b = surface.root.ns().bounds();
+        (b.size.width / 2.0, b.size.height / 2.0)
+    };
+    activate(&window);
+    const STEP: f64 = 24.0;
+    let gesture = dx != 0.0 || dy != 0.0;
+    let frames = ((dx.abs().max(dy.abs()) / STEP).ceil() as u32).max(1);
+    if gesture {
+        synth::wheel_with(&window, x, y, 0, 0, Some(1), 0, synth::timestamp());
+    }
+    let (mut sent_x, mut sent_y) = (0i32, 0i32);
+    for i in 1..=frames {
+        let t = i as f64 / f64::from(frames);
+        let (to_x, to_y) = ((dx * t).round() as i32, (dy * t).round() as i32);
+        if !gesture || (to_x == sent_x && to_y == sent_y) {
+            continue;
+        }
+        synth::wheel_with(
+            &window,
+            x,
+            y,
+            to_x - sent_x,
+            to_y - sent_y,
+            Some(2),
+            0,
+            synth::timestamp(),
+        );
+        (sent_x, sent_y) = (to_x, to_y);
+    }
+    if gesture {
+        synth::wheel_with(&window, x, y, 0, 0, Some(4), 0, synth::timestamp());
+    }
+    // `momentum`: that many more points as the system's coasting momentum
+    // (phase events a trackpad sends after the gesture ends); left
+    // running — no end — so a press can be checked against a live glide.
+    // It runs along the gesture's axis, or vertically on its own sign.
+    let momentum = args.get("momentum").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    if momentum != 0.0 {
+        // `dx=dy=0` continues momentum already running (changed deltas
+        // only, as the system sends until it decays).
+        if gesture {
+            synth::wheel_with(&window, x, y, 0, 0, None, 1, synth::timestamp());
+        }
+        let horizontal = dx != 0.0 && dy == 0.0;
+        let frames = ((momentum.abs() / STEP).ceil() as u32).max(1);
+        let (mut sent_x, mut sent_y) = (0i32, 0i32);
+        for i in 1..=frames {
+            let t = i as f64 / f64::from(frames);
+            let v = (momentum * t).round() as i32;
+            let (to_x, to_y) = if horizontal { (v, 0) } else { (0, v) };
+            synth::wheel_with(
+                &window,
+                x,
+                y,
+                to_x - sent_x,
+                to_y - sent_y,
+                None,
+                2,
+                synth::timestamp(),
+            );
+            (sent_x, sent_y) = (to_x, to_y);
+        }
+    }
     Ok(DispatchResult::empty())
 }
 
