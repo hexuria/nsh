@@ -943,7 +943,7 @@ fn scripted_type() -> Option<NSEventType> {
 
 /// Runs `f` (which hands `event` to a window) with `event` as the one
 /// AppKit handles, for the root's `hitTest:`.
-#[cfg(any(feature = "dev", test))]
+#[cfg(any(feature = "dev", feature = "gpui-agent", test))]
 pub(crate) fn scripted<R>(event: &NSEvent, f: impl FnOnce() -> R) -> R {
     let old = SCRIPTED.replace(Some(event.retain()));
     let r = f();
