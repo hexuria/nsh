@@ -1267,7 +1267,13 @@ impl NshView {
         // applied), not the logical ones, for the view and its ancestors
         // alike: the clip spaces are the ancestors' containers'.
         let ancestors = std::iter::successors(self.parent_view(), NshView::parent_view)
-            .map(|p| (placed(p.ns().frame()), crate::scroll::bounds_origin(&p)));
+            .map(|p| {
+                (
+                    placed(p.ns().frame()),
+                    crate::scroll::bounds_origin(&p),
+                    p.state().clips(),
+                )
+            });
         clip_shows(placed(ns.frame()), ancestors)
     }
 
@@ -1463,18 +1469,25 @@ fn placed(f: NSRect) -> Span {
 
 /// Whether `rect` (in its parent's content space) is not clipped away by
 /// `ancestors`, innermost first: each one's placed frame (in its own
-/// parent's content space) and the origin its content shows from (a
-/// scroll view's offset, (0, 0) otherwise).
-fn clip_shows(rect: Span, ancestors: impl IntoIterator<Item = (Span, (f32, f32))>) -> bool {
+/// parent's content space), the origin its content shows from (a scroll
+/// view's offset, (0, 0) otherwise) and whether it clips its children.
+/// Only clipping ancestors bound the rect — a plain view's children can
+/// hang out of it (a reaction badge above its card).
+fn clip_shows(
+    rect: Span,
+    ancestors: impl IntoIterator<Item = (Span, (f32, f32), bool)>,
+) -> bool {
     let (mut x0, mut y0, mut x1, mut y1) = rect;
-    for (frame, (ox, oy)) in ancestors {
-        let (w, h) = (frame.2 - frame.0, frame.3 - frame.1);
-        x0 = x0.max(ox);
-        y0 = y0.max(oy);
-        x1 = x1.min(ox + w);
-        y1 = y1.min(oy + h);
-        if x1 <= x0 || y1 <= y0 {
-            return false;
+    for (frame, (ox, oy), clips) in ancestors {
+        if clips {
+            let (w, h) = (frame.2 - frame.0, frame.3 - frame.1);
+            x0 = x0.max(ox);
+            y0 = y0.max(oy);
+            x1 = x1.min(ox + w);
+            y1 = y1.min(oy + h);
+            if x1 <= x0 || y1 <= y0 {
+                return false;
+            }
         }
         // Into the grandparent's content space: the offset origin shows
         // at the frame's origin.
@@ -1492,9 +1505,9 @@ mod tests {
 
     #[test]
     fn a_row_shows_through_the_scroll_offset() {
-        let screen = ((0.0, 0.0, 400.0, 800.0), (0.0, 0.0));
+        let screen = ((0.0, 0.0, 400.0, 800.0), (0.0, 0.0), true);
         let row = (0.0, 0.0, 400.0, 40.0);
-        let list = |y| ((0.0, 0.0, 400.0, 600.0), (0.0, y));
+        let list = |y| ((0.0, 0.0, 400.0, 600.0), (0.0, y), true);
         assert!(clip_shows(row, [list(0.0), screen]));
         assert!(!clip_shows(row, [list(1000.0), screen]));
     }
@@ -1504,10 +1517,10 @@ mod tests {
         // The header's logical frame is at the top of the content; scrolled
         // 1000 points, it is placed (shifted) at 1000, where the list shows.
         let text = (8.0, 8.0, 200.0, 32.0);
-        let header = ((0.0, 1000.0, 400.0, 1040.0), (0.0, 0.0));
-        let list = ((0.0, 0.0, 400.0, 600.0), (0.0, 1000.0));
+        let header = ((0.0, 1000.0, 400.0, 1040.0), (0.0, 0.0), true);
+        let list = ((0.0, 0.0, 400.0, 600.0), (0.0, 1000.0), true);
         assert!(clip_shows(text, [header, list]));
-        let logical = ((0.0, 0.0, 400.0, 40.0), (0.0, 0.0));
+        let logical = ((0.0, 0.0, 400.0, 40.0), (0.0, 0.0), true);
         assert!(!clip_shows(text, [logical, list]));
     }
 
@@ -1516,11 +1529,23 @@ mod tests {
         // A 400-point mirrored list scrolled 500 points: its bounds origin is
         // -500, and the cell at logical x 600 is placed at 400 - 600 - 90.
         let text = (10.0, 10.0, 80.0, 70.0);
-        let list = ((0.0, 0.0, 400.0, 80.0), (-500.0, 0.0));
-        let cell = ((-290.0, 0.0, -200.0, 80.0), (0.0, 0.0));
+        let list = ((0.0, 0.0, 400.0, 80.0), (-500.0, 0.0), true);
+        let cell = ((-290.0, 0.0, -200.0, 80.0), (0.0, 0.0), true);
         assert!(clip_shows(text, [cell, list]));
-        let logical = ((600.0, 0.0, 690.0, 80.0), (0.0, 0.0));
+        let logical = ((600.0, 0.0, 690.0, 80.0), (0.0, 0.0), true);
         assert!(!clip_shows(text, [logical, list]));
+    }
+
+    #[test]
+    fn an_overflowing_child_of_a_plain_view_shows() {
+        // A badge at `top: -27` hangs out of its parent, which does not
+        // clip: the scroll view still bounds it.
+        let text = (8.0, -17.0, 28.0, 0.0);
+        let parent = ((100.0, 200.0, 400.0, 400.0), (0.0, 0.0), false);
+        let list = ((0.0, 0.0, 400.0, 600.0), (0.0, 0.0), true);
+        assert!(clip_shows(text, [parent, list]));
+        let deep = ((0.0, 0.0, 400.0, 600.0), (0.0, 300.0), true);
+        assert!(!clip_shows(text, [parent, deep]));
     }
 
     #[test]
