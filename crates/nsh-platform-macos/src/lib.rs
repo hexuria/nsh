@@ -33,6 +33,8 @@ mod decor;
 pub mod dev;
 mod file_drop;
 mod fps;
+#[cfg(feature = "gpui-agent")]
+mod gpui_agent;
 mod gpu;
 mod image;
 mod input;
@@ -46,7 +48,9 @@ mod scroll;
 mod selectable_view;
 mod shader;
 mod surface;
-#[cfg(feature = "dev")]
+// The test agent and the gpui-agent host are synth's only callers; the
+// helpers it uses in input are gated the same way.
+#[cfg(any(feature = "dev", feature = "gpui-agent"))]
 mod synth;
 mod system;
 mod text;

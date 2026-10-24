@@ -100,7 +100,7 @@ struct AxState {
 
 /// The kinds of element nsh makes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Ax {
+pub(crate) enum Ax {
     /// No element.
     Generic,
     Button,
@@ -136,7 +136,7 @@ enum Ax {
 
 /// A view's value.
 #[derive(Debug, Clone, PartialEq)]
-enum Value {
+pub(crate) enum Value {
     None,
     /// Read as text.
     Text(String),
@@ -153,18 +153,18 @@ enum Value {
 
 /// Everything set on a view's accessibility attributes.
 #[derive(Debug, Clone, PartialEq)]
-struct Spec {
-    role: Ax,
-    label: Option<String>,
-    help: Option<String>,
-    value: Value,
-    disabled: bool,
-    selected: bool,
-    expanded: Option<bool>,
+pub(crate) struct Spec {
+    pub(crate) role: Ax,
+    pub(crate) label: Option<String>,
+    pub(crate) help: Option<String>,
+    pub(crate) value: Value,
+    pub(crate) disabled: bool,
+    pub(crate) selected: bool,
+    pub(crate) expanded: Option<bool>,
     /// Hidden with its subtree.
-    hidden: bool,
+    pub(crate) hidden: bool,
     /// One element: its children are not exposed.
-    grouped: bool,
+    pub(crate) grouped: bool,
 }
 
 /// A batch is about to be applied. (AppKit takes roles at any time, so
@@ -513,7 +513,7 @@ fn ax_role(role: Ax) -> (Option<Retained<NSString>>, Option<Retained<NSString>>)
 /// What to give AppKit for a view of `kind` with accessibility `a`;
 /// `invisible` for `visibility: hidden`, which hides the subtree as
 /// `accessibilityElementsHidden` does: what is not drawn is not read either.
-fn spec_for(
+pub(crate) fn spec_for(
     a: &Accessibility,
     kind: ViewKind,
     pressable: bool,
