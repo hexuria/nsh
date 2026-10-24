@@ -27,7 +27,7 @@ use gpui_agent::tree::{Bounds as TreeBounds, UiNode, UiTree};
 use gpui_agent::{AgentMailbox, DispatchResult, server};
 use nsh_core::EventKind;
 use objc2::MainThreadMarker;
-use objc2_app_kit::{NSEventType, NSView, NSWindow};
+use objc2_app_kit::{NSEventModifierFlags, NSEventType, NSView, NSWindow};
 use objc2_foundation::NSRect;
 
 use crate::access::{Ax, Value};
@@ -123,6 +123,7 @@ fn handle(surface: &Rc<Surface>, request: &Request) -> Response {
         Op::Assert { spec } => assert_spec(surface, spec),
         Op::Invoke { name, args } => match name.as_str() {
             "drag" => drag(surface, args),
+            "hover" => hover(surface, args),
             "scroll" => scroll(surface, args),
             _ => Err(format!("unknown invoke: {name}")),
         },
@@ -467,6 +468,50 @@ fn drag(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchResul
         );
     }
     synth::mouse(&window, NSEventType::LeftMouseUp, x0 + dx, y0 + dy, 1);
+    Ok(DispatchResult::empty())
+}
+
+/// `invoke("hover", {x?, y?, target?})` — a pointer move with no press:
+/// the hover a user gives a row to light its action bar. Points are
+/// content points, top-left origin; `target` centres on it.
+fn hover(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchResult, String> {
+    let Some(window) = surface.root.ns().window() else {
+        return Err("the window is gone".into());
+    };
+    let (x, y) = if let (Some(x), Some(y)) = (
+        args.get("x").and_then(|v| v.as_f64()),
+        args.get("y").and_then(|v| v.as_f64()),
+    ) {
+        (x, y)
+    } else if let Some(target) = args.get("target").and_then(|v| v.as_str()) {
+        let Some(view) = resolve(surface, target) else {
+            return Err(format!("target_gone: {target}"));
+        };
+        let Some(bounds) = in_window(view.ns(), view.ns().bounds(), &window) else {
+            return Err(format!("in_viewport_unavailable: {target} is not in the window"));
+        };
+        (
+            f64::from(bounds.origin.x.0) + f64::from(bounds.size.width.0) / 2.0,
+            f64::from(bounds.origin.y.0) + f64::from(bounds.size.height.0) / 2.0,
+        )
+    } else {
+        let b = surface.root.ns().bounds();
+        (b.size.width / 2.0, b.size.height / 2.0)
+    };
+    activate(&window);
+    // `postEvent` drops `MouseMoved` when the window's
+    // `acceptsMouseMovedEvents` is off (tracking areas opt real moves in,
+    // not posted ones): dispatch it through the input path itself.
+    if let Some(event) = synth::mouse_event(
+        &window,
+        NSEventType::MouseMoved,
+        x,
+        y,
+        0,
+        NSEventModifierFlags::empty(),
+    ) {
+        crate::input::event(surface, &event);
+    }
     Ok(DispatchResult::empty())
 }
 
