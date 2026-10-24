@@ -402,6 +402,7 @@ pub(crate) enum Ax {
     Row,
     Cell,
     Search,
+    TextField,
     Alert,
     Status,
     Timer,
@@ -1117,6 +1118,7 @@ fn ax_role(role: Ax) -> (Option<Retained<NSString>>, Option<Retained<NSString>>)
                 constant(NSAccessibilityTextFieldRole),
                 constant(NSAccessibilitySearchFieldSubrole),
             ),
+            Ax::TextField => (constant(NSAccessibilityTextFieldRole), None),
             // ARIA's landmark subroles, as WebKit maps them.
             Ax::Alert => (
                 constant(NSAccessibilityGroupRole),
@@ -1267,6 +1269,7 @@ fn base_role(a: &Accessibility, kind: ViewKind, pressable: bool) -> Ax {
             ViewKind::Text => Ax::Text,
             ViewKind::Image if a.label.is_some() => Ax::Image,
             _ if a.accessible == Some(false) => Ax::Generic,
+            ViewKind::Input => Ax::TextField,
             _ if pressable => Ax::Button,
             ViewKind::Scroll => Ax::ScrollArea,
             _ if a.label.is_some() || a.accessible == Some(true) => Ax::Group,
