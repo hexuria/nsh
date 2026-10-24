@@ -124,6 +124,7 @@ fn handle(surface: &Rc<Surface>, request: &Request) -> Response {
         Op::Invoke { name, args } => match name.as_str() {
             "drag" => drag(surface, args),
             "hover" => hover(surface, args),
+            "press" => press(surface, args),
             "scroll" => scroll(surface, args),
             _ => Err(format!("unknown invoke: {name}")),
         },
@@ -273,6 +274,7 @@ fn role_name(role: Ax) -> &'static str {
         Ax::List => "list",
         Ax::Grid => "grid",
         Ax::Search => "search",
+        Ax::TextField => "textfield",
         Ax::Alert => "alert",
         Ax::Status => "status",
         Ax::Timer => "timer",
@@ -443,16 +445,7 @@ fn drag(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchResul
     let Some(window) = surface.root.ns().window() else {
         return Err("the window is gone".into());
     };
-    let Some(view) = resolve(surface, target) else {
-        return Err(format!("target_gone: {target}"));
-    };
-    let Some(bounds) = in_window(view.ns(), view.ns().bounds(), &window) else {
-        return Err(format!("in_viewport_unavailable: {target} is not in the window"));
-    };
-    let (x0, y0) = (
-        f64::from(bounds.origin.x.0) + f64::from(bounds.size.width.0) / 2.0,
-        f64::from(bounds.origin.y.0) + f64::from(bounds.size.height.0) / 2.0,
-    );
+    let (x0, y0) = point_of(surface, &window, args)?;
     activate(&window);
     synth::mouse(&window, NSEventType::MouseMoved, x0, y0, 0);
     synth::mouse(&window, NSEventType::LeftMouseDown, x0, y0, 1);
@@ -471,6 +464,47 @@ fn drag(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchResul
     Ok(DispatchResult::empty())
 }
 
+/// The point an invoke's args name: explicit `x`/`y` content points
+/// (top-left origin), `target`'s centre, or the window's centre.
+fn point_of(
+    surface: &Rc<Surface>,
+    window: &NSWindow,
+    args: &serde_json::Value,
+) -> Result<(f64, f64), String> {
+    if let (Some(x), Some(y)) = (
+        args.get("x").and_then(|v| v.as_f64()),
+        args.get("y").and_then(|v| v.as_f64()),
+    ) {
+        return Ok((x, y));
+    }
+    if let Some(target) = args.get("target").and_then(|v| v.as_str()) {
+        let Some(view) = resolve(surface, target) else {
+            return Err(format!("target_gone: {target}"));
+        };
+        let Some(bounds) = in_window(view.ns(), view.ns().bounds(), window) else {
+            return Err(format!("in_viewport_unavailable: {target} is not in the window"));
+        };
+        return Ok((
+            f64::from(bounds.origin.x.0) + f64::from(bounds.size.width.0) / 2.0,
+            f64::from(bounds.origin.y.0) + f64::from(bounds.size.height.0) / 2.0,
+        ));
+    }
+    let b = surface.root.ns().bounds();
+    Ok((b.size.width / 2.0, b.size.height / 2.0))
+}
+
+/// `invoke("press", {x?, y?, target?})` — a user's press at a point:
+/// hover, down, up. For content with no accessible node to click, such
+/// as a mini app's inner views.
+fn press(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchResult, String> {
+    let Some(window) = surface.root.ns().window() else {
+        return Err("the window is gone".into());
+    };
+    let (x, y) = point_of(surface, &window, args)?;
+    press_at(&window, x, y);
+    Ok(DispatchResult::empty())
+}
+
 /// `invoke("hover", {x?, y?, target?})` — a pointer move with no press:
 /// the hover a user gives a row to light its action bar. Points are
 /// content points, top-left origin; `target` centres on it.
@@ -478,26 +512,7 @@ fn hover(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchResu
     let Some(window) = surface.root.ns().window() else {
         return Err("the window is gone".into());
     };
-    let (x, y) = if let (Some(x), Some(y)) = (
-        args.get("x").and_then(|v| v.as_f64()),
-        args.get("y").and_then(|v| v.as_f64()),
-    ) {
-        (x, y)
-    } else if let Some(target) = args.get("target").and_then(|v| v.as_str()) {
-        let Some(view) = resolve(surface, target) else {
-            return Err(format!("target_gone: {target}"));
-        };
-        let Some(bounds) = in_window(view.ns(), view.ns().bounds(), &window) else {
-            return Err(format!("in_viewport_unavailable: {target} is not in the window"));
-        };
-        (
-            f64::from(bounds.origin.x.0) + f64::from(bounds.size.width.0) / 2.0,
-            f64::from(bounds.origin.y.0) + f64::from(bounds.size.height.0) / 2.0,
-        )
-    } else {
-        let b = surface.root.ns().bounds();
-        (b.size.width / 2.0, b.size.height / 2.0)
-    };
+    let (x, y) = point_of(surface, &window, args)?;
     activate(&window);
     // `postEvent` drops `MouseMoved` when the window's
     // `acceptsMouseMovedEvents` is off (tracking areas opt real moves in,
@@ -525,26 +540,7 @@ fn scroll(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchRes
     let Some(window) = surface.root.ns().window() else {
         return Err("the window is gone".into());
     };
-    let (x, y) = if let (Some(x), Some(y)) = (
-        args.get("x").and_then(|v| v.as_f64()),
-        args.get("y").and_then(|v| v.as_f64()),
-    ) {
-        (x, y)
-    } else if let Some(target) = args.get("target").and_then(|v| v.as_str()) {
-        let Some(view) = resolve(surface, target) else {
-            return Err(format!("target_gone: {target}"));
-        };
-        let Some(bounds) = in_window(view.ns(), view.ns().bounds(), &window) else {
-            return Err(format!("in_viewport_unavailable: {target} is not in the window"));
-        };
-        (
-            f64::from(bounds.origin.x.0) + f64::from(bounds.size.width.0) / 2.0,
-            f64::from(bounds.origin.y.0) + f64::from(bounds.size.height.0) / 2.0,
-        )
-    } else {
-        let b = surface.root.ns().bounds();
-        (b.size.width / 2.0, b.size.height / 2.0)
-    };
+    let (x, y) = point_of(surface, &window, args)?;
     activate(&window);
     const STEP: f64 = 24.0;
     let gesture = dx != 0.0 || dy != 0.0;
