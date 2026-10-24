@@ -49,6 +49,9 @@ emoji-picker = ["nsh-base/emoji-picker"]
 zlib = ["js", "nsh-engine/zlib"]
 # The standard JS module `crypto` and the globals of Web Crypto.
 crypto = ["js", "nsh-engine/crypto"]
+# The gpui-agent control plane (`GPUI_AGENT=1`): snapshot/click/type over
+# TCP for the `gpui-agent` CLI.
+gpui-agent = ["dep:gpui-agent"]
 
 [dependencies]
 log.workspace = true
@@ -78,6 +81,7 @@ serde_json.workspace = true
 libc.workspace = true
 nsh-dev = { workspace = true, features = ["client"], optional = true }
 nsh-testing = { workspace = true, features = ["agent"], optional = true }
+gpui-agent = { workspace = true, optional = true }
 
 [[test]]
 name = "accessibility"
