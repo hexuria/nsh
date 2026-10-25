@@ -62,6 +62,8 @@ mod transition;
 mod view;
 mod visual;
 
+pub use block2;
+pub use keymap::keystroke as keystroke_of;
 pub use nsh_core::platform::{Appearance, Locale};
 pub use nsh_engine::{
     App, Bundle, ByteSize, CacheLocation, CacheOptions, CachePolicy, Limits, Root, perf,
