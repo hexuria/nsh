@@ -993,6 +993,18 @@ define_class!(
             }
         }
 
+        /// Copy (Edit > Copy, Command+C): with nothing selected
+        /// here, the surface's selection (text selected in the page while
+        /// the input keeps the focus).
+        #[unsafe(method(copy:))]
+        fn copy(&self, sender: Option<&AnyObject>) {
+            if !has_own_selection(self) && self.ivars().get().is_some_and(copy_surface_selection) {
+                return;
+            }
+            // SAFETY: NSTextView's own method.
+            let _: () = unsafe { msg_send![super(self), copy: sender] };
+        }
+
         /// A paste (Edit > Paste, Command+V, the context menu): reported,
         /// and its text pasted as `pasteBehavior` says.
         #[unsafe(method(paste:))]
@@ -1016,6 +1028,12 @@ define_class!(
         #[unsafe(method(validateUserInterfaceItem:))]
         fn validate(&self, item: &ProtocolObject<dyn NSValidatedUserInterfaceItem>,
         ) -> objc2::runtime::Bool {
+            if item.action() == Some(sel!(copy:))
+                && !has_own_selection(self)
+                && self.ivars().get().is_some_and(surface_has_selection)
+            {
+                return objc2::runtime::Bool::YES;
+            }
             if item.action() == Some(sel!(paste:)) && self.ivars().get().is_some_and(Ctx::pastes_more) {
                 return objc2::runtime::Bool::YES;
             }
@@ -1100,6 +1118,25 @@ pub(crate) fn test_paste(
     Ok(())
 }
 
+/// Whether text view `view` has a non-empty selection of its own.
+fn has_own_selection(view: &NSTextView) -> bool {
+    view.selectedRange().length > 0
+}
+
+/// Copies the surface's selection of the input `cx` is for; false if none.
+fn copy_surface_selection(cx: &Ctx) -> bool {
+    cx.surface
+        .upgrade()
+        .is_some_and(|surface| crate::text::copy(&surface))
+}
+
+/// Whether the surface of the input `cx` is for has a selection.
+fn surface_has_selection(cx: &Ctx) -> bool {
+    cx.surface
+        .upgrade()
+        .is_some_and(|surface| crate::text::selection_text(&surface).is_some())
+}
+
 /// A paste into text area `area`: [`Ctx::pasting`].
 fn text_area_pasting(area: &TextArea, pasteboard: &NSPasteboard) -> bool {
     area.ivars().get().is_none_or(|cx| cx.pasting(pasteboard))
@@ -1116,6 +1153,16 @@ define_class!(
     unsafe impl NSObjectProtocol for FieldEditor {}
 
     impl FieldEditor {
+        /// Copy with nothing selected here: the surface's selection.
+        #[unsafe(method(copy:))]
+        fn copy(&self, sender: Option<&AnyObject>) {
+            if !has_own_selection(self) && field_ctx(self).is_some_and(|cx| copy_surface_selection(&cx)) {
+                return;
+            }
+            // SAFETY: NSTextView's own method.
+            let _: () = unsafe { msg_send![super(self), copy: sender] };
+        }
+
         /// A paste (Edit > Paste, Command+V, the context menu): reported,
         /// and its text pasted as `pasteBehavior` says.
         #[unsafe(method(paste:))]
@@ -1139,6 +1186,12 @@ define_class!(
         #[unsafe(method(validateUserInterfaceItem:))]
         fn validate(&self, item: &ProtocolObject<dyn NSValidatedUserInterfaceItem>,
         ) -> objc2::runtime::Bool {
+            if item.action() == Some(sel!(copy:))
+                && !has_own_selection(self)
+                && field_ctx(self).is_some_and(|cx| surface_has_selection(&cx))
+            {
+                return objc2::runtime::Bool::YES;
+            }
             if item.action() == Some(sel!(paste:)) && field_ctx(self).is_some_and(|cx| cx.pastes_more()) {
                 return objc2::runtime::Bool::YES;
             }
