@@ -803,11 +803,31 @@ pub fn on_key(keystroke: &str, handler: impl Fn(&str) + 'static) {
 /// As [`on_key`].
 #[track_caller]
 pub fn on_key_with(keystroke: &str, options: KeyOptions, handler: impl Fn(&str) + 'static) {
+    bind_key(keystroke, options, false, handler);
+}
+
+/// [`on_key_with`] for a keystroke the system's menus keep (Hide, Hide
+/// Others, Minimize, Full Screen): the key monitor sees it before the
+/// menus, so the binding takes it from them. The app clears the menu
+/// item's key equivalent itself. Quitting stays the system's.
+///
+/// # Panics
+///
+/// On a keystroke that is not one, or the quit keystroke.
+#[track_caller]
+pub fn on_key_claiming(keystroke: &str, options: KeyOptions, handler: impl Fn(&str) + 'static) {
+    bind_key(keystroke, options, true, handler);
+}
+
+#[track_caller]
+fn bind_key(keystroke: &str, options: KeyOptions, claim: bool, handler: impl Fn(&str) + 'static) {
     let os = os();
     let parsed = crate::keymap::Keystroke::parse_with(keystroke, apple_keys())
         .unwrap_or_else(|e| panic!("on_key: {e}"));
     if let Some(why) = parsed.reserved(os) {
-        panic!("on_key: {keystroke:?} cannot be bound: {why}");
+        if !claim || why == "it quits the app" {
+            panic!("on_key: {keystroke:?} cannot be bound: {why}");
+        }
     }
     let owner = Owner::current();
     let handler: super::keys::KeyHandler = Rc::new(move |k: &str| owner.run(|| handler(k)));

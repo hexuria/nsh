@@ -160,8 +160,9 @@ fn editing(surface: &Surface, window: &NSWindow) -> Option<bool> {
     Some(!crate::view::is_ours(view))
 }
 
-/// The keystroke of `event`, by its key on the US layout.
-fn keystroke(event: &NSEvent) -> Option<Keystroke> {
+/// The keystroke of `event`, by its key on the US layout — as the key
+/// monitor matches it (an app recording a shortcut uses the same reading).
+pub fn keystroke(event: &NSEvent) -> Option<Keystroke> {
     let flags = event.modifierFlags();
     let modifiers = Modifiers {
         ctrl: flags.contains(NSEventModifierFlags::Control),
