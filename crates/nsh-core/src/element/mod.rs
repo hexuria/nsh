@@ -54,6 +54,7 @@ pub(crate) mod keys;
 pub(crate) mod menus;
 pub(crate) mod module;
 mod once;
+mod opened_url;
 pub mod palette;
 mod prop;
 pub mod reactive;

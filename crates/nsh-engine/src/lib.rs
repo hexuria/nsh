@@ -920,6 +920,8 @@ enum Message {
         url: String,
         handled: bool,
     },
+    /// The system opened this URL with the app ([`EngineControl::url_opened`]).
+    UrlOpened(String),
     /// Moves a manual clock forward by this much, then calls back.
     Advance(std::time::Duration, Box<dyn FnOnce() + Send>),
     /// Sent by a dropped [`Engine`] (there is none in WebAssembly).
@@ -962,6 +964,14 @@ pub struct EngineControl {
 }
 
 impl EngineControl {
+    /// The system opened `url` with the app (a link to a scheme the app
+    /// declares, the URL that launched it): the components' handlers
+    /// (`nsh_core::ui::on_open_url`) get it on the engine thread, or the
+    /// first one registered does when none listens yet.
+    pub fn url_opened(&self, url: impl Into<String>) {
+        let _ = self.tx.send(Message::UrlOpened(url.into()));
+    }
+
     /// Delivers an input event (and its data) to a node.
     pub fn dispatch_event(&self, id: NodeId, event: EventKind, payload: EventPayload) {
         let _ = self.tx.send(Message::Event(id, event, payload));
@@ -2687,6 +2697,7 @@ fn handle<M: TextEngine>(script: Option<&Script>, state: &mut State<M>, message:
                 state.core.open_url_on_platform(id, url);
             }
         }
+        Message::UrlOpened(url) => state.core.url_opened(url),
         // The driver handles it ([`Driver::handle`]), and keeps the ones
         // sent before it started for after the first frame.
         Message::Advance(..) => unreachable!("the driver moves the clock"),
