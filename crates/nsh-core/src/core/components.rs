@@ -576,6 +576,9 @@ pub(super) struct Components {
     /// Elements whose transitions' time to tell once this commit is
     /// styled ([`crate::element::ElementRef::transition_time`]).
     pub(super) transition_times: Vec<(NodeId, AnswerSlot<std::time::Duration>)>,
+    /// List item offsets to answer once this commit is laid out
+    /// ([`crate::element::ElementRef::item_offset`]).
+    pub(super) item_offsets: Vec<(NodeId, u32, AnswerSlot<Option<f32>>)>,
     /// The components' own lists, by node.
     virtual_lists: FxHashMap<NodeId, VirtualListState>,
     /// Views JS made, waiting to be in the tree to make their view.
@@ -672,6 +675,7 @@ impl Default for Components {
             animations: FxHashMap::default(),
             measures: Vec::new(),
             transition_times: Vec::new(),
+            item_offsets: Vec::new(),
             virtual_lists: FxHashMap::default(),
             list_counts: FxHashMap::default(),
             waiting: Vec::new(),
@@ -4809,6 +4813,9 @@ impl<M: TextEngine> Core<M> {
             Action::Measure(id, answer) => self.components.measures.push((id, answer)),
             Action::TransitionTime(id, answer) => {
                 self.components.transition_times.push((id, answer))
+            }
+            Action::ItemOffset(id, index, answer) => {
+                self.components.item_offsets.push((id, index, answer))
             }
             Action::ImageInfo(uri, answer) => {
                 let id = self.components.next_image_info;
