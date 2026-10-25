@@ -59,6 +59,8 @@ pub use nsh_core::platform::{Appearance, Locale};
 pub use nsh_engine::{
     App, Bundle, ByteSize, CacheLocation, CacheOptions, CachePolicy, Limits, Root, perf,
 };
+pub use block2;
+pub use keymap::keystroke as keystroke_of;
 pub use objc2;
 pub use objc2_app_kit;
 pub use objc2_foundation;
