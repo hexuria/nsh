@@ -29,7 +29,7 @@ use gpui_agent::{
 };
 use nsh_core::EventKind;
 use objc2::MainThreadMarker;
-use objc2_app_kit::{NSEventModifierFlags, NSEventType, NSView, NSWindow};
+use objc2_app_kit::{NSEventMask, NSEventModifierFlags, NSEventType, NSView, NSWindow};
 use objc2_foundation::NSRect;
 
 use crate::{
@@ -119,9 +119,16 @@ fn handle(surface: &Rc<Surface>, request: &Request) -> Response {
             text,
             delivery,
             expect_fingerprint,
-        } => with_focused(surface, target, *delivery, *expect_fingerprint, |window| {
-            synth::type_text(window, text);
-        }),
+        } => with_focused(
+            surface,
+            target,
+            *delivery,
+            *expect_fingerprint,
+            true,
+            |window| {
+                synth::type_text(window, text);
+            },
+        ),
         Op::SetValue {
             target,
             value,
@@ -131,6 +138,7 @@ fn handle(surface: &Rc<Surface>, request: &Request) -> Response {
             target,
             DeliveryMode::Semantic,
             *expect_fingerprint,
+            true,
             |window| {
                 synth::key(window, "cmd+a");
                 synth::type_text(window, value);
@@ -141,9 +149,16 @@ fn handle(surface: &Rc<Surface>, request: &Request) -> Response {
             key,
             delivery,
             expect_fingerprint,
-        } => with_focused(surface, target, *delivery, *expect_fingerprint, |window| {
-            synth::key(window, key);
-        }),
+        } => with_focused(
+            surface,
+            target,
+            *delivery,
+            *expect_fingerprint,
+            true,
+            |window| {
+                synth::key(window, key);
+            },
+        ),
         Op::Keybinding { binding, .. } => with_window(surface, |window| {
             synth::key(window, binding);
         }),
@@ -473,15 +488,35 @@ fn with_window(surface: &Rc<Surface>, f: impl FnOnce(&NSWindow)) -> Result<Dispa
     Ok(DispatchResult::empty())
 }
 
+/// Runs the events `press_at` queued — the run loop's next pass now —
+/// so the press has already executed when keys go out: key events are
+/// sent synchronously and would otherwise reach whatever was focused
+/// before the press.
+fn run_pending(window: &NSWindow) {
+    let app = objc2_app_kit::NSApplication::sharedApplication(MainThreadMarker::from(window));
+    while let Some(event) = app.nextEventMatchingMask_untilDate_inMode_dequeue(
+        NSEventMask::Any,
+        None,
+        // SAFETY: the default mode's name is a constant of Foundation's.
+        unsafe { objc2_foundation::NSDefaultRunLoopMode },
+        true,
+    ) {
+        app.sendEvent(&event);
+    }
+}
+
 /// Resolves `target`, checks the fingerprint gate, then presses its
 /// centre — the click a user gives — and runs `f` while the app has
-/// focus. `delivery` is accepted for either mode: this host's one path
-/// posts real events.
+/// focus. `needs_focus` asks for the press to have put the responder
+/// inside the view: `f` sends keys, and they must not land on whatever
+/// held focus before. `delivery` is accepted for either mode: this
+/// host's one path posts real events.
 fn with_focused(
     surface: &Rc<Surface>,
     target: &str,
     _delivery: DeliveryMode,
     expect_fingerprint: Option<u64>,
+    needs_focus: bool,
     f: impl FnOnce(&NSWindow),
 ) -> Result<DispatchResult, String> {
     if let Some(err) = stale(surface, target, expect_fingerprint) {
@@ -503,6 +538,18 @@ fn with_focused(
         f64::from(bounds.origin.y.0) + f64::from(bounds.size.height.0) / 2.0,
     );
     press_at(&window, x, y);
+    if needs_focus {
+        run_pending(&window);
+        let focused = window
+            .firstResponder()
+            .and_then(|r| r.downcast::<NSView>().ok())
+            .is_some_and(|v| v.isDescendantOf(view.ns()));
+        if !focused {
+            return Err(format!(
+                "focus_missed: the press on {target} did not focus it"
+            ));
+        }
+    }
     f(&window);
     Ok(DispatchResult::empty())
 }
@@ -513,7 +560,9 @@ fn click(
     delivery: DeliveryMode,
     expect_fingerprint: Option<u64>,
 ) -> Result<DispatchResult, String> {
-    with_focused(surface, target, delivery, expect_fingerprint, |_| {})
+    // Buttons and links respond without taking the responder: only
+    // keys need the focus check.
+    with_focused(surface, target, delivery, expect_fingerprint, false, |_| {})
 }
 
 /// `invoke("drag", {target, dx, dy, expect_fingerprint?})` — a user's
