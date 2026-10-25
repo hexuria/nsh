@@ -45,7 +45,7 @@ use objc2_app_kit::{
 };
 use objc2_core_foundation::{CGFloat, CGPoint, CGRect, CGSize};
 use objc2_core_graphics::CGContext;
-use objc2_foundation::{NSArray, NSObject, NSObjectProtocol, NSPoint, NSRect};
+use objc2_foundation::{NSArray, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize};
 use objc2_quartz_core::{CALayer, CALayerDelegate, CATransform3D};
 
 use crate::surface::{Surface, quiet};
@@ -1224,9 +1224,10 @@ impl NshView {
         Some(layer)
     }
 
-    /// The scale of its window's backing (2 before it has one).
+    /// Device pixels per point of its own coordinates (2 before it has a
+    /// window): see [`backing_scale_of`].
     fn backing_scale(&self) -> CGFloat {
-        self.ns().window().map_or(2.0, |w| w.backingScaleFactor())
+        backing_scale_of(self.ns())
     }
 
     /// Its window or screen changed: the content layer draws at the new
@@ -1575,5 +1576,23 @@ mod tests {
         let inside = scripted(&wheel, scripted_type);
         assert_eq!(inside, Some(NSEventType::ScrollWheel));
         assert_eq!(scripted_type(), None);
+    }
+}
+
+/// Device pixels per point of `view`'s own coordinates: its window's
+/// backing scale times the scaling of its ancestors' bounds (a host that
+/// zooms its window's content, an embedded app fitted into a card), so
+/// what it draws stays sharp at the size it shows. 2 before it has a
+/// window.
+pub(crate) fn backing_scale_of(view: &NSView) -> CGFloat {
+    if view.window().is_none() {
+        return 2.0;
+    }
+    let s = view.convertSizeToBacking(NSSize::new(1.0, 1.0));
+    let scale = s.width.abs().max(s.height.abs());
+    if scale.is_finite() && scale > 0.0 {
+        scale
+    } else {
+        2.0
     }
 }
