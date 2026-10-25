@@ -901,6 +901,14 @@ impl ListState {
         self.blocks().body + self.rows.prefix(self.row_of(i) as usize) as f32
     }
 
+    /// Content coordinate of item `i`'s row start, with the sizes known
+    /// now: what a scroll offset compares with to tell how far past the
+    /// row's start the viewport begins.
+    pub(super) fn item_offset(&self, i: u32) -> f32 {
+        let i = i.min(self.count.saturating_sub(1));
+        self.to_content(self.item_at(i), self.row_size(self.row_of(i)))
+    }
+
     /// Size and position of each cell across the main axis: `(offset,
     /// size)` of column `col`.
     pub(super) fn column(&self, cross: f32, col: u32) -> (f32, f32) {
