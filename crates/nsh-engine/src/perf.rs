@@ -237,7 +237,11 @@ fn jank_line(
     }
     if !mounted.is_empty() {
         mounted.sort_by(|a, b| b.1.cmp(&a.1));
-        let list: Vec<String> = mounted.iter().take(6).map(|(k, n)| format!("{k}×{n}")).collect();
+        let list: Vec<String> = mounted
+            .iter()
+            .take(6)
+            .map(|(k, n)| format!("{k}×{n}"))
+            .collect();
         let _ = write!(line, " · mounted {}", list.join(" "));
     }
     if let Some(c) = commit {
