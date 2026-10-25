@@ -559,11 +559,11 @@ fn image_of(surface: &Surface, view: &NshView) -> Option<CFRetained<CGImage>> {
     if f.size.width.0 <= 0.0 || f.size.height.0 <= 0.0 {
         return None;
     }
-    let scale = view
-        .ns()
-        .window()
-        .or_else(|| surface.root.ns().window())
-        .map_or(2.0, |w| w.backingScaleFactor());
+    // The view's own, or the root's when it is detached already.
+    let scale = match view.ns().window() {
+        Some(_) => crate::view::backing_scale_of(view.ns()),
+        None => crate::view::backing_scale_of(surface.root.ns()),
+    };
     let (pw, ph) = (
         (f.size.width.0 as f64 * scale).ceil() as usize,
         (f.size.height.0 as f64 * scale).ceil() as usize,

@@ -86,7 +86,11 @@ belong to the app, which owns retention and its storage budget.
   (`NshView::redraw`: a plain `CALayer` sublayer whose delegate draws in `drawLayer:inContext:`, above the decoration
   behind the view and below its children); no view uses `drawRect:`, every view uses `updateLayer` and gets no backing
   store. Implicit animations are off for every change NSH makes (`surface::quiet`; the content layer's delegate
-  answers no action). A backdrop (a material from `macos={{ backdrop }}`, glass or a blur) is the view's first
+  answers no action). Content layers, images, shader frames and transition snapshots use the scale a view is shown
+  at (`view::backing_scale_of`: the window's backing scale times the scaling of its ancestors' bounds, as when a host
+  zooms its window's content or fits an embedded app into a smaller view). A content layer takes it when it is made
+  and again when its view moves to a window or the window's backing changes (`rescale`), not when an ancestor's
+  bounds change later. A backdrop (a material from `macos={{ backdrop }}`, glass or a blur) is the view's first
   subview, below its fill layer and effects; see "Not implemented, or different".
 - **Why not `drawRect:`**: `drawRect:` views are redrawn by AppKit's display pass whenever a scroll moves their
   container; plain content layers are not, and are drawn again only when their content or size changes. A canvas
