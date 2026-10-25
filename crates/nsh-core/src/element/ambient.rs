@@ -1072,6 +1072,46 @@ pub fn on_back_press(f: impl Fn() -> bool + 'static) {
     cleanup(move || drop(subscription));
 }
 
+/// Runs `handler` with every URL the system opens the app with while the
+/// current owner lives: a link to a scheme the app's bundle declares
+/// (`CFBundleURLTypes` on macOS) clicked in another app, `open
+/// "app://…"` in a terminal, and the URL that launched the app. URLs that
+/// came before any view listened (the one that launched the app, before
+/// its root ran) go to the first handler registered, in its first turn.
+/// Every handler gets every URL, oldest handler first.
+///
+/// The standalone macOS app (`nsh_platform_macos::run_app`) delivers
+/// them; elsewhere handlers are kept and get none.
+pub fn on_open_url(handler: impl Fn(&str) + 'static) {
+    let owner = Owner::current();
+    let handler: super::opened_url::OpenUrlHandler =
+        Rc::new(move |url: &str| owner.run(|| handler(url)));
+    let urls = executor().opened_urls.clone();
+    let (id, pending) = {
+        let mut urls = urls.borrow_mut();
+        (urls.add(handler.clone()), urls.take_pending())
+    };
+    if !pending.is_empty() {
+        // Outside the component's body, as a URL opened later would come;
+        // the task still ends with the owner.
+        let first = handler.clone();
+        spawn(async move {
+            for url in pending {
+                first(&url);
+            }
+        })
+        .0
+        .detach();
+    }
+    let weak = Rc::downgrade(&urls);
+    cleanup(move || {
+        if let Some(urls) = weak.upgrade() {
+            let removed = urls.borrow_mut().remove(id);
+            drop(removed);
+        }
+    });
+}
+
 pub(crate) fn title_bar() -> crate::geometry::Edges<crate::geometry::Points> {
     env(|e| e.title_bar)
 }
