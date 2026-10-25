@@ -86,6 +86,29 @@ thread_local! {
     /// The HUDs of this (main) thread by key: the timer finds its HUD by
     /// key, as dispatched closures must be `Send`.
     static HUDS: RefCell<FxHashMap<u64, Weak<Hud>>> = RefCell::default();
+    /// Where the panel was dragged to, as its distance from the view's
+    /// top-right corner (it rides that corner through resizes); kept for
+    /// the next HUD, so hiding and showing it again leaves it there.
+    static PLACE: std::cell::Cell<Option<(CGFloat, CGFloat)>> = const { std::cell::Cell::new(None) };
+}
+
+/// A drag in progress: where the pointer went down (window points) and
+/// the panel's place then.
+#[derive(Default)]
+struct Drag {
+    from: Option<(NSPoint, (CGFloat, CGFloat))>,
+    /// Whether the pointer left the slop: a press that did not is a click.
+    moved: bool,
+}
+
+/// How far (points) a press moves before it drags the panel.
+const DRAG_SLOP: CGFloat = 3.0;
+
+/// The panel's own state: its HUD's key (a click finds the HUD by it) and
+/// the drag in progress.
+struct PanelState {
+    key: u64,
+    drag: RefCell<Drag>,
 }
 
 thread_local! {
@@ -131,11 +154,11 @@ pub(crate) fn drew_canvas(cost: Duration) {
 static NEXT_KEY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 define_class!(
-    /// The panel: takes the clicks on it (a click collapses or expands
-    /// it), lets the rest of the pointer through to the app.
+    /// The panel: takes the pointer over itself only (the rest goes through
+    /// to the app). A click collapses or expands it; dragging moves it.
     #[unsafe(super(NSView, NSResponder, NSObject))]
     #[thread_kind = MainThreadOnly]
-    #[ivars = Cell<u64>]
+    #[ivars = PanelState]
     #[name = "NshFpsPanel"]
     struct Panel;
 
@@ -155,6 +178,11 @@ define_class!(
             (inside && !self.isHidden()).then(|| Retained::into_super(self.retain()))
         }
 
+        #[unsafe(method(mouseDownCanMoveWindow))]
+        fn can_move_window(&self) -> bool {
+            false
+        }
+
         /// A click in a window that is not key acts at once.
         #[unsafe(method(acceptsFirstMouse:))]
         fn accepts_first_mouse(&self, _event: Option<&objc2_app_kit::NSEvent>) -> bool {
@@ -162,14 +190,48 @@ define_class!(
         }
 
         #[unsafe(method(mouseDown:))]
-        fn mouse_down(&self, _event: &objc2_app_kit::NSEvent) {
-            toggle(self.ivars().get());
+        fn mouse_down(&self, event: &objc2_app_kit::NSEvent) {
+            let place = PLACE.with(|p| p.get()).unwrap_or((MARGIN, MARGIN));
+            *self.ivars().drag.borrow_mut() = Drag {
+                from: Some((event.locationInWindow(), place)),
+                moved: false,
+            };
+        }
+
+        #[unsafe(method(mouseDragged:))]
+        fn mouse_dragged(&self, event: &objc2_app_kit::NSEvent) {
+            let Some((start, (right, top))) = self.ivars().drag.borrow().from else {
+                return;
+            };
+            let at = event.locationInWindow();
+            // Under the slop a press is still a click (it collapses or
+            // expands the panel on release).
+            if !self.ivars().drag.borrow().moved
+                && (at.x - start.x).abs() < DRAG_SLOP
+                && (at.y - start.y).abs() < DRAG_SLOP
+            {
+                return;
+            }
+            self.ivars().drag.borrow_mut().moved = true;
+            // Window points grow right and up: moving right shrinks the
+            // gap to the right edge, moving up shrinks the gap to the top.
+            let place = (right - (at.x - start.x), top - (at.y - start.y));
+            PLACE.with(|p| p.set(Some(place)));
+            place_panel(self, place);
+        }
+
+        #[unsafe(method(mouseUp:))]
+        fn mouse_up(&self, _event: &objc2_app_kit::NSEvent) {
+            let drag = std::mem::take(&mut *self.ivars().drag.borrow_mut());
+            if drag.from.is_some() && !drag.moved {
+                toggle(self.ivars().key);
+            }
         }
 
         /// VoiceOver's press: as a click.
         #[unsafe(method(accessibilityPerformPress))]
         fn accessibility_press(&self) -> bool {
-            toggle(self.ivars().get());
+            toggle(self.ivars().key);
             true
         }
     }
@@ -185,6 +247,21 @@ fn toggle(key: u64) {
         _ => FpsMode::Collapsed,
     });
     hud.update();
+}
+
+/// Puts the panel `(right, top)` points from its superview's top-right
+/// corner, kept inside the superview (not flipped: y grows upwards).
+fn place_panel(panel: &NSView, (right, top): (CGFloat, CGFloat)) {
+    let Some(parent) = crate::view::superview(panel) else {
+        return;
+    };
+    let bounds = parent.bounds();
+    let size = panel.frame().size;
+    let x = (bounds.size.width - size.width - right)
+        .clamp(0.0, (bounds.size.width - size.width).max(0.0));
+    let y = (bounds.size.height - size.height - top)
+        .clamp(0.0, (bounds.size.height - size.height).max(0.0));
+    panel.setFrameOrigin(NSPoint::new(x, y));
 }
 
 /// What the trace draws: frame costs (ms) and the budget (ms).
@@ -290,7 +367,10 @@ impl Hud {
         let surface = view.surface();
         let monitor = Arc::new(PerfMonitor::new());
         let key = NEXT_KEY.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let panel = mtm.alloc::<Panel>().set_ivars(Cell::new(key));
+        let panel = mtm.alloc::<Panel>().set_ivars(PanelState {
+            key,
+            drag: RefCell::default(),
+        });
         // SAFETY: NSView's designated initializer.
         let panel: Retained<Panel> =
             unsafe { msg_send![super(panel), initWithFrame: NSRect::ZERO] };
@@ -343,6 +423,12 @@ impl Hud {
         hud.update();
         schedule(hud.key);
         hud
+    }
+
+    /// Forgets the readings so far and redraws (⌘⇧K).
+    pub(crate) fn clear(&self) {
+        self.monitor.reset();
+        self.update();
     }
 
     /// The monitor it shows.
@@ -410,7 +496,7 @@ impl Hud {
     }
 
     /// Collapsed: the frame rate alone on a pill, in the color of `tone`, at
-    /// the top right of its superview.
+    /// the top right of its superview or where the panel was dragged.
     fn show_pill(&self, text: &str, tone: Tone) {
         self.trace.setHidden(true);
         // SAFETY: AppKit's font weight constant.
@@ -425,22 +511,16 @@ impl Hud {
                 r, g, b, 1.0,
             )));
         self.label.setStringValue(&NSString::from_str(text));
-        let Some(parent) = crate::view::superview(&self.panel) else {
-            return;
-        };
         let fit = self.label.fittingSize();
         let (width, height) = (
             (fit.width + 2.0 * PILL_PADDING_X).ceil(),
             (fit.height + 2.0 * PILL_PADDING_Y).ceil(),
         );
-        let bounds = parent.bounds();
-        self.panel.setFrame(NSRect::new(
-            NSPoint::new(
-                bounds.size.width - width - MARGIN,
-                bounds.size.height - height - MARGIN,
-            ),
-            NSSize::new(width, height),
-        ));
+        self.panel.setFrameSize(NSSize::new(width, height));
+        place_panel(
+            &self.panel,
+            PLACE.with(|p| p.get()).unwrap_or((MARGIN, MARGIN)),
+        );
         if let Some(layer) = self.panel.layer() {
             layer.setCornerRadius(height / 2.0);
         }
@@ -450,25 +530,19 @@ impl Hud {
         ));
     }
 
-    /// Sizes the panel to its text, at the top right of its superview (not
-    /// flipped: y grows upwards).
+    /// Sizes the panel to its text, at the top right of its superview or
+    /// where it was dragged (not flipped: y grows upwards).
     fn layout(&self) {
-        let Some(parent) = crate::view::superview(&self.panel) else {
-            return;
-        };
         let fit = self.label.fittingSize();
         let height = PADDING * 3.0 + fit.height + GRAPH_HEIGHT;
-        let bounds = parent.bounds();
-        self.panel.setFrame(NSRect::new(
-            NSPoint::new(
-                bounds.size.width - WIDTH - MARGIN,
-                bounds.size.height - height - MARGIN,
-            ),
-            NSSize::new(WIDTH, height),
-        ));
+        self.panel.setFrameSize(NSSize::new(WIDTH, height));
         if let Some(layer) = self.panel.layer() {
             layer.setCornerRadius(8.0);
         }
+        place_panel(
+            &self.panel,
+            PLACE.with(|p| p.get()).unwrap_or((MARGIN, MARGIN)),
+        );
         self.trace.setFrame(NSRect::new(
             NSPoint::new(PADDING, PADDING),
             NSSize::new(WIDTH - 2.0 * PADDING, GRAPH_HEIGHT),
