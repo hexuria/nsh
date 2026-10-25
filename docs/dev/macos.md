@@ -50,7 +50,11 @@ server client, log forwarding, the error overlay: `dev.rs`). The runtime needs m
   (`NshView::redraw`: a plain `CALayer` sublayer whose delegate draws in `drawLayer:inContext:`, above the decoration
   behind the view and below its children); no view uses `drawRect:`, every view uses `updateLayer` and gets no backing
   store. Implicit animations are off for every change NSH makes (`surface::quiet`; the content layer's delegate
-  answers no action).
+  answers no action). Content layers, images, shader frames and transition snapshots use the scale a view is shown
+  at (`view::backing_scale_of`: the window's backing scale times the scaling of its ancestors' bounds, as when a host
+  zooms its window's content or fits an embedded app into a smaller view). A content layer takes it when it is made
+  and again when its view moves to a window or the window's backing changes (`rescale`), not when an ancestor's
+  bounds change later.
 - **Why not `drawRect:`**: a scroll's commit moves a container's bounds origin, and `setBoundsOrigin:` walks the subtree
   (`NSViewHierarchyInvalidateVisibleRect`) and marks every `drawRect:` view's layer for display
   (`NS_viewVisibleRectDidChange`), clipped or not: every text of a scroll view went through AppKit's display pass on

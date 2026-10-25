@@ -255,7 +255,7 @@ fn frame(surface: &Rc<Surface>) -> bool {
 /// Renders and collects `view`'s frame, showing one that came back;
 /// whether it has more to render.
 fn render(view: &NshView, renderer: &Renderer, now: Instant) -> bool {
-    let scale = view.ns().window().map_or(2.0, |w| w.backingScaleFactor()) as f32;
+    let scale = crate::view::backing_scale_of(view.ns()) as f32;
     let mut state = view.state_mut();
     let size = state.frame.size;
     let Some(shader) = state.shader.as_mut() else {
