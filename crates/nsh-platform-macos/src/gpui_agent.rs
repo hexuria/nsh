@@ -540,11 +540,19 @@ fn with_focused(
     press_at(&window, x, y);
     if needs_focus {
         run_pending(&window);
-        let focused = window
-            .firstResponder()
-            .and_then(|r| r.downcast::<NSView>().ok())
-            .is_some_and(|v| v.isDescendantOf(view.ns()));
-        if !focused {
+        // The responder lands on the engine's reply — a queue pass or
+        // more after the press itself — so wait for it, bounded: a
+        // field that cannot take the focus still fails instead of
+        // eating the keys.
+        for _ in 0..50 {
+            if focused_in(&view, &window) {
+                break;
+            }
+            objc2_foundation::NSRunLoop::currentRunLoop().runUntilDate(
+                &objc2_foundation::NSDate::dateWithTimeIntervalSinceNow(0.01),
+            );
+        }
+        if !focused_in(&view, &window) {
             return Err(format!(
                 "focus_missed: the press on {target} did not focus it"
             ));
@@ -552,6 +560,14 @@ fn with_focused(
     }
     f(&window);
     Ok(DispatchResult::empty())
+}
+
+/// `view` or a descendant of it is the responder.
+fn focused_in(view: &NshView, window: &NSWindow) -> bool {
+    window
+        .firstResponder()
+        .and_then(|r| r.downcast::<NSView>().ok())
+        .is_some_and(|v| v.isDescendantOf(view.ns()))
 }
 
 fn click(
