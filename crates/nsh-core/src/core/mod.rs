@@ -3483,6 +3483,14 @@ impl<M: TextEngine> Core<M> {
         for (id, answer) in std::mem::take(&mut self.components.scroll_positions) {
             answer.borrow_mut().deliver(self.list_scroll_position(id));
         }
+        for (id, index, answer) in std::mem::take(&mut self.components.item_offsets) {
+            let offset = self
+                .key(id)
+                .ok()
+                .and_then(|k| self.nodes[k as usize].list.as_ref())
+                .map(|l| l.item_offset(index));
+            answer.borrow_mut().deliver(offset);
+        }
         // And their transitions' time, with this commit's styles.
         for (id, answer) in std::mem::take(&mut self.components.transition_times) {
             answer.borrow_mut().deliver(self.transition_time(id));
