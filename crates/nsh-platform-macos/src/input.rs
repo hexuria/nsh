@@ -450,6 +450,9 @@ fn set_cursor_at(surface: &Surface, x: f32, y: f32, always: bool) {
     }
     let cursor = match pick(&surface.root, x, y) {
         Some(hit) if hit.native => return,
+        // A pressable link inside text is a span of the text's view, not a
+        // view of its own: the hand there, as a press on it is the link's.
+        Some(hit) if on_link(surface, &hit.view, x, y) => Cursor::Pointer,
         Some(hit) => cursor_at(&hit),
         None => Cursor::Default,
     };
@@ -457,6 +460,12 @@ fn set_cursor_at(surface: &Surface, x: f32, y: f32, always: bool) {
     if always || NSCursor::currentCursor() != cursor {
         cursor.set();
     }
+}
+
+/// Whether `(x, y)` is on a pressable link span of `view`'s text.
+fn on_link(surface: &Surface, view: &NshView, x: f32, y: f32) -> bool {
+    let (lx, ly) = local(surface, view, x, y);
+    crate::text::link_at(&view.state(), lx, ly).is_some_and(|link| has_press(link.events))
 }
 
 /// Sets the cursor again where the mouse is (what is under it changed).
