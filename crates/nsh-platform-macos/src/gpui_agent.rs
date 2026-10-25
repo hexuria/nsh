@@ -27,7 +27,7 @@ use gpui_agent::tree::{Bounds as TreeBounds, UiNode, UiTree};
 use gpui_agent::{AgentMailbox, DispatchResult, server};
 use nsh_core::EventKind;
 use objc2::MainThreadMarker;
-use objc2_app_kit::{NSEventModifierFlags, NSEventType, NSView, NSWindow};
+use objc2_app_kit::{NSEventMask, NSEventModifierFlags, NSEventType, NSView, NSWindow};
 use objc2_foundation::NSRect;
 
 use crate::access::{Ax, Value};
@@ -102,18 +102,18 @@ fn handle(surface: &Rc<Surface>, request: &Request) -> Response {
             click(surface, target, *delivery, *expect_fingerprint)
         }
         Op::Type { target, text, delivery, expect_fingerprint } => {
-            with_focused(surface, target, *delivery, *expect_fingerprint, |window| {
+            with_focused(surface, target, *delivery, *expect_fingerprint, true, |window| {
                 synth::type_text(window, text);
             })
         }
         Op::SetValue { target, value, expect_fingerprint } => {
-            with_focused(surface, target, DeliveryMode::Semantic, *expect_fingerprint, |window| {
+            with_focused(surface, target, DeliveryMode::Semantic, *expect_fingerprint, true, |window| {
                 synth::key(window, "cmd+a");
                 synth::type_text(window, value);
             })
         }
         Op::Key { target, key, delivery, expect_fingerprint } => {
-            with_focused(surface, target, *delivery, *expect_fingerprint, |window| {
+            with_focused(surface, target, *delivery, *expect_fingerprint, true, |window| {
                 synth::key(window, key);
             })
         }
@@ -181,25 +181,52 @@ fn snapshot(surface: &Rc<Surface>) -> UiTree {
     }
 }
 
-/// Adds `view` and its element descendants to `nodes`, flattened: an
-/// element's children list holds its own element children, so agents see
-/// containment without the layout boxes between.
-fn collect(view: &NshView, window: &NSWindow, nodes: &mut Vec<UiNode>) {
-    let mut children = Vec::new();
-    for child in view.child_views() {
-        collect(&child, window, &mut children);
-    }
-    let Some(mut node) = node_for(view, window) else {
-        nodes.extend(children);
-        return;
-    };
-    node.children = children;
-    nodes.push(node);
+/// Where `view` lands in the semantic tree: hidden views exclude their
+/// whole subtree, a grouped view is one element (its children are not
+/// exposed), a plain layout box passes through to its descendants, and
+/// anything else is a node.
+enum Place {
+    Hidden,
+    Grouped(UiNode),
+    Node(UiNode),
+    Pass,
 }
 
-/// The semantic node of `view`, or `None` when it is no element (a plain
-/// layout box): VoiceOver goes through to its children, and so do we.
-fn node_for(view: &NshView, window: &NSWindow) -> Option<UiNode> {
+/// Adds `view`'s exposed element descendants to `nodes` under its own
+/// node, or flattens them when `view` is a pass-through box. Hidden
+/// views are pruned whole: nothing under them is ever exposed.
+fn collect(view: &NshView, window: &NSWindow, nodes: &mut Vec<UiNode>) {
+    match place(view, window) {
+        Place::Hidden => {}
+        Place::Grouped(mut node) => {
+            node.children = Vec::new();
+            nodes.push(node);
+        }
+        Place::Node(mut node) => {
+            for child in view.child_views() {
+                collect(&child, window, &mut node.children);
+            }
+            nodes.push(node);
+        }
+        Place::Pass => {
+            for child in view.child_views() {
+                collect(&child, window, nodes);
+            }
+        }
+    }
+}
+
+/// `view`'s node when it is an element (grouped or not).
+fn element(view: &NshView, window: &NSWindow) -> Option<UiNode> {
+    match place(view, window) {
+        Place::Node(node) | Place::Grouped(node) => Some(node),
+        _ => None,
+    }
+}
+
+/// The semantic place of `view`: VoiceOver goes through a plain layout
+/// box to its children, and so do we.
+fn place(view: &NshView, window: &NSWindow) -> Place {
     let (spec, test_id, text_input) = {
         let s = view.state();
         let a = &s.props.accessibility;
@@ -212,8 +239,11 @@ fn node_for(view: &NshView, window: &NSWindow) -> Option<UiNode> {
             s.input.is_some(),
         )
     };
-    if spec.role == Ax::Generic || spec.hidden {
-        return None;
+    if spec.hidden {
+        return Place::Hidden;
+    }
+    if spec.role == Ax::Generic {
+        return Place::Pass;
     }
     let id = test_id
         .as_deref()
@@ -243,8 +273,9 @@ fn node_for(view: &NshView, window: &NSWindow) -> Option<UiNode> {
     }
     if spec.grouped {
         node.states.push("grouped".into());
+        return Place::Grouped(node);
     }
-    Some(node)
+    Place::Node(node)
 }
 
 fn role_name(role: Ax) -> &'static str {
@@ -298,25 +329,32 @@ fn resolve(surface: &Rc<Surface>, target: &str) -> Option<NshView> {
     let mut by_name = None;
     let mut stack = surface.root.child_views();
     while let Some(view) = stack.pop() {
-        stack.extend(view.child_views());
-        let (hit, named) = {
+        let (hit, named, prune) = {
             let s = view.state();
-            if s.props.test_id.as_deref() == Some(target) || format!("n{}", s.id) == target {
-                (true, false)
+            let a = &s.props.accessibility;
+            let pressable = s.events.contains(EventKind::Press)
+                || s.events.contains(EventKind::LongPress);
+            let text = s.text.as_ref().map(|t| t.text.text.as_str());
+            let spec = access::spec_for(a, s.kind, pressable, text);
+            if spec.hidden {
+                (false, false, true)
+            } else if s.props.test_id.as_deref() == Some(target)
+                || format!("n{}", s.id) == target
+            {
+                (true, false, false)
             } else {
-                let a = &s.props.accessibility;
-                let pressable = s.events.contains(EventKind::Press)
-                    || s.events.contains(EventKind::LongPress);
-                let text = s.text.as_ref().map(|t| t.text.text.as_str());
-                let spec = access::spec_for(a, s.kind, pressable, text);
                 (
                     false,
-                    spec.role != Ax::Generic && !spec.hidden && spec.label.as_deref() == Some(target),
+                    spec.role != Ax::Generic && spec.label.as_deref() == Some(target),
+                    false,
                 )
             }
         };
         if hit {
             return Some(view);
+        }
+        if !prune {
+            stack.extend(view.child_views());
         }
         if named && by_name.is_none() {
             by_name = Some(view);
@@ -330,7 +368,7 @@ fn stale(surface: &Rc<Surface>, target: &str, expect: Option<u64>) -> Option<Str
     let expect = expect?;
     let window = surface.root.ns().window()?;
     let view = resolve(surface, target)?;
-    let node = node_for(&view, &window)?;
+    let node = element(&view, &window)?;
     let got = node.fingerprint(None);
     (got != expect).then(|| format!("stale_target: {target}"))
 }
@@ -391,15 +429,35 @@ fn with_window(
     Ok(DispatchResult::empty())
 }
 
+/// Runs the events `press_at` queued — the run loop's next pass now —
+/// so the press has already executed when keys go out: key events are
+/// sent synchronously and would otherwise reach whatever was focused
+/// before the press.
+fn run_pending(window: &NSWindow) {
+    let app = objc2_app_kit::NSApplication::sharedApplication(MainThreadMarker::from(window));
+    while let Some(event) = app.nextEventMatchingMask_untilDate_inMode_dequeue(
+        NSEventMask::Any,
+        None,
+        // SAFETY: the default mode's name is a constant of Foundation's.
+        unsafe { objc2_foundation::NSDefaultRunLoopMode },
+        true,
+    ) {
+        app.sendEvent(&event);
+    }
+}
+
 /// Resolves `target`, checks the fingerprint gate, then presses its
 /// centre — the click a user gives — and runs `f` while the app has
-/// focus. `delivery` is accepted for either mode: this host's one path
-/// posts real events.
+/// focus. `needs_focus` asks for the press to have put the responder
+/// inside the view: `f` sends keys, and they must not land on whatever
+/// held focus before. `delivery` is accepted for either mode: this
+/// host's one path posts real events.
 fn with_focused(
     surface: &Rc<Surface>,
     target: &str,
     _delivery: DeliveryMode,
     expect_fingerprint: Option<u64>,
+    needs_focus: bool,
     f: impl FnOnce(&NSWindow),
 ) -> Result<DispatchResult, String> {
     if let Some(err) = stale(surface, target, expect_fingerprint) {
@@ -417,8 +475,34 @@ fn with_focused(
     let (x, y) = (f64::from(bounds.origin.x.0) + f64::from(bounds.size.width.0) / 2.0,
                   f64::from(bounds.origin.y.0) + f64::from(bounds.size.height.0) / 2.0);
     press_at(&window, x, y);
+    if needs_focus {
+        run_pending(&window);
+        // The responder lands on the engine's reply — a queue pass or
+        // more after the press itself — so wait for it, bounded: a
+        // field that cannot take the focus still fails instead of
+        // eating the keys.
+        for _ in 0..50 {
+            if focused_in(&view, &window) {
+                break;
+            }
+            objc2_foundation::NSRunLoop::currentRunLoop().runUntilDate(
+                &objc2_foundation::NSDate::dateWithTimeIntervalSinceNow(0.01),
+            );
+        }
+        if !focused_in(&view, &window) {
+            return Err(format!("focus_missed: the press on {target} did not focus it"));
+        }
+    }
     f(&window);
     Ok(DispatchResult::empty())
+}
+
+/// `view` or a descendant of it is the responder.
+fn focused_in(view: &NshView, window: &NSWindow) -> bool {
+    window
+        .firstResponder()
+        .and_then(|r| r.downcast::<NSView>().ok())
+        .is_some_and(|v| v.isDescendantOf(view.ns()))
 }
 
 fn click(
@@ -427,7 +511,9 @@ fn click(
     delivery: DeliveryMode,
     expect_fingerprint: Option<u64>,
 ) -> Result<DispatchResult, String> {
-    with_focused(surface, target, delivery, expect_fingerprint, |_| {})
+    // Buttons and links respond without taking the responder: only
+    // keys need the focus check.
+    with_focused(surface, target, delivery, expect_fingerprint, false, |_| {})
 }
 
 /// `invoke("drag", {target, dx, dy, expect_fingerprint?})` — a user's
@@ -629,7 +715,7 @@ fn assert_spec(surface: &Rc<Surface>, spec: &AssertSpec) -> Result<DispatchResul
     let Some(window) = surface.root.ns().window() else {
         return Err("the window is gone".into());
     };
-    let node = resolve(surface, &spec.target).and_then(|v| node_for(&v, &window));
+    let node = resolve(surface, &spec.target).and_then(|v| element(&v, &window));
     if spec.exists == Some(false) {
         return if node.is_none() {
             Ok(DispatchResult::empty())
