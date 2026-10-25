@@ -37,9 +37,9 @@ mod file_drop;
 mod file_requests;
 mod fps;
 mod global_shortcut;
+mod gpu;
 #[cfg(feature = "gpui-agent")]
 mod gpui_agent;
-mod gpu;
 mod image;
 mod input;
 mod keyboard;
