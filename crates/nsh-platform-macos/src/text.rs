@@ -1948,12 +1948,7 @@ pub(crate) fn selection_key(
 /// Copies the selection to the general pasteboard (the Edit menu's Copy).
 /// False if there is none.
 pub(crate) fn copy(surface: &crate::surface::Surface) -> bool {
-    let Some(text) = surface.selection.area.text().or_else(|| {
-        surface
-            .selection
-            .with_range()
-            .and_then(|v| selected_text(&v))
-    }) else {
+    let Some(text) = selection_text(surface) else {
         return false;
     };
     let board = objc2_app_kit::NSPasteboard::generalPasteboard();
@@ -1962,6 +1957,17 @@ pub(crate) fn copy(surface: &crate::surface::Surface) -> bool {
     let kind = unsafe { objc2_app_kit::NSPasteboardTypeString };
     board.setString_forType(&objc2_foundation::NSString::from_str(&text), kind);
     true
+}
+
+/// The surface's selected text: a selection area's, else a selectable
+/// text's.
+pub(crate) fn selection_text(surface: &crate::surface::Surface) -> Option<String> {
+    surface.selection.area.text().or_else(|| {
+        surface
+            .selection
+            .with_range()
+            .and_then(|v| selected_text(&v))
+    })
 }
 
 /// Selects all of the last pressed selectable text or selectable view (the
