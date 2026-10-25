@@ -764,6 +764,9 @@ pub(super) struct Components {
     /// The next id of a platform command answering a web view request
     /// (shared by the downloads' commands).
     next_webview_request: u64,
+    /// List item offsets to answer once this commit is laid out
+    /// ([`crate::element::ElementRef::item_offset`]).
+    pub(super) item_offsets: Vec<(NodeId, u32, AnswerSlot<Option<f32>>)>,
     /// The components' own lists, by node.
     virtual_lists: FxHashMap<NodeId, VirtualListState>,
     /// Views JS made, waiting to be in the tree to make their view.
@@ -885,6 +888,7 @@ impl Default for Components {
             hovers: Vec::new(),
             downloads: crate::webview::downloads::Downloads::default(),
             next_webview_request: 1,
+            item_offsets: Vec::new(),
             virtual_lists: FxHashMap::default(),
             list_counts: FxHashMap::default(),
             waiting: Vec::new(),
@@ -6229,6 +6233,9 @@ impl<M: TextEngine> Core<M> {
             }
             Action::WebEvaluationTimeout(request) => self.timeout_web_evaluation(request),
             Action::CanvasRenderTimeout(id) => self.timeout_canvas_render(id),
+            Action::ItemOffset(id, index, answer) => {
+                self.components.item_offsets.push((id, index, answer))
+            }
             Action::TransitionTime(id, answer) => {
                 self.components.transition_times.push((id, answer))
             }
