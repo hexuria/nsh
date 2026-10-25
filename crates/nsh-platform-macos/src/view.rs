@@ -57,7 +57,9 @@ use objc2_app_kit::{
 };
 use objc2_core_foundation::{CGAffineTransform, CGFloat, CGPoint, CGRect, CGSize};
 use objc2_core_graphics::CGContext;
-use objc2_foundation::{NSArray, NSObject, NSObjectProtocol, NSPoint, NSRange, NSRect, NSString};
+use objc2_foundation::{
+    NSArray, NSObject, NSObjectProtocol, NSPoint, NSRange, NSRect, NSSize, NSString,
+};
 use objc2_quartz_core::{CALayer, CALayerDelegate, CATransform3D, kCAGravityBottomLeft};
 
 use crate::surface::{Surface, quiet};
@@ -2284,9 +2286,10 @@ impl NshView {
         }
     }
 
-    /// The scale of its window's backing (2 before it has one).
+    /// Device pixels per point of its own coordinates (2 before it has a
+    /// window): see [`backing_scale_of`].
     fn backing_scale(&self) -> CGFloat {
-        self.ns().window().map_or(2.0, |w| w.backingScaleFactor())
+        backing_scale_of(self.ns())
     }
 
     /// The scale its own transform's 2D axes apply, or 1 without one.
@@ -2993,6 +2996,96 @@ fn snap_to_scale(offset: f32, scale: CGFloat) -> CGFloat {
     (offset as CGFloat * scale).round() / scale
 }
 
+<<<<<<< /tmp/ours_f
+||||||| /tmp/base_f
+/// What of `rect` (in its parent's content space) is not clipped away by
+/// `ancestors`, innermost first: each one's placed frame (in its own
+/// parent's content space), the origin its content shows from (a scroll
+/// view's offset, (0, 0) otherwise) and whether it clips its children (an
+/// ancestor that does not only moves `rect` into its parent's space). In
+/// the content space of the outermost ancestor's parent; `None` when
+/// nothing is left. Ancestor transforms are not applied.
+#[cfg(feature = "gpui-agent")]
+fn clip_span(
+    rect: crate::sight::Span,
+    ancestors: impl IntoIterator<Item = (crate::sight::Span, (f32, f32), bool)>,
+) -> Option<crate::sight::Span> {
+    let (mut x0, mut y0, mut x1, mut y1) = rect;
+    for (frame, (ox, oy), clips) in ancestors {
+        if clips {
+            let (w, h) = (frame.2 - frame.0, frame.3 - frame.1);
+            x0 = x0.max(ox);
+            y0 = y0.max(oy);
+            x1 = x1.min(ox + w);
+            y1 = y1.min(oy + h);
+            if x1 <= x0 || y1 <= y0 {
+                return None;
+            }
+        }
+        // Into the grandparent's content space: the offset origin shows
+        // at the frame's origin.
+        x0 += frame.0 - ox;
+        x1 += frame.0 - ox;
+        y0 += frame.1 - oy;
+        y1 += frame.1 - oy;
+    }
+    Some((x0, y0, x1, y1))
+}
+
+=======
+/// What of `rect` (in its parent's content space) is not clipped away by
+/// `ancestors`, innermost first: each one's placed frame (in its own
+/// parent's content space), the origin its content shows from (a scroll
+/// view's offset, (0, 0) otherwise) and whether it clips its children (an
+/// ancestor that does not only moves `rect` into its parent's space). In
+/// the content space of the outermost ancestor's parent; `None` when
+/// nothing is left. Ancestor transforms are not applied.
+#[cfg(feature = "gpui-agent")]
+fn clip_span(
+    rect: crate::sight::Span,
+    ancestors: impl IntoIterator<Item = (crate::sight::Span, (f32, f32), bool)>,
+) -> Option<crate::sight::Span> {
+    let (mut x0, mut y0, mut x1, mut y1) = rect;
+    for (frame, (ox, oy), clips) in ancestors {
+        if clips {
+            let (w, h) = (frame.2 - frame.0, frame.3 - frame.1);
+            x0 = x0.max(ox);
+            y0 = y0.max(oy);
+            x1 = x1.min(ox + w);
+            y1 = y1.min(oy + h);
+            if x1 <= x0 || y1 <= y0 {
+                return None;
+            }
+        }
+        // Into the grandparent's content space: the offset origin shows
+        // at the frame's origin.
+        x0 += frame.0 - ox;
+        x1 += frame.0 - ox;
+        y0 += frame.1 - oy;
+        y1 += frame.1 - oy;
+    }
+    Some((x0, y0, x1, y1))
+}
+
+/// Device pixels per point of `view`'s own coordinates: its window's
+/// backing scale times the scaling of its ancestors' bounds (a host that
+/// zooms its window's content, an embedded app fitted into a smaller
+/// view), so what it draws stays sharp at the size it shows. 2 before it
+/// has a window.
+pub(crate) fn backing_scale_of(view: &NSView) -> CGFloat {
+    if view.window().is_none() {
+        return 2.0;
+    }
+    let s = view.convertSizeToBacking(NSSize::new(1.0, 1.0));
+    let scale = s.width.abs().max(s.height.abs());
+    if scale.is_finite() && scale > 0.0 {
+        scale
+    } else {
+        2.0
+    }
+}
+
+>>>>>>> /tmp/theirs_f
 #[cfg(test)]
 mod tests {
     use super::*;
