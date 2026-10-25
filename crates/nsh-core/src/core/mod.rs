@@ -1323,6 +1323,8 @@ impl<M: TextEngine> Core<M> {
     /// per list in turn (a nested list is not starved by its parent), each
     /// list's nearest its leading edge first. What a list assigns now is
     /// what waits: cells it left or whose items went are never handed out.
+    /// The cells of the components' own lists are not handed out: the core
+    /// binds them at its next commit (they count against `cells`).
     pub fn take_paced_list_binds(&mut self, cells: usize, out: &mut Vec<ListBind>) {
         let mut left = cells;
         let mut lists = std::mem::take(&mut self.paced_lists);
@@ -1342,6 +1344,20 @@ impl<M: TextEngine> Core<M> {
                 };
                 one.clear();
                 left -= list.take_paced(1, &mut one);
+                let paced_more = list.has_paced();
+                if self.components.is_virtual_list(id) {
+                    if let Some((slot, index)) = one.pop() {
+                        match self.list_binds.iter_mut().find(|b| b.list == id) {
+                            Some(bind) => bind.binds.push((slot, index)),
+                            None => self.list_binds.push(ListBind {
+                                list: id,
+                                binds: vec![(slot, index)],
+                            }),
+                        }
+                        self.needs_layout = true;
+                    }
+                    return paced_more;
+                }
                 if let Some((slot, index)) = one.pop() {
                     match out[start..].iter_mut().find(|b| b.list == id) {
                         Some(bind) => bind.binds.push((slot, index)),
@@ -6266,9 +6282,12 @@ impl<M: TextEngine> Core<M> {
             self.commands.push((id, command));
         }
 
-        // The components' own lists bind in the core, at once; the
-        // runtime's pace their overscan.
-        let paced = !self.components.is_virtual_list(id);
+        // Every list paces its overscan: what shows binds now, the rest a
+        // few cells per frame ([`Core::take_paced_list_binds`]). Binding a
+        // screen of cells above and below at once made one frame mount a
+        // thousand views or more (a chat switch); the components' own
+        // lists bind their paced cells in the core.
+        let paced = true;
         let list = self.nodes[key as usize].list.as_mut().expect("list");
         list.paced = paced;
         let mut binds = Vec::new();
