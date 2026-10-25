@@ -730,6 +730,13 @@ impl Ctx {
             }
             return true;
         }
+        // Up and Down report their key (a list under a field moves its
+        // selection with them); AppKit still moves the caret.
+        if command == sel!(moveUp:) {
+            self.key_press("ArrowUp");
+        } else if command == sel!(moveDown:) {
+            self.key_press("ArrowDown");
+        }
         // Backspace in an empty input deletes nothing, so no change
         // reports it.
         if command == sel!(deleteBackward:)
