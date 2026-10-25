@@ -1266,14 +1266,13 @@ impl NshView {
         // Placed frames (`ns().frame()`: a sticky shift and mirroring
         // applied), not the logical ones, for the view and its ancestors
         // alike: the clip spaces are the ancestors' containers'.
-        let ancestors = std::iter::successors(self.parent_view(), NshView::parent_view)
-            .map(|p| {
-                (
-                    placed(p.ns().frame()),
-                    crate::scroll::bounds_origin(&p),
-                    p.state().clips(),
-                )
-            });
+        let ancestors = std::iter::successors(self.parent_view(), NshView::parent_view).map(|p| {
+            (
+                placed(p.ns().frame()),
+                crate::scroll::bounds_origin(&p),
+                p.state().clips(),
+            )
+        });
         clip_shows(placed(ns.frame()), ancestors)
     }
 
@@ -1473,10 +1472,7 @@ fn placed(f: NSRect) -> Span {
 /// view's offset, (0, 0) otherwise) and whether it clips its children.
 /// Only clipping ancestors bound the rect — a plain view's children can
 /// hang out of it (a reaction badge above its card).
-fn clip_shows(
-    rect: Span,
-    ancestors: impl IntoIterator<Item = (Span, (f32, f32), bool)>,
-) -> bool {
+fn clip_shows(rect: Span, ancestors: impl IntoIterator<Item = (Span, (f32, f32), bool)>) -> bool {
     let (mut x0, mut y0, mut x1, mut y1) = rect;
     for (frame, (ox, oy), clips) in ancestors {
         if clips {

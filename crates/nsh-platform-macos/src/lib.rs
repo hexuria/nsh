@@ -33,9 +33,9 @@ mod decor;
 pub mod dev;
 mod file_drop;
 mod fps;
+mod gpu;
 #[cfg(feature = "gpui-agent")]
 mod gpui_agent;
-mod gpu;
 mod image;
 mod input;
 mod keymap;

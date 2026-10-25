@@ -17,23 +17,28 @@
 //! ([`crate::agent`]), so press handlers, text input and the keymap all
 //! see real events.
 
-use std::rc::Rc;
-use std::time::Duration;
+use std::{rc::Rc, time::Duration};
 
-use gpui_agent::protocol::{
-    AssertSpec, DeliveryMode, HelloInfo, Op, PROTOCOL_VERSION, PlatformKind, Request, Response,
+use gpui_agent::{
+    AgentMailbox, DispatchResult,
+    protocol::{
+        AssertSpec, DeliveryMode, HelloInfo, Op, PROTOCOL_VERSION, PlatformKind, Request, Response,
+    },
+    server,
+    tree::{Bounds as TreeBounds, UiNode, UiTree},
 };
-use gpui_agent::tree::{Bounds as TreeBounds, UiNode, UiTree};
-use gpui_agent::{AgentMailbox, DispatchResult, server};
 use nsh_core::EventKind;
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSEventModifierFlags, NSEventType, NSView, NSWindow};
 use objc2_foundation::NSRect;
 
-use crate::access::{Ax, Value};
-use crate::surface::Surface;
-use crate::view::NshView;
-use crate::{access, synth};
+use crate::{
+    access,
+    access::{Ax, Value},
+    surface::Surface,
+    synth,
+    view::NshView,
+};
 
 /// How often the main queue drains the request mailbox.
 const DRAIN: Duration = Duration::from_millis(15);
@@ -55,7 +60,13 @@ pub(crate) fn install(surface: &Rc<Surface>) {
     };
     let mailbox = AgentMailbox::new();
     let app = gpui_agent::discovery::detect_identity().executable;
-    match server::spawn_mailbox_named(config.addr, config.token, mailbox.clone(), REQUEST_TIMEOUT, &app) {
+    match server::spawn_mailbox_named(
+        config.addr,
+        config.token,
+        mailbox.clone(),
+        REQUEST_TIMEOUT,
+        &app,
+    ) {
         Ok((addr, _)) => {
             log::info!("gpui-agent: serving '{app}' on {addr}");
             schedule(surface.key(), mailbox);
@@ -98,25 +109,41 @@ fn handle(surface: &Rc<Surface>, request: &Request) -> Response {
             return Response::ok(id);
         }
         Op::Wait { .. } => Ok(DispatchResult::empty()),
-        Op::Click { target, delivery, expect_fingerprint } => {
-            click(surface, target, *delivery, *expect_fingerprint)
-        }
-        Op::Type { target, text, delivery, expect_fingerprint } => {
-            with_focused(surface, target, *delivery, *expect_fingerprint, |window| {
-                synth::type_text(window, text);
-            })
-        }
-        Op::SetValue { target, value, expect_fingerprint } => {
-            with_focused(surface, target, DeliveryMode::Semantic, *expect_fingerprint, |window| {
+        Op::Click {
+            target,
+            delivery,
+            expect_fingerprint,
+        } => click(surface, target, *delivery, *expect_fingerprint),
+        Op::Type {
+            target,
+            text,
+            delivery,
+            expect_fingerprint,
+        } => with_focused(surface, target, *delivery, *expect_fingerprint, |window| {
+            synth::type_text(window, text);
+        }),
+        Op::SetValue {
+            target,
+            value,
+            expect_fingerprint,
+        } => with_focused(
+            surface,
+            target,
+            DeliveryMode::Semantic,
+            *expect_fingerprint,
+            |window| {
                 synth::key(window, "cmd+a");
                 synth::type_text(window, value);
-            })
-        }
-        Op::Key { target, key, delivery, expect_fingerprint } => {
-            with_focused(surface, target, *delivery, *expect_fingerprint, |window| {
-                synth::key(window, key);
-            })
-        }
+            },
+        ),
+        Op::Key {
+            target,
+            key,
+            delivery,
+            expect_fingerprint,
+        } => with_focused(surface, target, *delivery, *expect_fingerprint, |window| {
+            synth::key(window, key);
+        }),
         Op::Keybinding { binding, .. } => with_window(surface, |window| {
             synth::key(window, binding);
         }),
@@ -203,8 +230,8 @@ fn node_for(view: &NshView, window: &NSWindow) -> Option<UiNode> {
     let (spec, test_id, text_input) = {
         let s = view.state();
         let a = &s.props.accessibility;
-        let pressable = s.events.contains(EventKind::Press)
-            || s.events.contains(EventKind::LongPress);
+        let pressable =
+            s.events.contains(EventKind::Press) || s.events.contains(EventKind::LongPress);
         let text = s.text.as_ref().map(|t| t.text.text.as_str());
         (
             access::spec_for(a, s.kind, pressable, text, s.style.hidden),
@@ -219,7 +246,11 @@ fn node_for(view: &NshView, window: &NSWindow) -> Option<UiNode> {
         .as_deref()
         .map(str::to_owned)
         .unwrap_or_else(|| format!("n{}", view.id()));
-    let mut node = UiNode::new(id, role_name(spec.role), spec.label.clone().unwrap_or_default());
+    let mut node = UiNode::new(
+        id,
+        role_name(spec.role),
+        spec.label.clone().unwrap_or_default(),
+    );
     node.enabled = !spec.disabled;
     node.focused = text_input
         && window
@@ -233,13 +264,22 @@ fn node_for(view: &NshView, window: &NSWindow) -> Option<UiNode> {
         _ => None,
     };
     node.bounds = in_window(view.ns(), view.ns().bounds(), window)
-        .map(|b| TreeBounds { x: b.origin.x.0, y: b.origin.y.0, w: b.size.width.0, h: b.size.height.0 })
+        .map(|b| TreeBounds {
+            x: b.origin.x.0,
+            y: b.origin.y.0,
+            w: b.size.width.0,
+            h: b.size.height.0,
+        })
         .unwrap_or_default();
     if spec.selected {
         node.states.push("selected".into());
     }
     if let Some(expanded) = spec.expanded {
-        node.states.push(if expanded { "expanded".into() } else { "collapsed".into() });
+        node.states.push(if expanded {
+            "expanded".into()
+        } else {
+            "collapsed".into()
+        });
     }
     if spec.grouped {
         node.states.push("grouped".into());
@@ -286,7 +326,10 @@ fn value_text(value: &Value) -> Option<String> {
         Value::None => None,
         Value::Text(text) => Some(text.clone()),
         Value::Checked(v) => Some(v.to_string()),
-        Value::Range { now, text, .. } => text.as_deref().map(str::to_owned).or(now.map(|n| n.to_string())),
+        Value::Range { now, text, .. } => text
+            .as_deref()
+            .map(str::to_owned)
+            .or(now.map(|n| n.to_string())),
     }
 }
 
@@ -305,13 +348,15 @@ fn resolve(surface: &Rc<Surface>, target: &str) -> Option<NshView> {
                 (true, false)
             } else {
                 let a = &s.props.accessibility;
-                let pressable = s.events.contains(EventKind::Press)
-                    || s.events.contains(EventKind::LongPress);
+                let pressable =
+                    s.events.contains(EventKind::Press) || s.events.contains(EventKind::LongPress);
                 let text = s.text.as_ref().map(|t| t.text.text.as_str());
                 let spec = access::spec_for(a, s.kind, pressable, text, s.style.hidden);
                 (
                     false,
-                    spec.role != Ax::Generic && !spec.hidden && spec.label.as_deref() == Some(target),
+                    spec.role != Ax::Generic
+                        && !spec.hidden
+                        && spec.label.as_deref() == Some(target),
                 )
             }
         };
@@ -380,10 +425,7 @@ fn press_at(window: &NSWindow, x: f64, y: f64) {
     synth::mouse(window, NSEventType::LeftMouseUp, x, y, 1);
 }
 
-fn with_window(
-    surface: &Rc<Surface>,
-    f: impl FnOnce(&NSWindow),
-) -> Result<DispatchResult, String> {
+fn with_window(surface: &Rc<Surface>, f: impl FnOnce(&NSWindow)) -> Result<DispatchResult, String> {
     let Some(window) = surface.root.ns().window() else {
         return Err("the window is gone".into());
     };
@@ -412,10 +454,14 @@ fn with_focused(
         return Err(format!("target_gone: {target}"));
     };
     let Some(bounds) = in_window(view.ns(), view.ns().bounds(), &window) else {
-        return Err(format!("in_viewport_unavailable: {target} is not in the window"));
+        return Err(format!(
+            "in_viewport_unavailable: {target} is not in the window"
+        ));
     };
-    let (x, y) = (f64::from(bounds.origin.x.0) + f64::from(bounds.size.width.0) / 2.0,
-                  f64::from(bounds.origin.y.0) + f64::from(bounds.size.height.0) / 2.0);
+    let (x, y) = (
+        f64::from(bounds.origin.x.0) + f64::from(bounds.size.width.0) / 2.0,
+        f64::from(bounds.origin.y.0) + f64::from(bounds.size.height.0) / 2.0,
+    );
     press_at(&window, x, y);
     f(&window);
     Ok(DispatchResult::empty())
@@ -435,7 +481,10 @@ fn click(
 /// to centre + `(dx, dy)` (pan gestures need a travel, not one jump),
 /// up at the end. Points are content points, top-left origin.
 fn drag(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchResult, String> {
-    let target = args.get("target").and_then(|v| v.as_str()).unwrap_or_default();
+    let target = args
+        .get("target")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
     let dx = args.get("dx").and_then(|v| v.as_f64()).unwrap_or(0.0);
     let dy = args.get("dy").and_then(|v| v.as_f64()).unwrap_or(0.0);
     let expect = args.get("expect_fingerprint").and_then(|v| v.as_u64());
@@ -482,7 +531,9 @@ fn point_of(
             return Err(format!("target_gone: {target}"));
         };
         let Some(bounds) = in_window(view.ns(), view.ns().bounds(), window) else {
-            return Err(format!("in_viewport_unavailable: {target} is not in the window"));
+            return Err(format!(
+                "in_viewport_unavailable: {target} is not in the window"
+            ));
         };
         return Ok((
             f64::from(bounds.origin.x.0) + f64::from(bounds.size.width.0) / 2.0,
@@ -668,7 +719,10 @@ fn assert_spec(surface: &Rc<Surface>, spec: &AssertSpec) -> Result<DispatchResul
     if let Some(want) = spec.in_viewport {
         let has = node.bounds.has_area();
         if has != want {
-            return Err(format!("assert failed: '{}' in_viewport mismatch", spec.target));
+            return Err(format!(
+                "assert failed: '{}' in_viewport mismatch",
+                spec.target
+            ));
         }
     }
     Ok(DispatchResult::empty())
