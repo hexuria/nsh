@@ -2520,6 +2520,9 @@ fn handle<M: TextEngine>(script: Option<&Script>, state: &mut State<M>, message:
             if state.trace {
                 log::info!(target: "nsh::perf", "event {event:?} on view {id}");
             }
+            if let Some(monitor) = &state.perf {
+                monitor.note_cause(format!("{event:?} on view {id}"));
+            }
             // Mouse moves wait for the frame, the latest per view; any other
             // event comes after the moves before it (a view hears where the
             // mouse went before it hears it leave).
