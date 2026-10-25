@@ -169,8 +169,9 @@ fn editing(surface: &Surface, window: &NSWindow) -> Option<bool> {
 }
 
 /// The keystroke of `event`, by its key on the US layout: the shortcut
-/// vocabulary [`crate::keyboard`] matches capture rules with too.
-pub(crate) fn keystroke(event: &NSEvent) -> Option<Keystroke> {
+/// vocabulary [`crate::keyboard`] matches capture rules with too, and the
+/// reading the key monitor matches (an app recording a shortcut uses it).
+pub fn keystroke(event: &NSEvent) -> Option<Keystroke> {
     let flags = event.modifierFlags();
     let modifiers = Modifiers {
         ctrl: flags.contains(NSEventModifierFlags::Control),
