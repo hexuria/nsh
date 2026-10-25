@@ -176,6 +176,15 @@ struct Inner {
     /// Engine wake-ups: when they ended, and how long they were busy.
     busy: VecDeque<(Instant, Duration)>,
     process: ProcessSample,
+    /// The open frame's main-thread work by kind (`apply`, `tick`,
+    /// `input`, …) and what its batches mounted, by item kind: what a jank
+    /// line names ([`PerfMonitor::vsync`]).
+    parts: Vec<(&'static str, Duration)>,
+    mounted: Vec<(&'static str, u32)>,
+    /// What last woke the engine (an event and its view), for the engine's
+    /// own jank lines ([`PerfMonitor::record_commit`]).
+    cause: Option<String>,
+    last_commit: Option<CommitTiming>,
 }
 
 impl Default for PerfMonitor {
@@ -194,9 +203,57 @@ impl Default for PerfMonitor {
                 latencies: VecDeque::with_capacity(CAPACITY),
                 busy: VecDeque::new(),
                 process: ProcessSample::default(),
+                parts: Vec::new(),
+                mounted: Vec::new(),
+                cause: None,
+                last_commit: None,
             }),
         }
     }
+}
+
+/// The `nsh::jank` line [`PerfMonitor::reset`] logs: a log reader can
+/// start over at it.
+pub const RESET_MARK: &str = "---- cleared ----";
+
+fn ms_f(d: Duration) -> f64 {
+    d.as_secs_f64() * 1000.0
+}
+
+/// One jank line: the frame's cost against its budget, the work by kind,
+/// the busiest mount item kinds, and the last engine commit and its cause.
+fn jank_line(
+    cost: Duration,
+    budget: Duration,
+    parts: &[(&'static str, Duration)],
+    mut mounted: Vec<(&'static str, u32)>,
+    commit: Option<&CommitTiming>,
+    cause: Option<&str>,
+) -> String {
+    use std::fmt::Write;
+    let mut line = format!("frame {:.1}ms (budget {:.1}ms):", ms_f(cost), ms_f(budget));
+    for (kind, d) in parts {
+        let _ = write!(line, " {kind} {:.1}ms", ms_f(*d));
+    }
+    if !mounted.is_empty() {
+        mounted.sort_by(|a, b| b.1.cmp(&a.1));
+        let list: Vec<String> = mounted.iter().take(6).map(|(k, n)| format!("{k}×{n}")).collect();
+        let _ = write!(line, " · mounted {}", list.join(" "));
+    }
+    if let Some(c) = commit {
+        let _ = write!(
+            line,
+            " · last commit app {:.1}ms core {:.1}ms ({} ops → {} items)",
+            ms_f(c.js),
+            ms_f(c.layout),
+            c.ops,
+            c.items
+        );
+    }
+    if let Some(cause) = cause {
+        let _ = write!(line, " · after {cause}");
+    }
+    line
 }
 
 fn push<T>(queue: &mut VecDeque<T>, value: T) {
@@ -216,13 +273,61 @@ impl PerfMonitor {
         self.inner.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    /// Forgets every reading (frames, commits, latencies, engine wake-ups)
+    /// and logs a `nsh::jank` marker: a fresh measurement from here, the
+    /// spikes before it gone from the HUD and its log.
+    pub fn reset(&self) {
+        let mut inner = self.lock();
+        inner.frames.clear();
+        inner.ticks.clear();
+        inner.commits.clear();
+        inner.latencies.clear();
+        inner.busy.clear();
+        inner.pending = Duration::ZERO;
+        inner.dirty = false;
+        inner.parts.clear();
+        inner.mounted.clear();
+        inner.last_commit = None;
+        inner.cause = None;
+        log::warn!(target: "nsh::jank", "{RESET_MARK}");
+    }
+
     /// Main thread: `cost` was spent on the surface; `dirty` if it changed
     /// what the screen shows (a batch was applied, an animation stepped, a
     /// scroll view moved).
     pub fn record_work(&self, cost: Duration, dirty: bool) {
+        self.record_part("work", cost, dirty);
+    }
+
+    /// [`PerfMonitor::record_work`] with what the work was (`apply`,
+    /// `tick`, `input`): a frame over its budget logs the split.
+    pub fn record_part(&self, kind: &'static str, cost: Duration, dirty: bool) {
         let mut inner = self.lock();
         inner.pending += cost;
         inner.dirty |= dirty;
+        match inner.parts.iter_mut().find(|(k, _)| *k == kind) {
+            Some((_, d)) => *d += cost,
+            None => inner.parts.push((kind, cost)),
+        }
+    }
+
+    /// Main thread: the open frame applies `items`; a jank line counts
+    /// them by kind.
+    pub fn record_mounted(&self, items: &[nsh_core::MountItem]) {
+        let mut inner = self.lock();
+        for item in items {
+            let kind = item.kind();
+            match inner.mounted.iter_mut().find(|(k, _)| *k == kind) {
+                Some((_, n)) => *n += 1,
+                None => inner.mounted.push((kind, 1)),
+            }
+        }
+    }
+
+    /// Engine thread: what woke it (an event on a view, …), named in a
+    /// slow commit's jank line.
+    pub fn note_cause(&self, cause: String) {
+        self.lock().cause = Some(cause);
     }
 
     /// Main thread: the display refreshed at `at`, `interval` after the
@@ -247,6 +352,14 @@ impl PerfMonitor {
             }
         }
         let cost = std::mem::take(&mut inner.pending);
+        let parts = std::mem::take(&mut inner.parts);
+        let mounted = std::mem::take(&mut inner.mounted);
+        // Jank: the frame's main-thread work outran the display's period —
+        // one line naming what it did, so a spike can be traced to its
+        // cause (target `nsh::jank`; logged while the monitor runs).
+        if interval > Duration::ZERO && cost > interval && inner.frame_warmup == 0 {
+            log::warn!(target: "nsh::jank", "{}", jank_line(cost, interval, &parts, mounted, inner.last_commit.as_ref(), inner.cause.as_deref()));
+        }
         if !std::mem::take(&mut inner.dirty) {
             return;
         }
@@ -270,6 +383,20 @@ impl PerfMonitor {
     /// Engine thread: a wake-up that committed.
     pub fn record_commit(&self, timing: CommitTiming) {
         let mut inner = self.lock();
+        inner.last_commit = Some(timing);
+        // A wake-up longer than a 60 Hz frame delays everything after it.
+        if timing.js + timing.layout > Duration::from_millis(16) && inner.commit_warmup == 0 {
+            log::warn!(
+                target: "nsh::jank",
+                "engine {:.1}ms (app {:.1}ms, core {:.1}ms; {} ops → {} items) after {}",
+                ms_f(timing.js + timing.layout),
+                ms_f(timing.js),
+                ms_f(timing.layout),
+                timing.ops,
+                timing.items,
+                inner.cause.as_deref().unwrap_or("a task or timer"),
+            );
+        }
         if inner.commit_warmup > 0 {
             inner.commit_warmup -= 1;
             return;
