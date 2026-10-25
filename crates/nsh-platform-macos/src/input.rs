@@ -113,6 +113,9 @@ pub(crate) struct Input {
     /// The scroll view mouse wheel notches go to while they keep coming,
     /// whether they scroll horizontally, and when the last one came (ms).
     latch: RefCell<Option<(NshView, bool, f64)>>,
+    /// The scroll under way has no scroll view of this surface under it:
+    /// it goes to the view the surface is in (an embedded app's host).
+    forward_scroll: Cell<bool>,
     /// Views that track `HOVERED` or listen to hover events.
     hover_tracked: RefCell<FxHashSet<NodeId>>,
     /// Views listening to mouse motion; other apps skip the extra hit test.
@@ -1872,6 +1875,41 @@ fn gesture_target(surface: &Surface, x: f32, y: f32, dx: f32, dy: f32) -> Option
             .into_iter()
             .find(|v| crate::scroll::can_bounce(v, dx, dy))
     })
+}
+
+/// Whether `event` belongs to a scroll this surface does not take — no
+/// scroll view of it under the pointer when the scroll began — so its
+/// view passes it up the responder chain: an app embedded in another
+/// one's content (a card in a chat) lets the host scroll, as a page
+/// scrolls under an iframe that cannot. Decided when a gesture begins
+/// (or per mouse wheel notch with nothing latched) and kept for the
+/// gesture's changes, end and momentum.
+pub(crate) fn forwards_scroll(surface: &Rc<Surface>, event: &NSEvent) -> bool {
+    let input = &surface.input;
+    let phase = event.phase();
+    let momentum = event.momentumPhase();
+    let starts = if momentum.is_empty() {
+        if phase.is_empty() {
+            input.latch.borrow().is_none()
+        } else {
+            phase.intersects(NSEventPhase::MayBegin | NSEventPhase::Began)
+        }
+    } else {
+        false
+    };
+    if starts {
+        let p = surface
+            .root
+            .ns()
+            .convertPoint_fromView(event.locationInWindow(), None);
+        let scrolls = pick(&surface.root, p.x as f32, p.y as f32).is_some_and(|hit| {
+            chain(&hit.view)
+                .into_iter()
+                .any(|v| v.kind() == ViewKind::Scroll)
+        });
+        input.forward_scroll.set(!scrolls);
+    }
+    input.forward_scroll.get()
 }
 
 /// A `scrollWheel:` event at `(x, y)`.
