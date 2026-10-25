@@ -526,7 +526,7 @@ impl Surface {
         };
         let start = Instant::now();
         let r = f();
-        monitor.record_work(start.elapsed(), dirty);
+        monitor.record_part("input", start.elapsed(), dirty);
         r
     }
 
@@ -565,7 +565,7 @@ impl Surface {
         if let (Some(monitor), Some(start)) = (monitor, start) {
             // Core Animation's commit (drawing what changed) included.
             let cost = start.elapsed();
-            monitor.record_work(cost, applied);
+            monitor.record_part("apply", cost, applied);
             if applied {
                 crate::fps::drained(cost);
             }
@@ -578,8 +578,11 @@ impl Surface {
     fn handle(self: &Rc<Self>, message: Message, monitor: Option<&PerfMonitor>) -> bool {
         match message {
             Message::Batch(batch, sent) => {
-                if let (Some(monitor), Some(sent)) = (monitor, sent) {
-                    monitor.record_latency(sent.elapsed());
+                if let Some(monitor) = monitor {
+                    if let Some(sent) = sent {
+                        monitor.record_latency(sent.elapsed());
+                    }
+                    monitor.record_mounted(&batch.items);
                 }
                 self.apply(&batch);
                 #[cfg(feature = "gpui-agent")]
@@ -861,7 +864,7 @@ impl Surface {
         let dirty = self.wants_frames();
         quiet(|| self.tick(now));
         let cost = start.elapsed();
-        monitor.record_work(cost, dirty);
+        monitor.record_part("tick", cost, dirty);
         crate::fps::ticked(cost);
         monitor.vsync(
             Instant::now(),
