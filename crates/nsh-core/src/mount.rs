@@ -1044,6 +1044,56 @@ pub enum MountItem {
 }
 
 impl MountItem {
+    /// The item's kind, as its variant is named (`"Create"`, `"Text"`, …):
+    /// what a performance trace counts per batch without formatting items.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            MountItem::TreeOrder(..) => "TreeOrder",
+            MountItem::Create { .. } => "Create",
+            MountItem::TrackStates { .. } => "TrackStates",
+            MountItem::ProjectStates { .. } => "ProjectStates",
+            MountItem::Insert { .. } => "Insert",
+            MountItem::Remove { .. } => "Remove",
+            MountItem::Delete { .. } => "Delete",
+            MountItem::Frame { .. } => "Frame",
+            MountItem::Overflow { .. } => "Overflow",
+            MountItem::ViewStyle { .. } => "ViewStyle",
+            MountItem::Text { .. } => "Text",
+            MountItem::Events { .. } => "Events",
+            MountItem::Image { .. } => "Image",
+            MountItem::ScrollConfig { .. } => "ScrollConfig",
+            MountItem::ScrollContent { .. } => "ScrollContent",
+            MountItem::ScrollBy { .. } => "ScrollBy",
+            MountItem::LayoutDirection { .. } => "LayoutDirection",
+            MountItem::Appearance { .. } => "Appearance",
+            MountItem::Keymap(..) => "Keymap",
+            MountItem::StickyCells { .. } => "StickyCells",
+            MountItem::ScrollBehavior { .. } => "ScrollBehavior",
+            MountItem::Refreshing { .. } => "Refreshing",
+            MountItem::Canvas { .. } => "Canvas",
+            MountItem::Shader { .. } => "Shader",
+            MountItem::ShaderTransition { .. } => "ShaderTransition",
+            MountItem::NavShader { .. } => "NavShader",
+            MountItem::ShaderInput { .. } => "ShaderInput",
+            MountItem::AnimationBindings { .. } => "AnimationBindings",
+            MountItem::Gestures { .. } => "Gestures",
+            MountItem::ViewProps { .. } => "ViewProps",
+            MountItem::AccessibilityLabel { .. } => "AccessibilityLabel",
+            MountItem::LayoutAnimation(..) => "LayoutAnimation",
+            MountItem::Animation(..) => "Animation",
+            MountItem::Input { .. } => "Input",
+            MountItem::InputValue { .. } => "InputValue",
+            MountItem::InputContent { .. } => "InputContent",
+            MountItem::ScreenConfig { .. } => "ScreenConfig",
+            MountItem::NativeProps { .. } => "NativeProps",
+            MountItem::ModalConfig { .. } => "ModalConfig",
+            MountItem::Component { .. } => "Component",
+            MountItem::ComponentPropSlots { .. } => "ComponentPropSlots",
+            MountItem::ComponentProps { .. } => "ComponentProps",
+            MountItem::Command { .. } => "Command",
+        }
+    }
+
     /// The view the item changes (a parent for its children's insertions),
     /// if it is about one: what [`MountItem::ShaderInput`] is derived from.
     pub fn view(&self) -> Option<NodeId> {
