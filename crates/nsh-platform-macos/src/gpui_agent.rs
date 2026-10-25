@@ -208,25 +208,48 @@ fn snapshot(surface: &Rc<Surface>) -> UiTree {
     }
 }
 
-/// Adds `view` and its element descendants to `nodes`, flattened: an
-/// element's children list holds its own element children, so agents see
-/// containment without the layout boxes between.
-fn collect(view: &NshView, window: &NSWindow, nodes: &mut Vec<UiNode>) {
-    let mut children = Vec::new();
-    for child in view.child_views() {
-        collect(&child, window, &mut children);
-    }
-    let Some(mut node) = node_for(view, window) else {
-        nodes.extend(children);
-        return;
-    };
-    node.children = children;
-    nodes.push(node);
+/// What `view` is to the tree a snapshot walks, as `Spec` says it is to
+/// VoiceOver.
+enum Place {
+    /// `hidden`: the subtree with it.
+    Hidden,
+    /// `grouped`: one element; its children are not exposed.
+    Grouped(UiNode),
+    /// An element; its element children are exposed.
+    Node(UiNode),
+    /// No element (a plain layout box): VoiceOver goes through to its
+    /// children, and so do we.
+    Pass,
 }
 
-/// The semantic node of `view`, or `None` when it is no element (a plain
-/// layout box): VoiceOver goes through to its children, and so do we.
-fn node_for(view: &NshView, window: &NSWindow) -> Option<UiNode> {
+/// Adds `view` and its element descendants to `nodes`, flattened: an
+/// element's children list holds its own element children, so agents see
+/// containment without the layout boxes between. Hidden subtrees and a
+/// grouped element's children are the accessibility tree's exclusions,
+/// so they are the snapshot's too.
+fn collect(view: &NshView, window: &NSWindow, nodes: &mut Vec<UiNode>) {
+    match place(view, window) {
+        Place::Hidden => {}
+        Place::Grouped(mut node) => {
+            node.children = Vec::new();
+            nodes.push(node);
+        }
+        Place::Node(mut node) => {
+            for child in view.child_views() {
+                collect(&child, window, &mut node.children);
+            }
+            nodes.push(node);
+        }
+        Place::Pass => {
+            for child in view.child_views() {
+                collect(&child, window, nodes);
+            }
+        }
+    }
+}
+
+/// [`Place`] for `view`, building its `UiNode` when it is an element.
+fn place(view: &NshView, window: &NSWindow) -> Place {
     let (spec, test_id, text_input) = {
         let s = view.state();
         let a = &s.props.accessibility;
@@ -239,8 +262,11 @@ fn node_for(view: &NshView, window: &NSWindow) -> Option<UiNode> {
             s.input.is_some(),
         )
     };
-    if spec.role == Ax::Generic || spec.hidden {
-        return None;
+    if spec.hidden {
+        return Place::Hidden;
+    }
+    if spec.role == Ax::Generic {
+        return Place::Pass;
     }
     let id = test_id
         .as_deref()
@@ -283,8 +309,17 @@ fn node_for(view: &NshView, window: &NSWindow) -> Option<UiNode> {
     }
     if spec.grouped {
         node.states.push("grouped".into());
+        return Place::Grouped(node);
     }
-    Some(node)
+    Place::Node(node)
+}
+
+/// `view`'s node when it is an element (grouped or not).
+fn element(view: &NshView, window: &NSWindow) -> Option<UiNode> {
+    match place(view, window) {
+        Place::Node(node) | Place::Grouped(node) => Some(node),
+        _ => None,
+    }
 }
 
 fn role_name(role: Ax) -> &'static str {
@@ -341,27 +376,32 @@ fn resolve(surface: &Rc<Surface>, target: &str) -> Option<NshView> {
     let mut by_name = None;
     let mut stack = surface.root.child_views();
     while let Some(view) = stack.pop() {
-        stack.extend(view.child_views());
-        let (hit, named) = {
+        let (hit, named, prune) = {
             let s = view.state();
-            if s.props.test_id.as_deref() == Some(target) || format!("n{}", s.id) == target {
-                (true, false)
+            let a = &s.props.accessibility;
+            let pressable =
+                s.events.contains(EventKind::Press) || s.events.contains(EventKind::LongPress);
+            let text = s.text.as_ref().map(|t| t.text.text.as_str());
+            let spec = access::spec_for(a, s.kind, pressable, text, s.style.hidden);
+            // What the snapshot excludes cannot be pressed, so it cannot
+            // be found either: a hidden view's subtree is skipped whole.
+            if spec.hidden {
+                (false, false, true)
+            } else if s.props.test_id.as_deref() == Some(target) || format!("n{}", s.id) == target {
+                (true, false, false)
             } else {
-                let a = &s.props.accessibility;
-                let pressable =
-                    s.events.contains(EventKind::Press) || s.events.contains(EventKind::LongPress);
-                let text = s.text.as_ref().map(|t| t.text.text.as_str());
-                let spec = access::spec_for(a, s.kind, pressable, text, s.style.hidden);
                 (
                     false,
-                    spec.role != Ax::Generic
-                        && !spec.hidden
-                        && spec.label.as_deref() == Some(target),
+                    spec.role != Ax::Generic && spec.label.as_deref() == Some(target),
+                    false,
                 )
             }
         };
         if hit {
             return Some(view);
+        }
+        if !prune {
+            stack.extend(view.child_views());
         }
         if named && by_name.is_none() {
             by_name = Some(view);
@@ -375,7 +415,7 @@ fn stale(surface: &Rc<Surface>, target: &str, expect: Option<u64>) -> Option<Str
     let expect = expect?;
     let window = surface.root.ns().window()?;
     let view = resolve(surface, target)?;
-    let node = node_for(&view, &window)?;
+    let node = element(&view, &window)?;
     let got = node.fingerprint(None);
     (got != expect).then(|| format!("stale_target: {target}"))
 }
@@ -680,7 +720,7 @@ fn assert_spec(surface: &Rc<Surface>, spec: &AssertSpec) -> Result<DispatchResul
     let Some(window) = surface.root.ns().window() else {
         return Err("the window is gone".into());
     };
-    let node = resolve(surface, &spec.target).and_then(|v| node_for(&v, &window));
+    let node = resolve(surface, &spec.target).and_then(|v| element(&v, &window));
     if spec.exists == Some(false) {
         return if node.is_none() {
             Ok(DispatchResult::empty())
