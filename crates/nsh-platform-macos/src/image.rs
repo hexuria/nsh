@@ -1228,7 +1228,7 @@ fn wait_for_frame(surface: &Rc<Surface>, view: &NshView) {
 
 /// Requests the view's image (and placeholder) at its current size.
 fn start(surface: &Rc<Surface>, view: &NshView) {
-    let scale = view.ns().window().map_or(2.0, |w| w.backingScaleFactor());
+    let scale = crate::view::backing_scale_of(view.ns());
     let (generation, source, placeholder, decoding, events, id) = {
         let mut guard = view.state_mut();
         let s = &mut *guard;
