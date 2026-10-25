@@ -139,6 +139,9 @@ pub(crate) enum Action {
     /// How long the node's transitions run with the styles of the commit
     /// the action goes out with; the time resolves the slot.
     TransitionTime(NodeId, AnswerSlot<std::time::Duration>),
+    /// A list's item start in content coordinates, with the layout of the
+    /// commit the action goes out with; resolves the slot.
+    ItemOffset(NodeId, u32, AnswerSlot<Option<f32>>),
 }
 
 /// A request on local paths waiting for the platform's answer
