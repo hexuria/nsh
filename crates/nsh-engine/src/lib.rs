@@ -2168,7 +2168,7 @@ impl<M: TextEngine> State<M> {
         if !self.frame_requested
             && (script.is_some_and(Script::wants_frame)
                 || self.core.wants_frame()
-                || (script.is_some() && self.core.has_paced_list_binds()))
+                || self.core.has_paced_list_binds())
         {
             self.frame_requested = true;
             sink.request_frame();
@@ -2255,6 +2255,15 @@ impl<M: TextEngine> State<M> {
             } else {
                 drop(binds);
             }
+            // Without JS, the paced cells are the components' own lists':
+            // the core binds what it hands out at this round's commit, whose
+            // time counts against the budget.
+            let rust_paced = script.is_none() && paced.left() && self.core.has_paced_list_binds();
+            if rust_paced {
+                let mut none = Vec::new();
+                self.core.take_paced_list_binds(1, &mut none);
+                paced.cells += 1;
+            }
             // The JS calls Rust queued (callbacks' posts), in order, before
             // the events: a task's posts come before its result.
             if let Some(script) = script {
@@ -2308,7 +2317,12 @@ impl<M: TextEngine> State<M> {
                 }
             }
             drop(ops);
-            if let Some(batch) = self.core.commit() {
+            let commit_start = Instant::now();
+            let batch = self.core.commit();
+            if rust_paced {
+                paced.time += commit_start.elapsed();
+            }
+            if let Some(batch) = batch {
                 commits += 1;
                 match &mut merged {
                     Some(m) => extend_frame(&mut m.items, batch.items),
@@ -2331,7 +2345,7 @@ impl<M: TextEngine> State<M> {
                 }
                 _ => false,
             };
-            let more_paced = script.is_some() && paced.left() && self.core.has_paced_list_binds();
+            let more_paced = paced.left() && self.core.has_paced_list_binds();
             if self.binds.is_empty()
                 && self.events.is_empty()
                 && !posted

@@ -12414,6 +12414,184 @@ mod views {
         }
     }
 
+    /// The platform's view tree as the mount items build it: parent links
+    /// from `Insert`, cut by `Remove`, gone with `Delete`.
+    #[derive(Default)]
+    struct NativeTree {
+        parent: std::collections::HashMap<NodeId, NodeId>,
+        alive: std::collections::HashSet<NodeId>,
+    }
+
+    impl NativeTree {
+        fn apply(&mut self, batch: &MountBatch) {
+            for item in &batch.items {
+                match item {
+                    MountItem::Create { id, .. } => {
+                        self.alive.insert(*id);
+                    }
+                    MountItem::Insert { parent, child, .. } => {
+                        self.parent.insert(*child, *parent);
+                    }
+                    MountItem::Remove { id } => {
+                        self.parent.remove(id);
+                    }
+                    MountItem::Delete { id } => {
+                        self.parent.remove(id);
+                        self.alive.remove(id);
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    /// Rows whose content a region builds again from the row's index — a
+    /// tall card on every third row, a short message elsewhere — as a chat
+    /// transcript's rows do when cells are reused for other items.
+    thread_local! {
+        /// `RegionRows`' "loaded" flag, flipped by the test between turns.
+        static LOADED: std::cell::Cell<Option<Signal<bool>>> = const { std::cell::Cell::new(None) };
+    }
+
+    #[component]
+    fn RegionRows() -> impl IntoElement {
+        let loaded = signal(false);
+        LOADED.with(|l| l.set(Some(loaded)));
+        view().flex_1().child(
+            virtual_list(120, move |at| {
+                // As a chat transcript's row: the cell binds a memo of its
+                // item, a region builds the row again from it.
+                let row = computed(move || at.index());
+                view().w_full().child(dynamic(move || {
+                    let i = row.get();
+                    // A hover-bar slot both shapes end with.
+                    let hovered = signal(false);
+                    let bar = view()
+                        .h(px(24.0))
+                        .child(when(move || hovered.get(), || text("bar")));
+                    if i % 3 == 0 {
+                        // A card: a placeholder/card branch; the card sizes
+                        // itself from its measured width and holds a native
+                        // component.
+                        let avail = signal(0.0f32);
+                        view()
+                            .gap(px(4.0))
+                            .child(when(move || !loaded.get(), || text("loading")).otherwise(
+                                move || {
+                                    view()
+                                        .w_full()
+                                        .on_layout(move |b: &Bounds<Points>| {
+                                            avail.set(b.size.width.0)
+                                        })
+                                        .child(
+                                            view()
+                                                .w(move || px(avail.get().min(200.0) + 24.0))
+                                                .child(
+                                                    view()
+                                                        .h(px(300.0))
+                                                        .child(native("test/card"))
+                                                        .child(text(format!("card{i}"))),
+                                                ),
+                                        )
+                                        .into_element()
+                                },
+                            ))
+                            .child(bar)
+                            .into_element()
+                    } else {
+                        view()
+                            .gap(px(4.0))
+                            .child(
+                                view()
+                                    .flex_row()
+                                    .w_full()
+                                    .child(view().h(px(40.0)).child(text(format!("msg{i}")))),
+                            )
+                            .child(bar)
+                            .into_element()
+                    }
+                }))
+            })
+            .estimated_item_size(px(80.0))
+            .flex_1(),
+        )
+    }
+
+    #[test]
+    fn reused_cells_leave_no_views_of_their_old_content_behind() {
+        let mut c = core();
+        c.mount_root(&Root::new::<RegionRows>(|| ()));
+        let mut tree = NativeTree::default();
+        let batch = c.commit().unwrap();
+        tree.apply(&batch);
+        let list = batch
+            .items
+            .iter()
+            .find_map(|i| match i {
+                MountItem::Create {
+                    id,
+                    kind: ViewKind::Scroll,
+                } => Some(*id),
+                _ => None,
+            })
+            .expect("a list");
+        let mut binds = Vec::new();
+        let loaded = LOADED.with(|l| l.get()).expect("mounted");
+        // The views the platform holds under the list, after a pass of the
+        // same scrolls: a pass that leaves its rows' old content attached
+        // makes the next count larger.
+        let under_list = |tree: &NativeTree| {
+            tree.parent
+                .keys()
+                .filter(|&&id| {
+                    let mut at = id;
+                    while let Some(&p) = tree.parent.get(&at) {
+                        if p == list {
+                            return tree.alive.contains(&id);
+                        }
+                        at = p;
+                    }
+                    false
+                })
+                .count()
+        };
+        let mut counts = Vec::new();
+        for pass in 0..4u32 {
+            for step in 1..=24u32 {
+                let y = (step as f32 * 700.0) % 9000.0;
+                c.set_scroll_offset(list, point(px(0.0), px(y)), u32::MAX);
+                // The cards' branch flips in the same turn as some scrolls
+                // (a module arriving while the list reuses cells).
+                if step % 3 == 0 {
+                    let _entered = c.components.runtime.enter();
+                    loaded.set(!loaded.get_untracked());
+                }
+                for _ in 0..6 {
+                    c.take_paced_list_binds(usize::MAX, &mut binds);
+                    if let Some(b) = c.commit() {
+                        tree.apply(&b);
+                    }
+                }
+            }
+            {
+                let _entered = c.components.runtime.enter();
+                loaded.set(false);
+            }
+            c.set_scroll_offset(list, point(px(0.0), px(0.0)), u32::MAX);
+            for _ in 0..6 {
+                c.take_paced_list_binds(usize::MAX, &mut binds);
+                if let Some(b) = c.commit() {
+                    tree.apply(&b);
+                }
+            }
+            counts.push((pass, under_list(&tree)));
+        }
+        assert_eq!(
+            counts[1].1, counts[3].1,
+            "views under the list grow pass after pass: {counts:?}"
+        );
+    }
+
     /// Rows of a list, each with a filled corner, a holder of a text and a
     /// plaque.
     #[component]
