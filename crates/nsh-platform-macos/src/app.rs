@@ -24,7 +24,7 @@ use objc2_app_kit::{
     NSWindowStyleMask,
 };
 use objc2_foundation::{
-    NSNotification, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString,
+    NSArray, NSNotification, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString, NSURL,
 };
 
 use crate::{
@@ -483,6 +483,24 @@ define_class!(
                 window.makeKeyAndOrderFront(None);
             }
             false
+        }
+
+        /// URLs of a scheme the app's bundle declares (`CFBundleURLTypes`),
+        /// opened from another app or `open`, including the one that
+        /// launched it: the running app's components get them
+        /// (`nsh_core::ui::on_open_url`).
+        #[unsafe(method(application:openURLs:))]
+        fn open_urls(&self, _app: &NSApplication, urls: &NSArray<NSURL>) {
+            let view = RUNNING.with(|r| r.borrow().as_ref().map(|r| r.view.clone()));
+            let Some(view) = view else {
+                return;
+            };
+            for url in urls.iter() {
+                if let Some(url) = url.absoluteString() {
+                    let url = url.to_string();
+                    view.surface().control(|c| c.url_opened(url));
+                }
+            }
         }
 
         #[unsafe(method(applicationWillTerminate:))]

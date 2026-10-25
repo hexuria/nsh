@@ -4554,6 +4554,25 @@ impl<M: TextEngine> Core<M> {
         out.append(&mut self.components.url_requests);
     }
 
+    /// The system opened `url` with the app (a link to its scheme, the URL
+    /// that launched it): the views' handlers ([`crate::ui::on_open_url`])
+    /// run with it, or it waits for the first one.
+    pub fn url_opened(&mut self, url: String) {
+        let _entered = self.components.runtime.enter();
+        let handlers = self
+            .components
+            .executor
+            .opened_urls
+            .borrow_mut()
+            .route(url.clone());
+        for handler in handlers {
+            if let Err(message) = caught(|| handler(&url)) {
+                log::error!(target: "js", "a handler of opened URLs failed: {message}");
+            }
+        }
+        self.apply_actions();
+    }
+
     /// Answers URL request `id`: whether the URL opened.
     pub fn answer_open_url(&mut self, id: u32, opened: bool) {
         if let Some(answer) = self.components.url_opens.remove(&id) {
