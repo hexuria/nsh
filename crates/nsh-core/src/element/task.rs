@@ -177,6 +177,9 @@ pub(crate) enum Action {
     /// the node, with the layout of the commit the action goes out with;
     /// whether a view took it resolves the slot.
     PressAt(NodeId, crate::PressEvent, AnswerSlot<bool>),
+    /// A list's item start in content coordinates, with the layout of the
+    /// commit the action goes out with; resolves the slot.
+    ItemOffset(NodeId, u32, AnswerSlot<Option<f32>>),
 }
 
 /// What a speech recognition session asks of the core

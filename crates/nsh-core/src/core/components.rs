@@ -643,6 +643,9 @@ pub(super) struct Components {
     /// Presses to pass on inside elements once this commit is laid out
     /// ([`crate::element::ElementRef::press_at`]).
     pub(super) presses: Vec<(NodeId, crate::PressEvent, AnswerSlot<bool>)>,
+    /// List item offsets to answer once this commit is laid out
+    /// ([`crate::element::ElementRef::item_offset`]).
+    pub(super) item_offsets: Vec<(NodeId, u32, AnswerSlot<Option<f32>>)>,
     /// The components' own lists, by node.
     virtual_lists: FxHashMap<NodeId, VirtualListState>,
     /// Views JS made, waiting to be in the tree to make their view.
@@ -745,6 +748,7 @@ impl Default for Components {
             measures: Vec::new(),
             transition_times: Vec::new(),
             presses: Vec::new(),
+            item_offsets: Vec::new(),
             virtual_lists: FxHashMap::default(),
             list_counts: FxHashMap::default(),
             waiting: Vec::new(),
@@ -5412,6 +5416,9 @@ impl<M: TextEngine> Core<M> {
                 self.set_builtin_scrollbars(theme.map(|theme| (source, theme)))
             }
             Action::Measure(id, answer) => self.components.measures.push((id, answer)),
+            Action::ItemOffset(id, index, answer) => {
+                self.components.item_offsets.push((id, index, answer))
+            }
             Action::TransitionTime(id, answer) => {
                 self.components.transition_times.push((id, answer))
             }
