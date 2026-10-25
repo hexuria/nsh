@@ -73,6 +73,17 @@ thread_local! {
     /// The HUDs of this (main) thread by key: the timer finds its HUD by
     /// key, as dispatched closures must be `Send`.
     static HUDS: RefCell<FxHashMap<u64, Weak<Hud>>> = RefCell::default();
+    /// Where the panel was dragged to, as its distance from the view's
+    /// top-right corner (it rides that corner through resizes); kept for
+    /// the next HUD, so hiding and showing it again leaves it there.
+    static PLACE: std::cell::Cell<Option<(CGFloat, CGFloat)>> = const { std::cell::Cell::new(None) };
+}
+
+/// A drag in progress: where the pointer went down (window points) and
+/// the panel's place then.
+#[derive(Default)]
+struct Drag {
+    from: Option<(NSPoint, (CGFloat, CGFloat))>,
 }
 
 thread_local! {
@@ -118,9 +129,11 @@ pub(crate) fn drew_canvas(cost: Duration) {
 static NEXT_KEY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 define_class!(
-    /// The panel: lets the pointer through to the app.
+    /// The panel: takes the pointer over itself only, where dragging moves
+    /// it (anywhere else the app gets the pointer as before).
     #[unsafe(super(NSView, NSResponder, NSObject))]
     #[thread_kind = MainThreadOnly]
+    #[ivars = RefCell<Drag>]
     #[name = "NshFpsPanel"]
     struct Panel;
 
@@ -128,11 +141,66 @@ define_class!(
 
     impl Panel {
         #[unsafe(method_id(hitTest:))]
-        fn hit_test(&self, _point: NSPoint) -> Option<Retained<NSView>> {
-            None
+        fn hit_test(&self, point: NSPoint) -> Option<Retained<NSView>> {
+            // `point` is in the superview's coordinates.
+            let f = self.frame();
+            let inside = point.x >= f.origin.x
+                && point.x <= f.origin.x + f.size.width
+                && point.y >= f.origin.y
+                && point.y <= f.origin.y + f.size.height;
+            inside.then(|| Retained::into_super(objc2::Message::retain(self)))
+        }
+
+        #[unsafe(method(mouseDownCanMoveWindow))]
+        fn can_move_window(&self) -> bool {
+            false
+        }
+
+        #[unsafe(method(acceptsFirstMouse:))]
+        fn accepts_first_mouse(&self, _event: Option<&objc2_app_kit::NSEvent>) -> bool {
+            true
+        }
+
+        #[unsafe(method(mouseDown:))]
+        fn mouse_down(&self, event: &objc2_app_kit::NSEvent) {
+            let place = PLACE.with(|p| p.get()).unwrap_or((MARGIN, MARGIN));
+            self.ivars().borrow_mut().from = Some((event.locationInWindow(), place));
+        }
+
+        #[unsafe(method(mouseDragged:))]
+        fn mouse_dragged(&self, event: &objc2_app_kit::NSEvent) {
+            let Some((start, (right, top))) = self.ivars().borrow().from else {
+                return;
+            };
+            let at = event.locationInWindow();
+            // Window points grow right and up: moving right shrinks the
+            // gap to the right edge, moving up shrinks the gap to the top.
+            let place = (right - (at.x - start.x), top - (at.y - start.y));
+            PLACE.with(|p| p.set(Some(place)));
+            place_panel(self, place);
+        }
+
+        #[unsafe(method(mouseUp:))]
+        fn mouse_up(&self, _event: &objc2_app_kit::NSEvent) {
+            self.ivars().borrow_mut().from = None;
         }
     }
 );
+
+/// Puts the panel `(right, top)` points from its superview's top-right
+/// corner, kept inside the superview (not flipped: y grows upwards).
+fn place_panel(panel: &NSView, (right, top): (CGFloat, CGFloat)) {
+    let Some(parent) = crate::view::superview(panel) else {
+        return;
+    };
+    let bounds = parent.bounds();
+    let size = panel.frame().size;
+    let x = (bounds.size.width - size.width - right)
+        .clamp(0.0, (bounds.size.width - size.width).max(0.0));
+    let y = (bounds.size.height - size.height - top)
+        .clamp(0.0, (bounds.size.height - size.height).max(0.0));
+    panel.setFrameOrigin(NSPoint::new(x, y));
+}
 
 /// What the trace draws: frame costs (ms) and the budget (ms).
 #[derive(Default)]
@@ -234,8 +302,9 @@ impl Hud {
         let surface = view.surface();
         let monitor = Arc::new(PerfMonitor::new());
         // SAFETY: NSView's designated initializer.
+        let panel = Panel::alloc(mtm).set_ivars(RefCell::default());
         let panel: Retained<Panel> =
-            unsafe { msg_send![Panel::alloc(mtm), initWithFrame: NSRect::ZERO] };
+            unsafe { msg_send![super(panel), initWithFrame: NSRect::ZERO] };
         let panel: Retained<NSView> = Retained::into_super(panel);
         panel.setWantsLayer(true);
         if let Some(layer) = panel.layer() {
@@ -281,6 +350,12 @@ impl Hud {
         hud
     }
 
+    /// Forgets the readings so far and redraws (⌘⇧K).
+    pub(crate) fn clear(&self) {
+        self.monitor.reset();
+        self.update();
+    }
+
     /// The monitor it shows.
     pub(crate) fn monitor(&self) -> &Arc<PerfMonitor> {
         &self.monitor
@@ -319,22 +394,16 @@ impl Hud {
         self.trace.setNeedsDisplay(true);
     }
 
-    /// Sizes the panel to its text, at the top right of its superview (not
-    /// flipped: y grows upwards).
+    /// Sizes the panel to its text, at the top right of its superview or
+    /// where it was dragged (not flipped: y grows upwards).
     fn layout(&self) {
-        let Some(parent) = crate::view::superview(&self.panel) else {
-            return;
-        };
         let fit = self.label.fittingSize();
         let height = PADDING * 3.0 + fit.height + GRAPH_HEIGHT;
-        let bounds = parent.bounds();
-        self.panel.setFrame(NSRect::new(
-            NSPoint::new(
-                bounds.size.width - WIDTH - MARGIN,
-                bounds.size.height - height - MARGIN,
-            ),
-            NSSize::new(WIDTH, height),
-        ));
+        self.panel.setFrameSize(NSSize::new(WIDTH, height));
+        place_panel(
+            &self.panel,
+            PLACE.with(|p| p.get()).unwrap_or((MARGIN, MARGIN)),
+        );
         self.trace.setFrame(NSRect::new(
             NSPoint::new(PADDING, PADDING),
             NSSize::new(WIDTH - 2.0 * PADDING, GRAPH_HEIGHT),
