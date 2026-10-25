@@ -430,6 +430,31 @@ define_class!(
 
     unsafe impl NSObjectProtocol for Delegate {}
 
+    impl Delegate {
+        /// Window ▸ Performance Monitor (⌘⇧F): shows or hides the running
+        /// view's HUD ([`AppView::set_fps_monitor`]).
+        #[unsafe(method(toggleFpsMonitor:))]
+        fn toggle_fps_monitor(&self, _sender: Option<&objc2::runtime::AnyObject>) {
+            let view = RUNNING.with(|r| r.borrow().as_ref().map(|r| r.view.clone()));
+            if let Some(view) = view {
+                let shown = view.fps.borrow().is_some();
+                view.set_fps_monitor(!shown);
+            }
+        }
+
+        /// Window ▸ Clear Performance Monitor (⌘⇧K): forgets the readings
+        /// so far (the trace's red spikes, the p95s) and marks the jank log.
+        #[unsafe(method(clearFpsMonitor:))]
+        fn clear_fps_monitor(&self, _sender: Option<&objc2::runtime::AnyObject>) {
+            let view = RUNNING.with(|r| r.borrow().as_ref().map(|r| r.view.clone()));
+            if let Some(view) = view {
+                if let Some(hud) = view.fps.borrow().as_ref() {
+                    hud.clear();
+                }
+            }
+        }
+    }
+
     unsafe impl NSApplicationDelegate for Delegate {
         #[unsafe(method(applicationShouldTerminateAfterLastWindowClosed:))]
         fn should_terminate_after_last_window_closed(&self, _app: &NSApplication) -> bool {
@@ -710,6 +735,9 @@ fn main_menu(mtm: MainThreadMarker, title: &str) -> Retained<NSMenu> {
     full.setKeyEquivalentModifierMask(
         NSEventModifierFlags::Command | NSEventModifierFlags::Control,
     );
+    // An uppercase key equivalent is Shift with it: ⌘⇧F.
+    item(&window, "Performance Monitor", Some(sel!(toggleFpsMonitor:)), "F");
+    item(&window, "Clear Performance Monitor", Some(sel!(clearFpsMonitor:)), "K");
     window.addItem(&NSMenuItem::separatorItem(mtm));
     item(&window, "Close", Some(sel!(performClose:)), "w");
     bar
