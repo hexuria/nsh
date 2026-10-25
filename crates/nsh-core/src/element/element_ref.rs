@@ -251,6 +251,25 @@ impl ElementRef {
         }
         answer
     }
+
+    /// Where row `index` of a list starts, in the content coordinates its
+    /// scroll events report (`ScrollEvent::offset`), with the sizes known
+    /// as of the commit this call goes out with. With the first viewable
+    /// row, it tells how far into that row the viewport begins — a
+    /// position [`Self::scroll_to_index`] restores (`view_offset` =
+    /// minus that distance). `None` when the ref is on no list. Await it in
+    /// a task.
+    pub fn item_offset(&self, index: usize) -> Answer<Option<f32>> {
+        let (answer, slot) = Answer::new();
+        let pending = slot.clone();
+        if self
+            .reach(|node, executor| executor.act(Action::ItemOffset(node, index as u32, pending)))
+            .is_none()
+        {
+            slot.borrow_mut().deliver(None);
+        }
+        answer
+    }
 }
 
 impl PartialEq for ElementRef {

@@ -125,6 +125,9 @@ pub(crate) enum Action {
     /// Measures the node with the layout of the commit the action goes out
     /// with; the measurement resolves the slot.
     Measure(NodeId, AnswerSlot<Option<crate::Measurement>>),
+    /// A list's item start in content coordinates, with the layout of the
+    /// commit the action goes out with; resolves the slot.
+    ItemOffset(NodeId, u32, AnswerSlot<Option<f32>>),
 }
 
 /// A clipboard read waiting for the platform's answer.
