@@ -285,6 +285,10 @@ pub(crate) struct Surface {
     /// The model of a test session's app (`nsh test --target`).
     #[cfg(feature = "dev")]
     test_model: RefCell<Option<std::sync::Arc<nsh_testing::agent::Model>>>,
+    /// Batches applied so far: the gpui-agent waits for them to stop
+    /// coming ([`Surface::activity`]).
+    #[cfg(feature = "gpui-agent")]
+    batches: Cell<u64>,
     /// The display link, once something wanted frames, and the root it
     /// was made from (it is made again from another window's:
     /// [`Surface::follow_windows`]).
@@ -430,6 +434,8 @@ impl Surface {
             cosmetic_frames: Cell::new(0),
             #[cfg(feature = "dev")]
             test_model: RefCell::default(),
+            #[cfg(feature = "gpui-agent")]
+            batches: Cell::new(0),
             link: RefCell::new(None),
             link_rate: Cell::new(None),
             link_screen_max: Cell::new(0.0),
@@ -783,6 +789,8 @@ impl Surface {
                 }
                 self.mounter.borrow_mut().rasters = rasters;
                 self.apply(&batch);
+                #[cfg(feature = "gpui-agent")]
+                self.batches.set(self.batches.get() + 1);
                 return true;
             }
             Message::Error(message) => {
@@ -976,6 +984,17 @@ impl Surface {
         self.anim.borrow().finishing()
             || self.frame_callbacks.borrow().len() > self.cosmetic_frames.get()
             || !self.queued.borrow().is_empty()
+    }
+
+    /// How many batches it has applied, and whether it is busy: messages
+    /// from the engine on their way to the main thread or waiting for a
+    /// frame, a display frame JS asked for, native animations or the
+    /// platform's own (scroll glides, transitions) running. The gpui-agent
+    /// settles on both standing still.
+    #[cfg(feature = "gpui-agent")]
+    pub(crate) fn activity(&self) -> (u64, bool) {
+        let incoming = self.pending.borrow().load(Ordering::Acquire);
+        (self.batches.get(), incoming || self.wants_frames())
     }
 
     /// Keeps the model `nsh test --target` steps see of the app
