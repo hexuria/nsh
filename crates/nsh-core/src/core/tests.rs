@@ -12449,12 +12449,12 @@ mod views {
     /// tall card on every third row, a short message elsewhere — as a chat
     /// transcript's rows do when cells are reused for other items.
     thread_local! {
-        /// `RegionRows`' "loaded" flag, flipped by the test between turns.
+        /// `TranscriptRows`' "loaded" flag, flipped by the test between turns.
         static LOADED: std::cell::Cell<Option<Signal<bool>>> = const { std::cell::Cell::new(None) };
     }
 
     #[component]
-    fn RegionRows() -> impl IntoElement {
+    fn TranscriptRows() -> impl IntoElement {
         let loaded = signal(false);
         LOADED.with(|l| l.set(Some(loaded)));
         view().flex_1().child(
@@ -12520,7 +12520,7 @@ mod views {
     #[test]
     fn reused_cells_leave_no_views_of_their_old_content_behind() {
         let mut c = core();
-        c.mount_root(&Root::new::<RegionRows>(|| ()));
+        c.mount_root(&Root::new::<TranscriptRows>(|| ()));
         let mut tree = NativeTree::default();
         let batch = c.commit().unwrap();
         tree.apply(&batch);
