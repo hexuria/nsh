@@ -3,7 +3,11 @@
 //! of the window. The agent of `nsh test --target macos` acts with them
 //! ([`crate::agent`]).
 
-use objc2::{MainThreadMarker, rc::Retained};
+use objc2::{
+    MainThreadMarker, msg_send,
+    rc::Retained,
+    runtime::{AnyClass, AnyObject},
+};
 use objc2_app_kit::{NSEvent, NSEventModifierFlags, NSEventType, NSWindow};
 use objc2_core_foundation::CGFloat;
 use objc2_foundation::{NSPoint, NSString};
@@ -285,16 +289,113 @@ pub(crate) fn shot(window: &NSWindow) -> Result<Vec<u8>, String> {
     if let Some(layer) = view.layer() {
         crate::surface::quiet(|| order_by_z(&layer));
     }
+    // A video draws out of process, where `cacheDisplay` cannot reach:
+    // its current frame stands in for it during the shot.
+    let stand_ins = media_stand_ins(&view);
     let bounds = view.bounds();
     let rep = view
         .bitmapImageRepForCachingDisplayInRect(bounds)
         .ok_or("cannot make a bitmap of the window")?;
     view.cacheDisplayInRect_toBitmapImageRep(bounds, &rep);
+    crate::surface::quiet(|| {
+        for layer in &stand_ins {
+            layer.removeFromSuperlayer();
+        }
+    });
     let properties = NSDictionary::<NSBitmapImageRepPropertyKey, objc2::runtime::AnyObject>::new();
     // SAFETY: an empty property dictionary is valid for PNG.
     let data =
         unsafe { rep.representationUsingType_properties(NSBitmapImageFileType::PNG, &properties) };
     Ok(data.ok_or("cannot encode the picture")?.to_vec())
+}
+
+/// Layers holding the current frame of each video under `view`, which
+/// `cacheDisplayInRect:` leaves black (the media server draws it). Each is
+/// a sublayer of the `AVPlayerLayer` it stands in for, so it shows where
+/// that layer does and under whatever covers it; the caller removes them.
+/// (Web views need none: WebKit draws their page into the shot.)
+fn media_stand_ins(view: &objc2_app_kit::NSView) -> Vec<Retained<objc2_quartz_core::CALayer>> {
+    let mut out = Vec::new();
+    let player = AnyClass::get(c"AVPlayerLayer");
+    if let (Some(player), Some(root)) = (player, view.layer()) {
+        let mut layers = vec![root];
+        while let Some(l) = layers.pop() {
+            // SAFETY: NSObject's `isKindOfClass:`.
+            let is_player: bool = unsafe { msg_send![&*l, isKindOfClass: player] };
+            if is_player {
+                if let Some(frame) = video_frame(&l) {
+                    // SAFETY: AVPlayerLayer's `videoGravity`, a string the
+                    // layer's own gravity names mirror.
+                    let gravity: Option<Retained<NSString>> =
+                        unsafe { msg_send![&*l, videoGravity] };
+                    out.push(stand_in(&l, &frame, gravity.as_deref()));
+                }
+                continue;
+            }
+            // SAFETY: the main thread reads the layer tree.
+            if let Some(subs) = unsafe { l.sublayers() } {
+                layers.extend(subs.iter());
+            }
+        }
+    }
+    out
+}
+
+/// A sublayer of `layer`, over its content, showing `image` (an NSImage
+/// or a CGImage) laid out as the video gravity `gravity` says (resized to
+/// fill without one).
+fn stand_in(
+    layer: &objc2_quartz_core::CALayer,
+    image: &AnyObject,
+    gravity: Option<&NSString>,
+) -> Retained<objc2_quartz_core::CALayer> {
+    let shown = objc2_quartz_core::CALayer::new();
+    crate::surface::quiet(|| {
+        shown.setFrame(layer.bounds());
+        // AVLayerVideoGravity's values are CALayer's gravity names.
+        let fit = match gravity.map(|g| g.to_string()) {
+            Some(g) if g == "AVLayerVideoGravityResizeAspectFill" => "resizeAspectFill",
+            Some(g) if g == "AVLayerVideoGravityResizeAspect" => "resizeAspect",
+            _ => "resize",
+        };
+        shown.setContentsGravity(&NSString::from_str(fit));
+        // SAFETY: `contents` takes an NSImage or a CGImage.
+        unsafe { shown.setContents(Some(image)) };
+        layer.addSublayer(&shown);
+    });
+    shown
+}
+
+/// The frame `player`'s video shows now, decoded from its asset (a CGImage);
+/// none for a stream with no frames to read (live HLS).
+fn video_frame(player: &objc2_quartz_core::CALayer) -> Option<Retained<AnyObject>> {
+    // SAFETY: AVPlayerLayer's, AVPlayer's, AVPlayerItem's and
+    // AVAssetImageGenerator's documented API; the image is +1 (copy).
+    unsafe {
+        let player: Option<Retained<AnyObject>> = msg_send![player, player];
+        let item: Option<Retained<AnyObject>> = msg_send![&*player?, currentItem];
+        let item = item?;
+        let asset: Option<Retained<AnyObject>> = msg_send![&*item, asset];
+        let now: crate::native::CMTime = msg_send![&*item, currentTime];
+        let generator: Retained<AnyObject> = msg_send![AnyClass::get(c"AVAssetImageGenerator")?, assetImageGeneratorWithAsset: &*asset?];
+        let () = msg_send![&*generator, setAppliesPreferredTrackTransform: true];
+        // `kCMTimeZero`: the frame at `now`, not a nearby key frame.
+        let exact = crate::native::CMTime {
+            value: 0,
+            timescale: 1,
+            flags: 1,
+            epoch: 0,
+        };
+        let () = msg_send![&*generator, setRequestedTimeToleranceBefore: exact];
+        let () = msg_send![&*generator, setRequestedTimeToleranceAfter: exact];
+        let image: *mut AnyObject = msg_send![
+            &*generator,
+            copyCGImageAtTime: now,
+            actualTime: std::ptr::null_mut::<crate::native::CMTime>(),
+            error: std::ptr::null_mut::<*mut AnyObject>()
+        ];
+        Retained::from_raw(image)
+    }
 }
 
 /// Orders the sublayers of `layer` and its sublayers by their `zPosition`
