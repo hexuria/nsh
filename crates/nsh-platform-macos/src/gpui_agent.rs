@@ -155,9 +155,12 @@ fn start(surface: &Rc<Surface>, request: &Request) -> Start {
             resp.hello = Some(hello());
             return Start::Done(resp);
         }
-        Op::Snapshot { .. } => {
+        Op::Snapshot { fingerprints, .. } => {
             let mut resp = Response::ok(id);
             let tree = snapshot(surface);
+            if *fingerprints == Some(true) {
+                resp.fingerprints = Some(tree.fingerprint_map());
+            }
             resp.tree = Some(tree);
             return Start::Done(resp);
         }
@@ -282,7 +285,7 @@ fn snapshot(surface: &Rc<Surface>) -> UiTree {
     let window = surface.root.ns().window();
     if let Some(window) = window.as_deref() {
         for child in surface.root.child_views() {
-            collect(&child, window, &mut nodes);
+            collect(surface, &child, window, &mut nodes);
         }
     }
     UiTree {
@@ -308,49 +311,37 @@ enum Place {
 /// Adds `view`'s exposed element descendants to `nodes` under its own
 /// node, or flattens them when `view` is a pass-through box. Hidden
 /// views are pruned whole: nothing under them is ever exposed.
-fn collect(view: &NshView, window: &NSWindow, nodes: &mut Vec<UiNode>) {
+fn collect(surface: &Surface, view: &NshView, window: &NSWindow, nodes: &mut Vec<UiNode>) {
     match place(view, window) {
         Place::Hidden => {}
         Place::Grouped(mut node) => {
+            measure(surface, view, window, &mut node);
             node.children = Vec::new();
             nodes.push(node);
         }
         Place::Node(mut node) => {
+            measure(surface, view, window, &mut node);
             for child in view.child_views() {
-                collect(&child, window, &mut node.children);
+                collect(surface, &child, window, &mut node.children);
             }
             nodes.push(node);
         }
         Place::Pass => {
             for child in view.child_views() {
-                collect(&child, window, nodes);
+                collect(surface, &child, window, nodes);
             }
         }
     }
 }
 
-/// `view`'s node when it is an element (grouped or not).
-fn element(view: &NshView, window: &NSWindow) -> Option<UiNode> {
-    match place(view, window) {
-        Place::Node(node) | Place::Grouped(node) => Some(node),
-        _ => None,
-    }
-}
-
 /// The semantic place of `view`: VoiceOver goes through a plain layout
-/// box to its children, and so do we.
+/// box to its children, and so do we. Its node has no geometry yet
+/// ([`measure`]): finding a target needs none.
 fn place(view: &NshView, window: &NSWindow) -> Place {
-    let (spec, test_id, text_input) = {
+    let spec = spec_of(view);
+    let (test_id, text_input) = {
         let s = view.state();
-        let a = &s.props.accessibility;
-        let pressable =
-            s.events.contains(EventKind::Press) || s.events.contains(EventKind::LongPress);
-        let text = s.text.as_ref().map(|t| t.text.text.as_str());
-        (
-            access::spec_for(a, s.kind, pressable, text, s.style.hidden),
-            s.props.test_id.clone(),
-            s.input.is_some(),
-        )
+        (s.props.test_id.clone(), s.input.is_some())
     };
     if spec.hidden {
         return Place::Hidden;
@@ -368,25 +359,12 @@ fn place(view: &NshView, window: &NSWindow) -> Place {
         spec.label.clone().unwrap_or_default(),
     );
     node.enabled = !spec.disabled;
-    node.focused = text_input
-        && window
-            .firstResponder()
-            .and_then(|r| r.downcast::<NSView>().ok())
-            .is_some_and(|v| v.isDescendantOf(view.ns()));
-    node.visible = true;
+    node.focused = text_input && focused_in(view, window);
     node.value = value_text(&spec.value);
     node.checked = match spec.value {
         Value::Checked(v) => Some(v != 0),
         _ => None,
     };
-    node.bounds = in_window(view.ns(), view.ns().bounds(), window)
-        .map(|b| TreeBounds {
-            x: b.origin.x.0,
-            y: b.origin.y.0,
-            w: b.size.width.0,
-            h: b.size.height.0,
-        })
-        .unwrap_or_default();
     if spec.selected {
         node.states.push("selected".into());
     }
@@ -402,6 +380,22 @@ fn place(view: &NshView, window: &NSWindow) -> Place {
         return Place::Grouped(node);
     }
     Place::Node(node)
+}
+
+/// Fills in where `view`'s node is: its bounds in the window's content,
+/// and whether it can be seen, by the rule actions follow
+/// ([`visibility`]). A node a scroll view has out of its viewport is
+/// visible, not in the viewport: scrolling brings it in.
+fn measure(surface: &Surface, view: &NshView, window: &NSWindow, node: &mut UiNode) {
+    node.visible = visibility(surface, view, window).visible();
+    node.bounds = in_window(view.ns(), view.ns().bounds(), window)
+        .map(|b| TreeBounds {
+            x: b.origin.x.0,
+            y: b.origin.y.0,
+            w: b.size.width.0,
+            h: b.size.height.0,
+        })
+        .unwrap_or_default();
 }
 
 fn role_name(role: Ax) -> &'static str {
@@ -453,51 +447,82 @@ fn value_text(value: &Value) -> Option<String> {
 
 // --- Targets ----------------------------------------------------------------
 
+/// A node of the snapshot: its view, its node (measured) and its parent
+/// node's id, which the node's fingerprint covers.
+struct Found {
+    view: NshView,
+    node: UiNode,
+    parent: Option<String>,
+}
+
 /// The view `target` names: a `testID`, a `n<node>` id, or — so agents
 /// can act without the app naming every control — a node's name.
 fn resolve(surface: &Rc<Surface>, target: &str) -> Option<NshView> {
-    let mut by_name = None;
-    let mut stack = surface.root.child_views();
-    while let Some(view) = stack.pop() {
-        let (hit, named, prune) = {
-            let s = view.state();
-            let a = &s.props.accessibility;
-            let pressable =
-                s.events.contains(EventKind::Press) || s.events.contains(EventKind::LongPress);
-            let text = s.text.as_ref().map(|t| t.text.text.as_str());
-            let spec = access::spec_for(a, s.kind, pressable, text, s.style.hidden);
-            if spec.hidden {
-                (false, false, true)
-            } else if s.props.test_id.as_deref() == Some(target) || format!("n{}", s.id) == target {
-                (true, false, false)
-            } else {
-                (
-                    false,
-                    spec.role != Ax::Generic && spec.label.as_deref() == Some(target),
-                    false,
-                )
-            }
-        };
-        if hit {
-            return Some(view);
-        }
-        if !prune {
-            stack.extend(view.child_views());
-        }
-        if named && by_name.is_none() {
-            by_name = Some(view);
-        }
-    }
-    by_name
+    find(surface, target).map(|found| found.view)
 }
 
-/// Fingerprint gate: the node the client saw must still be this one.
+/// The node `target` names, among exactly the nodes the snapshot shows,
+/// in its order: ids win over names, and a name goes to its first node.
+/// A view the snapshot leaves out (hidden, under a grouped element, a
+/// plain box even with a `testID`) cannot be targeted.
+fn find(surface: &Rc<Surface>, target: &str) -> Option<Found> {
+    let window = surface.root.ns().window()?;
+    let mut by_name = None;
+    let found = surface
+        .root
+        .child_views()
+        .iter()
+        .find_map(|child| find_in(child, &window, target, None, &mut by_name));
+    let mut found = found.or(by_name)?;
+    measure(surface, &found.view, &window, &mut found.node);
+    Some(found)
+}
+
+fn find_in(
+    view: &NshView,
+    window: &NSWindow,
+    target: &str,
+    parent: Option<&str>,
+    by_name: &mut Option<Found>,
+) -> Option<Found> {
+    let (node, children) = match place(view, window) {
+        Place::Hidden => return None,
+        Place::Pass => {
+            return view
+                .child_views()
+                .iter()
+                .find_map(|child| find_in(child, window, target, parent, by_name));
+        }
+        Place::Grouped(node) => (node, false),
+        Place::Node(node) => (node, true),
+    };
+    let found = |node: UiNode| Found {
+        view: view.clone(),
+        node,
+        parent: parent.map(str::to_owned),
+    };
+    if node.id == target {
+        return Some(found(node));
+    }
+    let id = node.id.clone();
+    if by_name.is_none() && node.name == target {
+        *by_name = Some(found(node));
+    }
+    if !children {
+        return None;
+    }
+    view.child_views()
+        .iter()
+        .find_map(|child| find_in(child, window, target, Some(&id), by_name))
+}
+
+/// Fingerprint gate: the node the client saw must still be this one. The
+/// fingerprint is the snapshot's ([`UiTree::fingerprint_map`]): its
+/// parent's id is part of it.
 fn stale(surface: &Rc<Surface>, target: &str, expect: Option<u64>) -> Option<String> {
     let expect = expect?;
-    let window = surface.root.ns().window()?;
-    let view = resolve(surface, target)?;
-    let node = element(&view, &window)?;
-    let got = node.fingerprint(None);
+    let found = find(surface, target)?;
+    let got = found.node.fingerprint(found.parent.as_deref());
     (got != expect).then(|| format!("stale_target: {target}"))
 }
 
@@ -733,6 +758,18 @@ enum Visibility {
     Offscreen,
     /// Hidden, empty, or clipped away where scrolling does not help.
     Hidden,
+}
+
+impl Visibility {
+    /// The snapshot's `visible`: it shows, or would once scrolled to.
+    fn visible(&self) -> bool {
+        !matches!(self, Visibility::Hidden)
+    }
+
+    /// The snapshot's `in_viewport`: some of it shows now.
+    fn in_viewport(&self) -> bool {
+        matches!(self, Visibility::Shown(_))
+    }
 }
 
 /// Where `view` can be seen: not hidden up its chain, with an area, and
@@ -1061,15 +1098,15 @@ fn assert_spec(surface: &Rc<Surface>, spec: &AssertSpec) -> Result<DispatchResul
     let Some(window) = surface.root.ns().window() else {
         return Err("the window is gone".into());
     };
-    let node = resolve(surface, &spec.target).and_then(|v| element(&v, &window));
+    let found = find(surface, &spec.target);
     if spec.exists == Some(false) {
-        return if node.is_none() {
+        return if found.is_none() {
             Ok(DispatchResult::empty())
         } else {
             Err(format!("assert failed: '{}' exists", spec.target))
         };
     }
-    let Some(node) = node else {
+    let Some(Found { view, node, .. }) = found else {
         return Err(format!("assert failed: '{}' not found", spec.target));
     };
     for (field, want, got) in [
@@ -1098,7 +1135,7 @@ fn assert_spec(surface: &Rc<Surface>, spec: &AssertSpec) -> Result<DispatchResul
         return Err(format!("assert failed: '{}' visible mismatch", spec.target));
     }
     if let Some(want) = spec.in_viewport {
-        let has = node.bounds.has_area();
+        let has = visibility(surface, &view, &window).in_viewport();
         if has != want {
             return Err(format!(
                 "assert failed: '{}' in_viewport mismatch",
@@ -1145,6 +1182,17 @@ mod tests {
         );
         assert_eq!(within(rect(0.0, 800.0, 50.0, 40.0), 400.0, 800.0), None);
         assert_eq!(within(rect(10.0, 10.0, 0.0, 40.0), 400.0, 800.0), None);
+    }
+
+    #[test]
+    fn a_node_scrolled_out_is_visible_but_not_in_the_viewport() {
+        let shown = Visibility::Shown(Bounds::new(
+            Point::new(Points(0.0), Points(0.0)),
+            Size::new(Points(10.0), Points(10.0)),
+        ));
+        assert!(shown.visible() && shown.in_viewport());
+        assert!(Visibility::Offscreen.visible() && !Visibility::Offscreen.in_viewport());
+        assert!(!Visibility::Hidden.visible() && !Visibility::Hidden.in_viewport());
     }
 
     #[test]
