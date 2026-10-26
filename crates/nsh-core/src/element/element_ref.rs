@@ -297,7 +297,7 @@ impl ElementRef {
     /// position [`Self::scroll_to_index`] restores (`view_offset` =
     /// minus that distance). `None` when the ref is on no list. Await it in
     /// a task.
-    pub fn item_offset(&self, index: usize) -> Answer<Option<f32>> {
+    pub fn item_offset(&self, index: usize) -> Answer<Option<Points>> {
         let (answer, slot) = Answer::new();
         let pending = slot.clone();
         if self
