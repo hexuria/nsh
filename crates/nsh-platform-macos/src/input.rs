@@ -129,6 +129,10 @@ pub(crate) struct Input {
     js_block: Cell<bool>,
     /// Where the mouse last was (root coordinates), while over the root.
     last: Cell<Option<(f32, f32)>>,
+    /// The cursor this surface last set (`None`: another may show, a
+    /// hosted view's or another app's) — `NSCursor::currentCursor` is
+    /// another object than the one set when the pointer is customized.
+    cursor: Cell<Option<Cursor>>,
     /// Hovered views and the cursor are picked again on the main queue
     /// (what is under the mouse moved).
     repick: Cell<bool>,
@@ -453,22 +457,22 @@ fn update_cursor(surface: &Surface, x: f32, y: f32) {
 /// [`update_cursor`]; unless `always`, only when the app's cursor is
 /// another one. `-[NSCursor set]` costs milliseconds even for the cursor
 /// already set (with a customized pointer size or color it renders the
-/// cursor image again: ~3 ms on macOS 26), so what calls it while the mouse
-/// is still (batches, scroll steps, AppKit's cursor updates) skips it; a
-/// mouse that moves sets it, as it may come from another app's cursor.
+/// cursor image again: ~3 ms on macOS 26), so only the mouse coming in
+/// (it may bring another app's cursor) and a press's end set it always.
 fn set_cursor_at(surface: &Surface, x: f32, y: f32, always: bool) {
     if surface.input.pointer.borrow().is_some() {
         // A drag keeps the cursor it began with.
         return;
     }
     let cursor = match pick(&surface.root, x, y) {
-        Some(hit) if hit.native => return,
+        // the hosted view sets its own: the next one is set again
+        Some(hit) if hit.native => return surface.input.cursor.set(None),
         Some(hit) => cursor_at(&hit),
         None => Cursor::Default,
     };
-    let cursor = ns_cursor(cursor);
-    if always || NSCursor::currentCursor() != cursor {
-        cursor.set();
+    if always || surface.input.cursor.get() != Some(cursor) {
+        ns_cursor(cursor).set();
+        surface.input.cursor.set(Some(cursor));
     }
 }
 
@@ -486,10 +490,13 @@ fn refresh_cursor(surface: &Surface) {
 }
 
 /// AppKit asks the view under the mouse for its cursor (`cursorUpdate:`,
-/// after views moved or were added): NSH's, which AppKit's default (the
-/// arrow, set again on every update) would replace.
+/// after views moved or were added, or the pointer left a window edge's
+/// resize cursor): NSH's, which AppKit's default (the arrow, set again on
+/// every update) would replace. Set always: AppKit may have shown another.
 pub(crate) fn cursor_update(surface: &Surface) {
-    refresh_cursor(surface);
+    if let Some((x, y)) = surface.input.last.get() {
+        set_cursor_at(surface, x, y, true);
+    }
 }
 
 /// A repick waits this long after the last content move (ms): each repick
@@ -623,11 +630,16 @@ pub(crate) fn event(surface: &Rc<Surface>, event: &NSEvent) {
             hover(surface, x, y, mouse);
             mouse_moved(surface, x, y, mouse);
             reveal_indicators(surface, x, y);
-            update_cursor(surface, x, y);
+            // Set always as the mouse comes in (it may bring another app's
+            // cursor); while it moves, only when it changes: setting it
+            // on every move kept a customized pointer re-rendering
+            // (~95% of the main thread's time over a chat's rows).
+            set_cursor_at(surface, x, y, ty == NSEventType::MouseEntered);
         }
         NSEventType::MouseExited => {
             // The views it leaves hear where it was last over them.
             let (x, y) = input.last.take().unwrap_or((x, y));
+            input.cursor.set(None);
             if input.pointer.borrow().is_none() {
                 set_hovered(surface, Vec::new(), x, y, Mouse::of(event));
             }
