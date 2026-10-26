@@ -14,8 +14,9 @@
 //! [`AgentMailbox`]; a timer on the main queue drains it about once a
 //! display frame, so the host touches views only on the main thread.
 //!
-//! **Ops.** `hello`; `snapshot` (with `fingerprints`, `since` a revision)
-//! and `revision`; `assert` and `wait_until`; `click`, `type`,
+//! **Ops.** `hello`; `snapshot` (with `fingerprints`, `since` a
+//! revision, `format: "compact"`: what shows and can be operated, one
+//! line a node) and `revision`; `assert` and `wait_until`; `click`, `type`,
 //! `set_value` and `key` on a target; `keybindings` and `keybinding`;
 //! `wait`; `screenshot` (the window, drawn in process: [`synth::shot`]);
 //! `shutdown`; and the invokes `press`, `hover`, `drag` and `scroll` (on
@@ -67,7 +68,7 @@ use gpui_agent::{
     mailbox::MailboxRequest,
     protocol::{
         AssertSpec, DeliveryMode, HelloInfo, KeybindingScope, Op, PROTOCOL_VERSION, PlatformKind,
-        Request, Response,
+        Request, Response, SnapshotFormat,
     },
     server,
     tree::{Bounds as TreeBounds, UiNode, UiTree},
@@ -226,15 +227,27 @@ fn start(surface: &Rc<Surface>, request: &Request) -> Start {
         }
         Op::Snapshot {
             since,
+            format,
             fingerprints,
-            ..
         } => {
             let mut resp = Response::ok(id);
-            let tree = snapshot(surface);
+            let mut tree = snapshot(surface);
             if *fingerprints == Some(true) {
                 resp.fingerprints = Some(tree.fingerprint_map());
             }
             resp.rev = tree.rev;
+            if *format == Some(SnapshotFormat::Compact) {
+                let size = surface.root.ns().window().and_then(|w| w.contentView());
+                let size = size.map_or((0.0, 0.0), |v| {
+                    let s = v.frame().size;
+                    (s.width as f32, s.height as f32)
+                });
+                tree.nodes = compact(std::mem::take(&mut tree.nodes), size);
+                resp.result = Some(serde_json::json!({
+                    "compact": gpui_agent::compact_lines(&tree),
+                }));
+                return Start::Done(resp);
+            }
             match since {
                 Some(rev) if *rev == revision(&tree) => {
                     resp.result = Some(serde_json::json!({ "unchanged": true }));
@@ -414,6 +427,43 @@ fn snapshot(surface: &Rc<Surface>) -> UiTree {
     };
     tree.rev = Some(revision(&tree));
     tree
+}
+
+/// The roles a user operates.
+const INTERACTIVE: [&str; 13] = [
+    "button",
+    "link",
+    "textfield",
+    "search",
+    "checkbox",
+    "switch",
+    "radio",
+    "slider",
+    "combobox",
+    "menuitem",
+    "tab",
+    "option",
+    "spinbutton",
+];
+
+/// `snapshot {format: "compact"}`'s tree: the interactive nodes that
+/// show in a `width` × `height` window, and the nodes they are in, whose
+/// names say where they are. A live app's whole tree runs to thousands
+/// of nodes (rows scrolled away, every label); this is what an agent
+/// can act on now.
+fn compact(nodes: Vec<UiNode>, (width, height): (f32, f32)) -> Vec<UiNode> {
+    nodes
+        .into_iter()
+        .filter(|node| node.visible)
+        .filter_map(|mut node| {
+            node.children = compact(std::mem::take(&mut node.children), (width, height));
+            let b = node.bounds;
+            let shows =
+                b.has_area() && b.x < width && b.y < height && b.x + b.w > 0.0 && b.y + b.h > 0.0;
+            let acts = shows && INTERACTIVE.contains(&node.role.as_str());
+            (acts || !node.children.is_empty()).then_some(node)
+        })
+        .collect()
 }
 
 /// The tree's revision: a hash of what it says, so an equal revision is
@@ -1748,6 +1798,33 @@ mod tests {
         assert!(err.starts_with("scale_unsupported: "), "{err}");
         let same = serde_json::json!({"preset": "phone", "scale": 2});
         assert_eq!(viewport_size(&same, 2.0), Ok((390.0, 844.0)));
+    }
+
+    #[test]
+    fn a_compact_tree_keeps_what_shows_and_can_be_operated_with_its_context() {
+        let at = |mut node: UiNode, y: f32| {
+            node.bounds = TreeBounds {
+                x: 0.0,
+                y,
+                w: 100.0,
+                h: 20.0,
+            };
+            node
+        };
+        let mut list = at(UiNode::new("chats", "list", "Chats"), 0.0);
+        list.children = vec![
+            at(UiNode::new("open", "button", "Open"), 10.0),
+            at(UiNode::new("n7", "text", "Yesterday"), 40.0),
+            at(UiNode::new("far", "button", "Far"), -400.0),
+        ];
+        let mut hidden = at(UiNode::new("gone", "button", "Gone"), 10.0);
+        hidden.visible = false;
+        let lone = at(UiNode::new("n9", "text", "Title"), 10.0);
+        let tree = compact(vec![list, hidden, lone], (400.0, 800.0));
+        assert_eq!(tree.len(), 1);
+        assert_eq!(tree[0].id, "chats");
+        let kept: Vec<_> = tree[0].children.iter().map(|n| n.id.as_str()).collect();
+        assert_eq!(kept, ["open"]);
     }
 
     #[test]
