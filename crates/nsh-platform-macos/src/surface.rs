@@ -262,6 +262,9 @@ pub(crate) struct Surface {
     pub(crate) handoff: RefCell<Option<nsh_platform_apple::handoff::Activity>>,
     /// JS asked for a display frame.
     js_frame: Cell<bool>,
+    /// The embedding app holds the app ([`crate::AppView::set_paused`]):
+    /// a frame JS asks for waits, and so do its timers.
+    paused: Cell<bool>,
     /// Batches that arrived while animations run, and what came after
     /// them, applied at the start of the next frames
     /// ([`Surface::apply_queued`]).
@@ -426,6 +429,7 @@ impl Surface {
             launch_links: RefCell::new(Vec::new()),
             handoff: RefCell::new(None),
             js_frame: Cell::new(false),
+            paused: Cell::new(false),
             queued: RefCell::default(),
             frame_callbacks: RefCell::default(),
             background_frames: Cell::new(0),
@@ -519,6 +523,7 @@ impl Surface {
         // The displays are there as the app first renders.
         let displays = crate::window_state::displays(self.mtm);
         let links = std::mem::take(&mut *self.launch_links.borrow_mut());
+        let paused = self.paused.get();
         let setup = |control: &EngineControl| {
             if tokens.is_some() {
                 control.set_tokens(tokens);
@@ -533,6 +538,10 @@ impl Surface {
                         nsh_core::PayloadValue::Str(url),
                     )]),
                 );
+            }
+            // A paused surface's next app starts held.
+            if paused {
+                control.set_suspended(true);
             }
         };
         // Remote images download with NSURLSession.
@@ -1023,7 +1032,7 @@ impl Surface {
     /// a JS frame request): while it does, a bounds commit mid-scroll
     /// lands on a live frame.
     pub(crate) fn wants_frames(&self) -> bool {
-        self.js_frame.get()
+        (self.js_frame.get() && !self.paused.get())
             || !self.queued.borrow().is_empty()
             || self.anim.borrow().animating()
             || !self.frame_callbacks.borrow().is_empty()
@@ -1359,7 +1368,7 @@ impl Surface {
             kept.append(&mut added);
             *added = kept;
         }
-        if self.js_frame.replace(false) {
+        if !self.paused.get() && self.js_frame.replace(false) {
             self.control(|c| c.frame());
         }
         // A batch changes more than moves count (clips, deletions); else
@@ -1372,6 +1381,19 @@ impl Surface {
         // A pad hosted above its input's transforms takes the place those
         // transforms show, so it follows them this frame.
         crate::text_input::sync(self);
+    }
+
+    /// Holds the app's frames and timers, or lets them run again
+    /// ([`crate::AppView::set_paused`]); a frame JS asked for meanwhile
+    /// begins on resuming.
+    pub(crate) fn set_paused(self: &Rc<Self>, paused: bool) {
+        if self.paused.replace(paused) == paused {
+            return;
+        }
+        self.control(|c| c.set_suspended(paused));
+        if !paused {
+            self.ensure_ticking();
+        }
     }
 
     /// Applies the batches that waited for this frame, in order, until
