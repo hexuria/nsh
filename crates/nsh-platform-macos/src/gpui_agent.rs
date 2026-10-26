@@ -17,7 +17,12 @@
 //! ([`crate::agent`]), so press handlers, text input and the keymap all
 //! see real events.
 
-use std::{collections::VecDeque, rc::Rc, time::Duration};
+use std::{
+    collections::VecDeque,
+    hash::{Hash, Hasher},
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
 use gpui_agent::{
     AgentMailbox, DispatchResult,
@@ -56,6 +61,16 @@ const ACTIONABLE_TRIES: u32 = 60;
 /// How many drains a press waits for the focus to land in the field it
 /// pressed: the responder moves on the engine's reply.
 const FOCUS_TRIES: u32 = 50;
+/// How many drains in a row the app must be quiet to have settled: about
+/// 100 ms, as `nsh test`'s agent waits (`nsh_testing::agent`), which
+/// covers the engine's turn from an event to the batch it makes.
+const QUIET_DRAINS: u32 = 7;
+/// How long an action waits for the app to settle at most: an app that
+/// animates for ever still gets its reply.
+const SETTLE: Duration = Duration::from_secs(2);
+/// The longest `wait` a client may ask for: below the server's request
+/// timeout, so the reply still reaches it.
+const MAX_WAIT: Duration = Duration::from_secs(25);
 
 /// Starts the server for `surface`, when `GPUI_AGENT` asks for one.
 ///
@@ -108,11 +123,16 @@ fn schedule(key: u64, mailbox: AgentMailbox, mut jobs: VecDeque<Job>) {
                 Start::Done(response) => request.reply(response),
                 Start::Act(action) => jobs.push_back(Job {
                     request,
-                    action,
+                    action: Some(action),
                     phase: Phase::Locate {
                         tries: 0,
                         revealed: false,
                     },
+                }),
+                Start::Settle(timeout) => jobs.push_back(Job {
+                    request,
+                    action: None,
+                    phase: Phase::Settle(Settle::new(timeout, true)),
                 }),
             }
         }
@@ -129,10 +149,12 @@ fn schedule(key: u64, mailbox: AgentMailbox, mut jobs: VecDeque<Job>) {
     });
 }
 
-/// What a request starts: an answer now, or an action to step.
+/// What a request starts: an answer now, an action to step, or a wait
+/// for the app to settle.
 enum Start {
     Done(Response),
     Act(Action),
+    Settle(Duration),
 }
 
 fn response(id: &str, result: Result<DispatchResult, String>) -> Response {
@@ -155,20 +177,39 @@ fn start(surface: &Rc<Surface>, request: &Request) -> Start {
             resp.hello = Some(hello());
             return Start::Done(resp);
         }
-        Op::Snapshot { fingerprints, .. } => {
+        Op::Snapshot {
+            since,
+            fingerprints,
+            ..
+        } => {
             let mut resp = Response::ok(id);
             let tree = snapshot(surface);
             if *fingerprints == Some(true) {
                 resp.fingerprints = Some(tree.fingerprint_map());
             }
-            resp.tree = Some(tree);
+            resp.rev = tree.rev;
+            match since {
+                Some(rev) if *rev == revision(&tree) => {
+                    resp.result = Some(serde_json::json!({ "unchanged": true }));
+                }
+                // No earlier trees are kept to diff against: the whole one.
+                Some(_) => {
+                    resp.result = Some(serde_json::json!({ "full": true }));
+                    resp.tree = Some(tree);
+                }
+                None => resp.tree = Some(tree),
+            }
             return Start::Done(resp);
         }
         Op::Revision => {
-            // No revision tracking: every snapshot is rebuilt.
-            return Start::Done(Response::ok(id));
+            let mut resp = Response::ok(id);
+            resp.rev = snapshot(surface).rev;
+            return Start::Done(resp);
         }
-        Op::Wait { .. } => Ok(DispatchResult::empty()),
+        Op::Wait { timeout_ms } => {
+            let timeout = timeout_ms.map_or(SETTLE, Duration::from_millis);
+            return Start::Settle(timeout.min(MAX_WAIT));
+        }
         Op::Click {
             target,
             expect_fingerprint,
@@ -288,13 +329,27 @@ fn snapshot(surface: &Rc<Surface>) -> UiTree {
             collect(surface, &child, window, &mut nodes);
         }
     }
-    UiTree {
+    let mut tree = UiTree {
         app: gpui_agent::discovery::detect_identity().executable,
         platform: PlatformKind::Desktop,
         ready: true,
         nodes,
         rev: None,
-    }
+    };
+    tree.rev = Some(revision(&tree));
+    tree
+}
+
+/// The tree's revision: a hash of what it says, so an equal revision is
+/// an equal tree. `wait_until` skips its assert while the revision
+/// stands, which a counter of batches would get wrong (a scroll moves
+/// nodes in and out of the viewport without one).
+fn revision(tree: &UiTree) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    serde_json::to_vec(&tree.nodes)
+        .unwrap_or_default()
+        .hash(&mut hasher);
+    hasher.finish()
 }
 
 /// Where `view` lands in the semantic tree: hidden views exclude their
@@ -557,10 +612,10 @@ fn describe(view: &NshView) -> String {
 
 // --- Actions ----------------------------------------------------------------
 
-/// An input request in flight ([`schedule`]).
+/// A request in flight ([`schedule`]): an action, or a wait.
 struct Job {
     request: MailboxRequest,
-    action: Action,
+    action: Option<Action>,
     phase: Phase,
 }
 
@@ -612,6 +667,56 @@ enum Phase {
     Locate { tries: u32, revealed: bool },
     /// Pressed; waiting for the focus to land in the target.
     Focus { tries: u32 },
+    /// The input is given; waiting for the app to settle.
+    Settle(Settle),
+}
+
+/// The wait for the app to settle: no batches coming or waiting, no
+/// native animation, no display frame JS asked for, for
+/// [`QUIET_DRAINS`] drains in a row, until a deadline. An action replies
+/// once it is over, so the next snapshot sees what it did.
+struct Settle {
+    until: Instant,
+    /// The batch count the quiet drains saw.
+    batches: Option<u64>,
+    quiet: u32,
+    /// The reply says whether it settled (`wait`); an action's says so
+    /// only when it did not.
+    report: bool,
+}
+
+impl Settle {
+    fn new(timeout: Duration, report: bool) -> Settle {
+        Settle {
+            until: Instant::now() + timeout,
+            batches: None,
+            quiet: 0,
+            report,
+        }
+    }
+
+    /// One drain's look at the app's activity ([`Surface::activity`]):
+    /// `Some(settled)` once it is over.
+    fn poll(&mut self, (batches, busy): (u64, bool), now: Instant) -> Option<bool> {
+        if busy || self.batches != Some(batches) {
+            self.quiet = 0;
+            self.batches = Some(batches);
+        } else {
+            self.quiet += 1;
+        }
+        if self.quiet >= QUIET_DRAINS {
+            return Some(true);
+        }
+        (now >= self.until).then_some(false)
+    }
+
+    fn result(&self, settled: bool) -> DispatchResult {
+        if self.report || !settled {
+            DispatchResult::json(serde_json::json!({ "settled": settled }))
+        } else {
+            DispatchResult::empty()
+        }
+    }
 }
 
 /// The action an `invoke` names (`None`: no such invoke).
@@ -662,7 +767,17 @@ fn step(surface: &Rc<Surface>, job: &mut Job) -> Option<Result<DispatchResult, S
     let Some(window) = surface.root.ns().window() else {
         return Some(Err("the window is gone".into()));
     };
-    let action = &job.action;
+    let action = match (&mut job.phase, &job.action) {
+        (Phase::Settle(settle), _) => {
+            let settled = settle.poll(surface.activity(), Instant::now())?;
+            if !settled {
+                log::info!("gpui-agent: the app did not settle; replying all the same");
+            }
+            return Some(Ok(settle.result(settled)));
+        }
+        (_, Some(action)) => action,
+        (_, None) => return Some(Err("nothing to act on".into())),
+    };
     let target = action.target.as_deref().unwrap_or("the window");
     match &mut job.phase {
         Phase::Locate { tries, revealed } => {
@@ -679,13 +794,14 @@ fn step(surface: &Rc<Surface>, job: &mut Job) -> Option<Result<DispatchResult, S
                 }
             };
             perform(surface, &window, &action.gesture, x, y);
-            if action.gesture.types() {
+            job.phase = if action.gesture.types() {
                 // The press is in the event queue: the run loop handles it
                 // before the next drain.
-                job.phase = Phase::Focus { tries: 0 };
-                return None;
-            }
-            Some(Ok(DispatchResult::empty()))
+                Phase::Focus { tries: 0 }
+            } else {
+                Phase::Settle(Settle::new(SETTLE, false))
+            };
+            None
         }
         Phase::Focus { tries } => {
             let focused = action
@@ -710,8 +826,10 @@ fn step(surface: &Rc<Surface>, job: &mut Job) -> Option<Result<DispatchResult, S
                 Gesture::Key(key) => synth::key(&window, key),
                 _ => {}
             }
-            Some(Ok(DispatchResult::empty()))
+            job.phase = Phase::Settle(Settle::new(SETTLE, false));
+            None
         }
+        Phase::Settle(_) => None,
     }
 }
 
@@ -1182,6 +1300,56 @@ mod tests {
         );
         assert_eq!(within(rect(0.0, 800.0, 50.0, 40.0), 400.0, 800.0), None);
         assert_eq!(within(rect(10.0, 10.0, 0.0, 40.0), 400.0, 800.0), None);
+    }
+
+    #[test]
+    fn the_app_settles_after_quiet_drains_in_a_row() {
+        let now = Instant::now();
+        let mut settle = Settle::new(SETTLE, false);
+        // The first look only learns the batch count.
+        assert_eq!(settle.poll((3, false), now), None);
+        for _ in 1..QUIET_DRAINS {
+            assert_eq!(settle.poll((3, false), now), None);
+        }
+        assert_eq!(settle.poll((3, false), now), Some(true));
+    }
+
+    #[test]
+    fn a_batch_or_an_animation_starts_the_quiet_over() {
+        let now = Instant::now();
+        let mut settle = Settle::new(SETTLE, false);
+        for _ in 0..QUIET_DRAINS {
+            settle.poll((3, false), now);
+        }
+        assert_eq!(settle.poll((4, false), now), None);
+        assert_eq!(settle.poll((4, true), now), None);
+        assert_eq!(settle.quiet, 0);
+    }
+
+    #[test]
+    fn an_app_that_never_settles_gets_its_reply_at_the_deadline() {
+        let mut settle = Settle::new(Duration::from_millis(10), false);
+        let later = Instant::now() + Duration::from_secs(1);
+        assert_eq!(settle.poll((1, true), later), Some(false));
+        assert_eq!(
+            settle.result(false).value,
+            Some(serde_json::json!({ "settled": false }))
+        );
+        assert_eq!(settle.result(true).value, None);
+        assert!(Settle::new(SETTLE, true).result(true).value.is_some());
+    }
+
+    #[test]
+    fn equal_trees_have_equal_revisions() {
+        let tree = |name: &str| UiTree {
+            app: "app".into(),
+            platform: PlatformKind::Desktop,
+            ready: true,
+            nodes: vec![UiNode::new("save", "button", name)],
+            rev: None,
+        };
+        assert_eq!(revision(&tree("Save")), revision(&tree("Save")));
+        assert_ne!(revision(&tree("Save")), revision(&tree("Saved")));
     }
 
     #[test]
