@@ -157,6 +157,43 @@ pub(crate) fn modifier(name: &str) -> Option<NSEventModifierFlags> {
     })
 }
 
+/// `stroke` as [`key`] names it: modifiers, then the key.
+pub(crate) fn keystroke_name(stroke: &nsh_core::keymap::Keystroke) -> String {
+    use nsh_core::keymap::Key;
+    let mut name = String::new();
+    let m = stroke.modifiers;
+    for (on, prefix) in [
+        (m.cmd, "cmd+"),
+        (m.ctrl, "ctrl+"),
+        (m.alt, "alt+"),
+        (m.shift, "shift+"),
+    ] {
+        if on {
+            name.push_str(prefix);
+        }
+    }
+    name.push_str(&match stroke.key {
+        Key::Char(' ') => "space".into(),
+        Key::Char(c) => c.to_string(),
+        Key::Enter => "Return".into(),
+        Key::Escape => "Escape".into(),
+        Key::Tab => "Tab".into(),
+        Key::Backspace => "BackSpace".into(),
+        Key::Delete => "Delete".into(),
+        Key::Insert => "Help".into(),
+        Key::Up => "Up".into(),
+        Key::Down => "Down".into(),
+        Key::Left => "Left".into(),
+        Key::Right => "Right".into(),
+        Key::Home => "Home".into(),
+        Key::End => "End".into(),
+        Key::PageUp => "Page_Up".into(),
+        Key::PageDown => "Page_Down".into(),
+        Key::F(n) => format!("F{n}"),
+    });
+    name
+}
+
 pub(crate) fn key(window: &NSWindow, name: &str) {
     let mut flags = NSEventModifierFlags::empty();
     let mut name = name;

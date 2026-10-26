@@ -66,6 +66,17 @@ pub(crate) fn set(surface: &Surface, keymap: Arc<Keymap>) {
     }
 }
 
+/// The surface's bindings, oldest first: the gpui-agent lists them.
+#[cfg(feature = "gpui-agent")]
+pub(crate) fn bindings(surface: &Surface) -> Vec<nsh_core::keymap::KeyBinding> {
+    surface
+        .keymap
+        .table
+        .borrow()
+        .as_ref()
+        .map_or_else(Vec::new, |table| table.bindings().to_vec())
+}
+
 /// Drops the table (the app stopped).
 pub(crate) fn clear(surface: &Surface) {
     surface.keymap.table.borrow_mut().take();
