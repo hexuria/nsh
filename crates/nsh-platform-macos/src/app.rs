@@ -412,6 +412,16 @@ impl AppView {
         Ok(())
     }
 
+    /// Holds the app while nobody can see it (`true`), as a browser holds
+    /// a background tab: no display frames reach it (`requestAnimationFrame`
+    /// waits) and its JS timers wait, so a game loop or a poll stops
+    /// costing CPU. Input, requests and what is mounted stay; an app
+    /// loaded meanwhile starts held. `false` runs it again: what came due
+    /// meanwhile runs once.
+    pub fn set_paused(&self, paused: bool) {
+        self.surface.set_paused(paused);
+    }
+
     /// Stops the app.
     pub fn stop(&self) {
         self.surface.stop();
