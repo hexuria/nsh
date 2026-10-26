@@ -511,7 +511,7 @@ pub(super) struct Components {
     pub(super) measures: Vec<(NodeId, AnswerSlot<Option<crate::Measurement>>)>,
     /// List item offsets to answer once this commit is laid out
     /// ([`crate::ui::ElementRef::item_offset`]).
-    pub(super) item_offsets: Vec<(NodeId, u32, AnswerSlot<Option<f32>>)>,
+    pub(super) item_offsets: Vec<(NodeId, u32, AnswerSlot<Option<Points>>)>,
     /// The components' own lists, by node.
     virtual_lists: FxHashMap<NodeId, VirtualListState>,
     /// Views JS made, waiting to be in the tree to make their view.
