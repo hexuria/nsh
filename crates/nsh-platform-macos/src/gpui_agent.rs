@@ -71,6 +71,14 @@ const SETTLE: Duration = Duration::from_secs(2);
 /// The longest `wait` a client may ask for: below the server's request
 /// timeout, so the reply still reaches it.
 const MAX_WAIT: Duration = Duration::from_secs(25);
+/// `invoke("viewport", {preset})`'s sizes, in points: a phone, a tablet
+/// upright, and two common laptop and desktop windows.
+const VIEWPORTS: [(&str, f64, f64); 4] = [
+    ("phone", 390.0, 844.0),
+    ("tablet", 820.0, 1180.0),
+    ("laptop", 1280.0, 800.0),
+    ("desktop", 1440.0, 900.0),
+];
 
 /// Starts the server for `surface`, when `GPUI_AGENT` asks for one.
 ///
@@ -129,10 +137,10 @@ fn schedule(key: u64, mailbox: AgentMailbox, mut jobs: VecDeque<Job>) {
                         revealed: false,
                     },
                 }),
-                Start::Settle(timeout) => jobs.push_back(Job {
+                Start::Settle(timeout, reply) => jobs.push_back(Job {
                     request,
                     action: None,
-                    phase: Phase::Settle(Settle::new(timeout, true)),
+                    phase: Phase::Settle(Settle::new(timeout, reply)),
                 }),
             }
         }
@@ -154,7 +162,7 @@ fn schedule(key: u64, mailbox: AgentMailbox, mut jobs: VecDeque<Job>) {
 enum Start {
     Done(Response),
     Act(Action),
-    Settle(Duration),
+    Settle(Duration, Reply),
 }
 
 fn response(id: &str, result: Result<DispatchResult, String>) -> Response {
@@ -208,7 +216,7 @@ fn start(surface: &Rc<Surface>, request: &Request) -> Start {
         }
         Op::Wait { timeout_ms } => {
             let timeout = timeout_ms.map_or(SETTLE, Duration::from_millis);
-            return Start::Settle(timeout.min(MAX_WAIT));
+            return Start::Settle(timeout.min(MAX_WAIT), Reply::Settled);
         }
         Op::Click {
             target,
@@ -260,6 +268,16 @@ fn start(surface: &Rc<Surface>, request: &Request) -> Start {
             synth::key(window, binding);
         }),
         Op::Assert { spec } => assert_spec(surface, spec),
+        Op::Invoke { name, args } if name == "viewport" => match surface.root.ns().window() {
+            None => Err("the window is gone".into()),
+            Some(window) => match viewport_size(args, window.backingScaleFactor()) {
+                Ok((w, h)) => {
+                    window.setContentSize(objc2_foundation::NSSize::new(w, h));
+                    return Start::Settle(SETTLE, Reply::Viewport { w, h });
+                }
+                Err(err) => Err(err),
+            },
+        },
         Op::Invoke { name, args } => match invoke_action(name, args) {
             Some(Ok(action)) => {
                 let expect = args.get("expect_fingerprint").and_then(|v| v.as_u64());
@@ -680,18 +698,28 @@ struct Settle {
     /// The batch count the quiet drains saw.
     batches: Option<u64>,
     quiet: u32,
-    /// The reply says whether it settled (`wait`); an action's says so
-    /// only when it did not.
-    report: bool,
+    reply: Reply,
+}
+
+/// What a request replies once the app settled.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Reply {
+    /// An action's: nothing, or `{settled: false}` when it did not.
+    Action,
+    /// `wait`'s: `{settled}`.
+    Settled,
+    /// `invoke("viewport")`'s: the size the window's content got, which
+    /// the screen may have held below the `w` × `h` asked for.
+    Viewport { w: f64, h: f64 },
 }
 
 impl Settle {
-    fn new(timeout: Duration, report: bool) -> Settle {
+    fn new(timeout: Duration, reply: Reply) -> Settle {
         Settle {
             until: Instant::now() + timeout,
             batches: None,
             quiet: 0,
-            report,
+            reply,
         }
     }
 
@@ -710,12 +738,57 @@ impl Settle {
         (now >= self.until).then_some(false)
     }
 
-    fn result(&self, settled: bool) -> DispatchResult {
-        if self.report || !settled {
-            DispatchResult::json(serde_json::json!({ "settled": settled }))
-        } else {
-            DispatchResult::empty()
+    /// The reply; `window` gives the viewport's applied size.
+    fn result(&self, settled: bool, window: Option<&NSWindow>) -> DispatchResult {
+        match self.reply {
+            Reply::Action if settled => DispatchResult::empty(),
+            Reply::Action | Reply::Settled => {
+                DispatchResult::json(serde_json::json!({ "settled": settled }))
+            }
+            Reply::Viewport { w, h } => {
+                let size = window.and_then(|w| w.contentView()).map(|v| v.frame().size);
+                DispatchResult::json(serde_json::json!({
+                    "w": size.map(|s| s.width),
+                    "h": size.map(|s| s.height),
+                    "scale": window.map(|w| w.backingScaleFactor()),
+                    "requested": { "w": w, "h": h },
+                    "settled": settled,
+                }))
+            }
         }
+    }
+}
+
+/// The content size `invoke("viewport", args)` asks for: `{w, h}` in
+/// points, or a `{preset}` of [`VIEWPORTS`]. A window's backing scale is
+/// its screen's, which macOS does not let an app choose: asking for
+/// another `scale` than `current` fails rather than pretending.
+fn viewport_size(args: &serde_json::Value, current: f64) -> Result<(f64, f64), String> {
+    let num = |key: &str| args.get(key).and_then(|v| v.as_f64());
+    if let Some(scale) = num("scale")
+        && scale != current
+    {
+        return Err(format!(
+            "scale_unsupported: macOS gives a window its screen's backing scale ({current}); \
+             it cannot be {scale}"
+        ));
+    }
+    if let Some(preset) = args.get("preset").and_then(|v| v.as_str()) {
+        return VIEWPORTS
+            .iter()
+            .find(|(name, ..)| *name == preset)
+            .map(|&(_, w, h)| (w, h))
+            .ok_or_else(|| {
+                let names: Vec<_> = VIEWPORTS.iter().map(|(name, ..)| *name).collect();
+                format!(
+                    "unknown viewport preset `{preset}` (one of {})",
+                    names.join(", ")
+                )
+            });
+    }
+    match (num("w"), num("h")) {
+        (Some(w), Some(h)) if w.is_finite() && h.is_finite() && w >= 1.0 && h >= 1.0 => Ok((w, h)),
+        _ => Err("viewport needs {w, h} in points (at least 1) or {preset}".into()),
     }
 }
 
@@ -773,7 +846,7 @@ fn step(surface: &Rc<Surface>, job: &mut Job) -> Option<Result<DispatchResult, S
             if !settled {
                 log::info!("gpui-agent: the app did not settle; replying all the same");
             }
-            return Some(Ok(settle.result(settled)));
+            return Some(Ok(settle.result(settled, Some(&window))));
         }
         (_, Some(action)) => action,
         (_, None) => return Some(Err("nothing to act on".into())),
@@ -799,7 +872,7 @@ fn step(surface: &Rc<Surface>, job: &mut Job) -> Option<Result<DispatchResult, S
                 // before the next drain.
                 Phase::Focus { tries: 0 }
             } else {
-                Phase::Settle(Settle::new(SETTLE, false))
+                Phase::Settle(Settle::new(SETTLE, Reply::Action))
             };
             None
         }
@@ -826,7 +899,7 @@ fn step(surface: &Rc<Surface>, job: &mut Job) -> Option<Result<DispatchResult, S
                 Gesture::Key(key) => synth::key(&window, key),
                 _ => {}
             }
-            job.phase = Phase::Settle(Settle::new(SETTLE, false));
+            job.phase = Phase::Settle(Settle::new(SETTLE, Reply::Action));
             None
         }
         Phase::Settle(_) => None,
@@ -1305,7 +1378,7 @@ mod tests {
     #[test]
     fn the_app_settles_after_quiet_drains_in_a_row() {
         let now = Instant::now();
-        let mut settle = Settle::new(SETTLE, false);
+        let mut settle = Settle::new(SETTLE, Reply::Action);
         // The first look only learns the batch count.
         assert_eq!(settle.poll((3, false), now), None);
         for _ in 1..QUIET_DRAINS {
@@ -1317,7 +1390,7 @@ mod tests {
     #[test]
     fn a_batch_or_an_animation_starts_the_quiet_over() {
         let now = Instant::now();
-        let mut settle = Settle::new(SETTLE, false);
+        let mut settle = Settle::new(SETTLE, Reply::Action);
         for _ in 0..QUIET_DRAINS {
             settle.poll((3, false), now);
         }
@@ -1328,15 +1401,48 @@ mod tests {
 
     #[test]
     fn an_app_that_never_settles_gets_its_reply_at_the_deadline() {
-        let mut settle = Settle::new(Duration::from_millis(10), false);
+        let mut settle = Settle::new(Duration::from_millis(10), Reply::Action);
         let later = Instant::now() + Duration::from_secs(1);
         assert_eq!(settle.poll((1, true), later), Some(false));
         assert_eq!(
-            settle.result(false).value,
+            settle.result(false, None).value,
             Some(serde_json::json!({ "settled": false }))
         );
-        assert_eq!(settle.result(true).value, None);
-        assert!(Settle::new(SETTLE, true).result(true).value.is_some());
+        assert_eq!(settle.result(true, None).value, None);
+        let wait = Settle::new(SETTLE, Reply::Settled);
+        assert_eq!(
+            wait.result(true, None).value,
+            Some(serde_json::json!({ "settled": true }))
+        );
+    }
+
+    #[test]
+    fn a_viewport_is_a_size_or_a_preset() {
+        use serde_json::json;
+        assert_eq!(
+            viewport_size(&json!({"w": 800, "h": 600}), 2.0),
+            Ok((800.0, 600.0))
+        );
+        assert_eq!(
+            viewport_size(&json!({"preset": "phone"}), 2.0),
+            Ok((390.0, 844.0))
+        );
+        assert!(
+            viewport_size(&json!({"preset": "watch"}), 2.0)
+                .unwrap_err()
+                .contains("phone, tablet, laptop, desktop")
+        );
+        assert!(viewport_size(&json!({"w": 0, "h": 600}), 2.0).is_err());
+        assert!(viewport_size(&json!({}), 2.0).is_err());
+    }
+
+    #[test]
+    fn a_viewport_cannot_change_the_backing_scale() {
+        let args = serde_json::json!({"preset": "phone", "scale": 3});
+        let err = viewport_size(&args, 2.0).unwrap_err();
+        assert!(err.starts_with("scale_unsupported: "), "{err}");
+        let same = serde_json::json!({"preset": "phone", "scale": 2});
+        assert_eq!(viewport_size(&same, 2.0), Ok((390.0, 844.0)));
     }
 
     #[test]
