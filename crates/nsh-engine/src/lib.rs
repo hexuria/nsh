@@ -905,6 +905,9 @@ enum Message {
         url: String,
         handled: bool,
     },
+    /// The app's JS timers wait (`true`) or run again
+    /// ([`EngineControl::set_suspended`]).
+    Suspend(bool),
     /// Moves a manual clock forward by this much, then calls back.
     Advance(std::time::Duration, Box<dyn FnOnce() + Send>),
     /// Sent by a dropped [`Engine`] (there is none in WebAssembly).
@@ -1054,6 +1057,16 @@ impl EngineControl {
     /// stops). Measuring costs nothing while no monitor is installed.
     pub fn set_perf_monitor(&self, monitor: Option<Arc<perf::PerfMonitor>>) {
         let _ = self.tx.send(Message::Perf(monitor));
+    }
+
+    /// Holds the app's JS timers (`setTimeout`, `setInterval`) while
+    /// `suspended`, as a browser holds a background tab's: an app nobody
+    /// can see (scrolled away, covered, in a hidden pane) stops its game
+    /// loops and polls. Input, requests and the components' tasks still
+    /// run; display frames are the platform's to hold. Resumed, what came
+    /// due meanwhile runs once (an interval goes on from then).
+    pub fn set_suspended(&self, suspended: bool) {
+        let _ = self.tx.send(Message::Suspend(suspended));
     }
 
     /// Sets the embedding app's design tokens (`nsh-base`'s theme's),
@@ -1469,6 +1482,7 @@ impl<M: TextEngine + 'static> Driver<M> {
             core,
             js_tokens,
             frame_requested: false,
+            suspended: false,
             ops: Vec::new(),
             binds: Vec::new(),
             events: Vec::new(),
@@ -1624,7 +1638,10 @@ impl<M: TextEngine + 'static> Driver<M> {
     /// is due, on the engine's clock.
     fn due(&self) -> Option<Instant> {
         [
-            self.script.as_ref().and_then(Script::next_timer),
+            self.script
+                .as_ref()
+                .filter(|_| !self.state.suspended)
+                .and_then(Script::next_timer),
             self.state.next_scroll_event(),
             self.state.next_hover_move(),
             self.state.core.next_task_timer(),
@@ -1758,7 +1775,9 @@ impl<M: TextEngine + 'static> Driver<M> {
             for update in hot {
                 script.hot_update(update, &**sink);
             }
-            script.run_timers(nsh_core::time::now());
+            if !state.suspended {
+                script.run_timers(nsh_core::time::now());
+            }
             script.run_system();
         }
         state.core.run_component_tasks();
@@ -1848,6 +1867,8 @@ struct State<M: TextEngine> {
     pinned: EnvironmentPins,
     /// A display frame was requested and has not begun yet.
     frame_requested: bool,
+    /// JS timers wait ([`EngineControl::set_suspended`]).
+    suspended: bool,
     ops: Vec<Op>,
     /// List render requests not yet sent to JS.
     binds: Vec<ListBind>,
@@ -2509,6 +2530,7 @@ fn handle<M: TextEngine>(script: Option<&Script>, state: &mut State<M>, message:
             state.resized = Some(size);
         }
         Message::Wake => {}
+        Message::Suspend(suspended) => state.suspended = suspended,
         Message::Environment(mut env) => {
             state.pinned.apply(&mut env);
             state.core.set_font_scale(env.font_scale);
