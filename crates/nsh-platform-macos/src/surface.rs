@@ -206,6 +206,9 @@ pub(crate) struct Surface {
     pub(crate) host_tokens: RefCell<Option<nsh_engine::Tokens>>,
     /// JS asked for a display frame.
     js_frame: Cell<bool>,
+    /// The embedding app holds the app ([`crate::AppView::set_paused`]):
+    /// a frame JS asks for waits, and so do its timers.
+    paused: Cell<bool>,
     /// Batches that arrived while animations run, and what came after
     /// them, applied at the start of the next frames
     /// ([`Surface::apply_queued`]).
@@ -281,6 +284,7 @@ impl Surface {
             host_environment: Cell::default(),
             host_tokens: RefCell::new(None),
             js_frame: Cell::new(false),
+            paused: Cell::new(false),
             queued: RefCell::default(),
             frame_callbacks: RefCell::default(),
             #[cfg(feature = "dev")]
@@ -349,9 +353,14 @@ impl Surface {
         *self.pending.borrow_mut() = pending;
         // The embedding app's theme overrides are in the first frame.
         let tokens = self.host_tokens.borrow().clone();
+        let paused = self.paused.get();
         let setup = |control: &EngineControl| {
             if tokens.is_some() {
                 control.set_tokens(tokens);
+            }
+            // A paused surface's next app starts held.
+            if paused {
+                control.set_suspended(true);
             }
         };
         match Engine::start_with(config, CoreTextEngine::default, sink, setup) {
@@ -727,7 +736,7 @@ impl Surface {
     /// a JS frame request): while it does, a bounds commit mid-scroll
     /// lands on a live frame.
     pub(crate) fn wants_frames(&self) -> bool {
-        self.js_frame.get()
+        (self.js_frame.get() && !self.paused.get())
             || !self.queued.borrow().is_empty()
             || self.anim.borrow().animating()
             || !self.frame_callbacks.borrow().is_empty()
@@ -863,10 +872,23 @@ impl Surface {
             kept.append(&mut added);
             *added = kept;
         }
-        if self.js_frame.replace(false) {
+        if !self.paused.get() && self.js_frame.replace(false) {
             self.control(|c| c.frame());
         }
         self.revisit();
+    }
+
+    /// Holds the app's frames and timers, or lets them run again
+    /// ([`crate::AppView::set_paused`]); a frame JS asked for meanwhile
+    /// begins on resuming.
+    pub(crate) fn set_paused(self: &Rc<Self>, paused: bool) {
+        if self.paused.replace(paused) == paused {
+            return;
+        }
+        self.control(|c| c.set_suspended(paused));
+        if !paused {
+            self.ensure_ticking();
+        }
     }
 
     /// Applies the batches that waited for this frame, in order, until
