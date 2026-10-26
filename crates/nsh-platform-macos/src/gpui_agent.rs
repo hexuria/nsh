@@ -1,21 +1,55 @@
-//! The gpui-agent control plane (feature `gpui-agent`): an in-process
-//! `AgentHost` so the `gpui-agent` CLI, recipes and MCP can drive a live
-//! app — `snapshot`, `click`, `type`, `key`, `screenshot`, `assert`.
+//! The gpui-agent host (feature `gpui-agent`): serves the gpui-agent
+//! protocol (NDJSON over TCP) from inside a running app, so the
+//! `gpui-agent` CLI, its MCP server and any other client drive the app
+//! with the input a user gives.
 //!
-//! Opt-in: [`install`] does nothing unless `GPUI_AGENT` is set
-//! (`gpui_agent::security::from_env` enforces the token / insecure rules
-//! and refuses release builds). The TCP server runs on its own thread and
-//! posts each request on an [`AgentMailbox`]; a repeating timer on the
-//! main queue drains it, so views are only ever touched on the main
-//! thread.
+//! **Trust.** The feature compiles the host in; [`install`] starts it for
+//! a window when the app runs with `GPUI_AGENT=1`, and
+//! `gpui_agent::security::from_env` sets the terms: requests carry the
+//! token (`GPUI_AGENT_TOKEN`, an HMAC challenge per connection; only
+//! `GPUI_AGENT_INSECURE_NO_TOKEN` waives it), the server listens on
+//! loopback (`GPUI_AGENT_REMOTE` with a token opens another address),
+//! and a release build serves only with `GPUI_AGENT_ALLOW_RELEASE`. The
+//! server runs on a thread of its own and posts each request on an
+//! [`AgentMailbox`]; a timer on the main queue drains it about once a
+//! display frame, so the host touches views only on the main thread.
 //!
-//! The semantic tree is what VoiceOver gets: each view's [`access::Spec`]
-//! (role, label, value, states) becomes a [`UiNode`], identified by its
-//! `testID` or `n<node>`; layout boxes that are no element are skipped
-//! but walked through. Input is posted to the app as the system posts it
-//! ([`crate::synth`]), the same path the `nsh test` agent takes
-//! ([`crate::agent`]), so press handlers, text input and the keymap all
-//! see real events.
+//! **Ops.** `hello`; `snapshot` (with `fingerprints`, `since` a revision)
+//! and `revision`; `assert` and `wait_until`; `click`, `type`,
+//! `set_value` and `key` on a target; `keybindings` and `keybinding`;
+//! `wait`; `screenshot` (the window, drawn in process: [`synth::shot`]);
+//! `shutdown`; and the invokes `press`, `hover`, `drag` and `scroll` (on
+//! a target or at a point) and `viewport` (the window's content size, or
+//! a preset).
+//!
+//! **The tree** is what VoiceOver gets: each view's [`access::Spec`]
+//! (role, label, value, states) becomes a [`UiNode`] with the `testID` or
+//! `n<node>` id; a hidden view takes its subtree out, a grouped element
+//! its children, and a plain layout box passes its children up. `visible`
+//! says a node shows or would once scrolled to, and `in_viewport` that it
+//! shows now. A target is a node of exactly this tree, by id, else by
+//! name; the revision is a hash of the tree.
+//!
+//! **Actionability.** An action acts once its target is actionable: shown
+//! (an area, not hidden, left of it by every clipping ancestor and the
+//! window; a target a scroll view has out of sight is scrolled into view),
+//! enabled, and the view a press at the middle of its shown part reaches,
+//! as the window delivers it (AppKit's hit test, then nsh's picking over
+//! the root). It retries for about a second, then fails with
+//! `target_gone`, `not_visible`, `offscreen`, `disabled` or
+//! `occluded_by`. Input is posted to the app as the system posts it
+//! ([`crate::synth`], as `nsh test`'s agent does), so press handlers, text
+//! input and the keymap see real events.
+//!
+//! **Settle.** An action replies once the app is quiet: no batches coming
+//! or waiting, no native animation, no frame JS asked for, for about
+//! 100 ms in a row, 2 s at most. The next snapshot sees what it did.
+//! Actions are jobs stepped once per drain, in order, so the main thread
+//! runs freely between steps.
+//!
+//! **Key bindings** are the app's keymap's (focused scope) and its menus'
+//! key equivalents (global scope); one that closes, quits or deletes
+//! fires only with `confirm`.
 
 use std::{
     collections::VecDeque,
