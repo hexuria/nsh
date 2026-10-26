@@ -1873,6 +1873,39 @@ impl NshView {
         })
     }
 
+    /// Its ancestors as [`clip_span`] takes them, innermost first.
+    #[cfg(feature = "gpui-agent")]
+    fn clip_ancestors(&self) -> impl Iterator<Item = (crate::sight::Span, (f32, f32), bool)> {
+        std::iter::successors(self.parent_view(), NshView::parent_view).map(|p| {
+            let clips = p.state().clips() || p.state().id == ROOT_ID;
+            (
+                crate::sight::placed(p.ns().frame()),
+                crate::scroll::bounds_origin(&p),
+                clips,
+            )
+        })
+    }
+
+    /// The part of it that [`NshView::shown`] finds not clipped away, in
+    /// the root's coordinates; `None` when nothing of it shows. The agent
+    /// presses the middle of this part, not of the whole view: a row half
+    /// scrolled out is pressed where it can be seen.
+    #[cfg(feature = "gpui-agent")]
+    pub(crate) fn shown_part(&self) -> Option<NSRect> {
+        let ns = self.ns();
+        if ns.window().is_none() || ns.isHiddenOrHasHiddenAncestor() {
+            return None;
+        }
+        let (x0, y0, x1, y1) = clip_span(crate::sight::placed(ns.frame()), self.clip_ancestors())?;
+        // The walk ends in the root's parent's space: back into the root's.
+        let root = std::iter::successors(self.parent_view(), NshView::parent_view).last()?;
+        let origin = root.ns().frame().origin;
+        Some(NSRect::new(
+            NSPoint::new(f64::from(x0) - origin.x, f64::from(y0) - origin.y),
+            CGSize::new(f64::from(x1 - x0), f64::from(y1 - y0)),
+        ))
+    }
+
     /// Its frame, transform or shift changed: places it again.
     pub(crate) fn moved(&self) {
         // Where it was shows anew to a backdrop over it.
@@ -2199,9 +2232,59 @@ impl crate::sight::Tree for Planned {
     }
 }
 
+/// What of `rect` (in its parent's content space) is not clipped away by
+/// `ancestors`, innermost first: each one's placed frame (in its own
+/// parent's content space), the origin its content shows from (a scroll
+/// view's offset, (0, 0) otherwise) and whether it clips its children (an
+/// ancestor that does not only moves `rect` into its parent's space). In
+/// the content space of the outermost ancestor's parent; `None` when
+/// nothing is left. Ancestor transforms are not applied.
+#[cfg(feature = "gpui-agent")]
+fn clip_span(
+    rect: crate::sight::Span,
+    ancestors: impl IntoIterator<Item = (crate::sight::Span, (f32, f32), bool)>,
+) -> Option<crate::sight::Span> {
+    let (mut x0, mut y0, mut x1, mut y1) = rect;
+    for (frame, (ox, oy), clips) in ancestors {
+        if clips {
+            let (w, h) = (frame.2 - frame.0, frame.3 - frame.1);
+            x0 = x0.max(ox);
+            y0 = y0.max(oy);
+            x1 = x1.min(ox + w);
+            y1 = y1.min(oy + h);
+            if x1 <= x0 || y1 <= y0 {
+                return None;
+            }
+        }
+        // Into the grandparent's content space: the offset origin shows
+        // at the frame's origin.
+        x0 += frame.0 - ox;
+        x1 += frame.0 - ox;
+        y0 += frame.1 - oy;
+        y1 += frame.1 - oy;
+    }
+    Some((x0, y0, x1, y1))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(feature = "gpui-agent")]
+    fn the_shown_part_of_a_row_half_scrolled_out_is_what_the_list_shows() {
+        // A 600-point list at y 100 scrolled 20 points: the row at 0..40
+        // shows from 20 to 40, at 100..120 in the screen.
+        let screen = ((0.0, 0.0, 400.0, 800.0), (0.0, 0.0), true);
+        let list = ((0.0, 100.0, 400.0, 700.0), (0.0, 20.0), true);
+        let row = (0.0, 0.0, 400.0, 40.0);
+        assert_eq!(
+            clip_span(row, [list, screen]),
+            Some((0.0, 100.0, 400.0, 120.0))
+        );
+        let below = (0.0, 700.0, 400.0, 740.0);
+        assert_eq!(clip_span(below, [list, screen]), None);
+    }
 
     #[test]
     fn scripted_wheels_are_the_event_handled() {
