@@ -17,19 +17,23 @@
 //! ([`crate::agent`]), so press handlers, text input and the keymap all
 //! see real events.
 
-use std::{rc::Rc, time::Duration};
+use std::{collections::VecDeque, rc::Rc, time::Duration};
 
 use gpui_agent::{
     AgentMailbox, DispatchResult,
+    mailbox::MailboxRequest,
     protocol::{
         AssertSpec, DeliveryMode, HelloInfo, Op, PROTOCOL_VERSION, PlatformKind, Request, Response,
     },
     server,
     tree::{Bounds as TreeBounds, UiNode, UiTree},
 };
-use nsh_core::EventKind;
-use objc2::MainThreadMarker;
-use objc2_app_kit::{NSEventMask, NSEventModifierFlags, NSEventType, NSView, NSWindow};
+use nsh_core::{
+    EventKind, ViewKind,
+    geometry::{Bounds, Point, Points, Size},
+};
+use objc2::{MainThreadMarker, Message};
+use objc2_app_kit::{NSEventModifierFlags, NSEventType, NSView, NSWindow};
 use objc2_foundation::NSRect;
 
 use crate::{
@@ -40,10 +44,18 @@ use crate::{
     view::NshView,
 };
 
-/// How often the main queue drains the request mailbox.
+/// How often the main queue drains the request mailbox and steps the
+/// action in flight: about a display frame.
 const DRAIN: Duration = Duration::from_millis(15);
 /// How long a TCP thread waits for its request to be answered.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+/// How many drains an action waits for its target to be actionable
+/// (visible, enabled, reached by the press) before it fails: about a
+/// second, as long as a screen's transition takes to end.
+const ACTIONABLE_TRIES: u32 = 60;
+/// How many drains a press waits for the focus to land in the field it
+/// pressed: the responder moves on the engine's reply.
+const FOCUS_TRIES: u32 = 50;
 
 /// Starts the server for `surface`, when `GPUI_AGENT` asks for one.
 ///
@@ -69,112 +81,61 @@ pub(crate) fn install(surface: &Rc<Surface>) {
     ) {
         Ok((addr, _)) => {
             log::info!("gpui-agent: serving '{app}' on {addr}");
-            schedule(surface.key(), mailbox);
+            schedule(surface.key(), mailbox, VecDeque::new());
         }
         Err(err) => log::warn!("gpui-agent: cannot bind {}: {err}", config.addr),
     }
 }
 
 /// Re-arms the drain on the main queue while the surface lives.
-fn schedule(key: u64, mailbox: AgentMailbox) {
+///
+/// Requests that read the app are answered at once; actions are jobs,
+/// stepped once per drain, one at a time and in order. Between two drains
+/// the main queue is free, so the app handles the posted input, applies
+/// the engine's batches and runs its animations: an action never blocks
+/// the main thread while it waits for the app.
+fn schedule(key: u64, mailbox: AgentMailbox, mut jobs: VecDeque<Job>) {
     crate::input::later(DRAIN.as_millis() as u64, move || {
         let Some(surface) = Surface::with_key(key) else {
+            for job in jobs {
+                let id = job.request.request.id.clone();
+                job.request.reply(Response::err(id, "the window is gone"));
+            }
             return;
         };
         for request in mailbox.take() {
-            let response = handle(&surface, &request.request);
-            request.reply(response);
+            match start(&surface, &request.request) {
+                Start::Done(response) => request.reply(response),
+                Start::Act(action) => jobs.push_back(Job {
+                    request,
+                    action,
+                    phase: Phase::Locate {
+                        tries: 0,
+                        revealed: false,
+                    },
+                }),
+            }
         }
-        schedule(key, mailbox);
+        while let Some(job) = jobs.front_mut() {
+            let Some(result) = step(&surface, job) else {
+                break;
+            };
+            if let Some(job) = jobs.pop_front() {
+                let id = job.request.request.id.clone();
+                job.request.reply(response(&id, result));
+            }
+        }
+        schedule(key, mailbox, jobs);
     });
 }
 
-/// Answers one request, on the main thread.
-fn handle(surface: &Rc<Surface>, request: &Request) -> Response {
-    let id = &request.id;
-    let result = match &request.op {
-        Op::Hello => {
-            let mut resp = Response::ok(id);
-            resp.hello = Some(hello());
-            return resp;
-        }
-        Op::Snapshot { .. } => {
-            let mut resp = Response::ok(id);
-            let tree = snapshot(surface);
-            resp.tree = Some(tree);
-            return resp;
-        }
-        Op::Revision => {
-            // No revision tracking: every snapshot is rebuilt.
-            return Response::ok(id);
-        }
-        Op::Wait { .. } => Ok(DispatchResult::empty()),
-        Op::Click {
-            target,
-            delivery,
-            expect_fingerprint,
-        } => click(surface, target, *delivery, *expect_fingerprint),
-        Op::Type {
-            target,
-            text,
-            delivery,
-            expect_fingerprint,
-        } => with_focused(
-            surface,
-            target,
-            *delivery,
-            *expect_fingerprint,
-            true,
-            |window| {
-                synth::type_text(window, text);
-            },
-        ),
-        Op::SetValue {
-            target,
-            value,
-            expect_fingerprint,
-        } => with_focused(
-            surface,
-            target,
-            DeliveryMode::Semantic,
-            *expect_fingerprint,
-            true,
-            |window| {
-                synth::key(window, "cmd+a");
-                synth::type_text(window, value);
-            },
-        ),
-        Op::Key {
-            target,
-            key,
-            delivery,
-            expect_fingerprint,
-        } => with_focused(
-            surface,
-            target,
-            *delivery,
-            *expect_fingerprint,
-            true,
-            |window| {
-                synth::key(window, key);
-            },
-        ),
-        Op::Keybinding { binding, .. } => with_window(surface, |window| {
-            synth::key(window, binding);
-        }),
-        Op::Assert { spec } => assert_spec(surface, spec),
-        Op::Invoke { name, args } => match name.as_str() {
-            "drag" => drag(surface, args),
-            "hover" => hover(surface, args),
-            "press" => press(surface, args),
-            "scroll" => scroll(surface, args),
-            _ => Err(format!("unknown invoke: {name}")),
-        },
-        Op::Screenshot { path, mode, .. } => screenshot(surface, path.as_deref(), *mode),
-        Op::Shutdown => with_window(surface, |window| window.close()),
-        Op::Keybindings => Ok(DispatchResult::json(serde_json::json!([]))),
-        Op::WaitUntil { .. } => Err("wait_until is served by the server".into()),
-    };
+/// What a request starts: an answer now, or an action to step.
+enum Start {
+    Done(Response),
+    Act(Action),
+}
+
+fn response(id: &str, result: Result<DispatchResult, String>) -> Response {
     match result {
         Ok(DispatchResult { value }) => {
             let mut resp = Response::ok(id);
@@ -183,6 +144,117 @@ fn handle(surface: &Rc<Surface>, request: &Request) -> Response {
         }
         Err(error) => Response::err(id, error),
     }
+}
+
+/// Answers one request, on the main thread, or makes it an action.
+fn start(surface: &Rc<Surface>, request: &Request) -> Start {
+    let id = &request.id;
+    let result = match &request.op {
+        Op::Hello => {
+            let mut resp = Response::ok(id);
+            resp.hello = Some(hello());
+            return Start::Done(resp);
+        }
+        Op::Snapshot { .. } => {
+            let mut resp = Response::ok(id);
+            let tree = snapshot(surface);
+            resp.tree = Some(tree);
+            return Start::Done(resp);
+        }
+        Op::Revision => {
+            // No revision tracking: every snapshot is rebuilt.
+            return Start::Done(Response::ok(id));
+        }
+        Op::Wait { .. } => Ok(DispatchResult::empty()),
+        Op::Click {
+            target,
+            expect_fingerprint,
+            ..
+        } => return act(surface, id, target, *expect_fingerprint, Gesture::Press),
+        Op::Type {
+            target,
+            text,
+            expect_fingerprint,
+            ..
+        } => {
+            return act(
+                surface,
+                id,
+                target,
+                *expect_fingerprint,
+                Gesture::Type(text.clone()),
+            );
+        }
+        Op::SetValue {
+            target,
+            value,
+            expect_fingerprint,
+        } => {
+            return act(
+                surface,
+                id,
+                target,
+                *expect_fingerprint,
+                Gesture::SetValue(value.clone()),
+            );
+        }
+        Op::Key {
+            target,
+            key,
+            expect_fingerprint,
+            ..
+        } => {
+            return act(
+                surface,
+                id,
+                target,
+                *expect_fingerprint,
+                Gesture::Key(key.clone()),
+            );
+        }
+        Op::Keybinding { binding, .. } => with_window(surface, |window| {
+            synth::key(window, binding);
+        }),
+        Op::Assert { spec } => assert_spec(surface, spec),
+        Op::Invoke { name, args } => match invoke_action(name, args) {
+            Some(Ok(action)) => {
+                let expect = args.get("expect_fingerprint").and_then(|v| v.as_u64());
+                if let Some(target) = &action.target
+                    && let Some(err) = stale(surface, target, expect)
+                {
+                    Err(err)
+                } else {
+                    return Start::Act(action);
+                }
+            }
+            Some(Err(err)) => Err(err),
+            None => Err(format!("unknown invoke: {name}")),
+        },
+        Op::Screenshot { path, mode, .. } => screenshot(surface, path.as_deref(), *mode),
+        Op::Shutdown => with_window(surface, |window| window.close()),
+        Op::Keybindings => Ok(DispatchResult::json(serde_json::json!([]))),
+        Op::WaitUntil { .. } => Err("wait_until is served by the server".into()),
+    };
+    Start::Done(response(id, result))
+}
+
+/// An action on `target`, after the fingerprint gate. `delivery` is
+/// accepted for either mode: this host's one path posts real events.
+fn act(
+    surface: &Rc<Surface>,
+    id: &str,
+    target: &str,
+    expect_fingerprint: Option<u64>,
+    gesture: Gesture,
+) -> Start {
+    if let Some(err) = stale(surface, target, expect_fingerprint) {
+        return Start::Done(Response::err(id, err));
+    }
+    Start::Act(Action {
+        target: Some(target.to_owned()),
+        at: None,
+        gesture,
+    })
 }
 
 fn hello() -> HelloInfo {
@@ -201,7 +273,6 @@ fn hello() -> HelloInfo {
     gpui_agent::discovery::fill_hello_identity(&mut hello);
     hello
 }
-
 // --- Snapshot ---------------------------------------------------------------
 
 /// The semantic tree of `surface`: every view that is an accessibility
@@ -430,17 +501,383 @@ fn stale(surface: &Rc<Surface>, target: &str, expect: Option<u64>) -> Option<Str
     (got != expect).then(|| format!("stale_target: {target}"))
 }
 
+/// `view`'s accessibility, as [`place`] reads it.
+fn spec_of(view: &NshView) -> access::Spec {
+    let s = view.state();
+    let pressable = s.events.contains(EventKind::Press) || s.events.contains(EventKind::LongPress);
+    let text = s.text.as_ref().map(|t| t.text.text.as_str());
+    access::spec_for(
+        &s.props.accessibility,
+        s.kind,
+        pressable,
+        text,
+        s.style.hidden,
+    )
+}
+
+/// How a client names `view` in an error: its id, and its name if it has
+/// one.
+fn describe(view: &NshView) -> String {
+    let id = view
+        .state()
+        .props
+        .test_id
+        .as_deref()
+        .map_or_else(|| format!("n{}", view.id()), str::to_owned);
+    match spec_of(view).label {
+        Some(label) if !label.is_empty() => format!("{id} {label:?}"),
+        _ => id,
+    }
+}
+
+// --- Actions ----------------------------------------------------------------
+
+/// An input request in flight ([`schedule`]).
+struct Job {
+    request: MailboxRequest,
+    action: Action,
+    phase: Phase,
+}
+
+/// What an input request does, and where.
+#[derive(Debug, PartialEq)]
+struct Action {
+    /// The node it acts on; `None` acts at `at` or the window's middle.
+    target: Option<String>,
+    /// An explicit point (content points from the top left), which wins
+    /// over `target`: for content no node names, such as a mini app's.
+    at: Option<(f64, f64)>,
+    gesture: Gesture,
+}
+
+/// The input of an [`Action`].
+#[derive(Debug, PartialEq)]
+enum Gesture {
+    /// Hover, down, up.
+    Press,
+    /// A press, then the text once the field has the focus.
+    Type(String),
+    /// A press, then Select All and the text.
+    SetValue(String),
+    /// A press, then a key.
+    Key(String),
+    /// A pointer move with no press.
+    Hover,
+    /// A press-drag-release of `(dx, dy)` points.
+    Drag { dx: f64, dy: f64 },
+    /// A trackpad gesture of `(dx, dy)` points and `momentum` more.
+    Scroll { dx: f64, dy: f64, momentum: f64 },
+}
+
+impl Gesture {
+    /// It sends keys after its press, which must have focused the target:
+    /// keys must not land on whatever held the focus before.
+    fn types(&self) -> bool {
+        matches!(
+            self,
+            Gesture::Type(_) | Gesture::SetValue(_) | Gesture::Key(_)
+        )
+    }
+}
+
+/// Where a [`Job`] is.
+enum Phase {
+    /// Waiting for the target to be actionable; `revealed`: its scroll
+    /// views were scrolled to bring it in.
+    Locate { tries: u32, revealed: bool },
+    /// Pressed; waiting for the focus to land in the target.
+    Focus { tries: u32 },
+}
+
+/// The action an `invoke` names (`None`: no such invoke).
+///
+/// - `press {x?, y?, target?}`: a press.
+/// - `hover {x?, y?, target?}`: a pointer move with no press, the hover
+///   a user gives a row to light its action bar.
+/// - `drag {target?, x?, y?, dx, dy}`: a press-drag-release.
+/// - `scroll {dx, dy, momentum?, x?, y?, target?}`: a trackpad gesture.
+fn invoke_action(name: &str, args: &serde_json::Value) -> Option<Result<Action, String>> {
+    let num = |key: &str| args.get(key).and_then(|v| v.as_f64());
+    let gesture = match name {
+        "press" => Gesture::Press,
+        "hover" => Gesture::Hover,
+        "drag" => Gesture::Drag {
+            dx: num("dx").unwrap_or(0.0),
+            dy: num("dy").unwrap_or(0.0),
+        },
+        "scroll" => Gesture::Scroll {
+            dx: num("dx").unwrap_or(0.0),
+            dy: num("dy").unwrap_or(0.0),
+            momentum: num("momentum").unwrap_or(0.0),
+        },
+        _ => return None,
+    };
+    let at = num("x").zip(num("y"));
+    let target = args
+        .get("target")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned);
+    Some(Ok(Action {
+        target,
+        at,
+        gesture,
+    }))
+}
+
+/// Steps `job` once; `Some` when it is done.
+///
+/// Before its input an action waits until its target is actionable: shown
+/// (in the window, not hidden, not clipped away; scrolled into view first
+/// when a scroll view has it out of sight), enabled, and the one the
+/// press reaches. It retries for [`ACTIONABLE_TRIES`] drains, so a screen
+/// still sliding in or an overlay fading out does not fail it, then fails
+/// with why: a press that would land elsewhere returns an error instead
+/// of reporting a press nothing received.
+fn step(surface: &Rc<Surface>, job: &mut Job) -> Option<Result<DispatchResult, String>> {
+    let Some(window) = surface.root.ns().window() else {
+        return Some(Err("the window is gone".into()));
+    };
+    let action = &job.action;
+    let target = action.target.as_deref().unwrap_or("the window");
+    match &mut job.phase {
+        Phase::Locate { tries, revealed } => {
+            let (x, y) = match locate(surface, &window, action) {
+                Ok(point) => point,
+                Err(Unready::Offscreen(view)) if !*revealed => {
+                    *revealed = true;
+                    crate::scroll::reveal(surface, &view);
+                    return None;
+                }
+                Err(unready) => {
+                    *tries += 1;
+                    return (*tries >= ACTIONABLE_TRIES).then(|| Err(unready.error(target)));
+                }
+            };
+            perform(surface, &window, &action.gesture, x, y);
+            if action.gesture.types() {
+                // The press is in the event queue: the run loop handles it
+                // before the next drain.
+                job.phase = Phase::Focus { tries: 0 };
+                return None;
+            }
+            Some(Ok(DispatchResult::empty()))
+        }
+        Phase::Focus { tries } => {
+            let focused = action
+                .target
+                .as_deref()
+                .and_then(|t| resolve(surface, t))
+                .is_some_and(|view| focused_in(&view, &window));
+            if !focused {
+                *tries += 1;
+                return (*tries >= FOCUS_TRIES).then(|| {
+                    Err(format!(
+                        "focus_missed: the press on {target} did not focus it"
+                    ))
+                });
+            }
+            match &action.gesture {
+                Gesture::Type(text) => synth::type_text(&window, text),
+                Gesture::SetValue(value) => {
+                    synth::key(&window, "cmd+a");
+                    synth::type_text(&window, value);
+                }
+                Gesture::Key(key) => synth::key(&window, key),
+                _ => {}
+            }
+            Some(Ok(DispatchResult::empty()))
+        }
+    }
+}
+
+// --- Actionability ----------------------------------------------------------
+
+/// Why a target cannot take an action yet.
+enum Unready {
+    /// No node of the snapshot has this id or name.
+    Gone,
+    /// Hidden, empty, or clipped away by an ancestor that does not scroll.
+    NotVisible,
+    /// Out of a scroll view's viewport, still after scrolling it in.
+    Offscreen(NshView),
+    /// It, or an ancestor, is disabled.
+    Disabled,
+    /// The press would land on another view: this one.
+    Occluded(String),
+}
+
+impl Unready {
+    /// The error a client branches on: a code, a colon, the details.
+    fn error(&self, target: &str) -> String {
+        match self {
+            Unready::Gone => format!("target_gone: {target}"),
+            Unready::NotVisible => {
+                format!("not_visible: {target} is hidden, empty or clipped away")
+            }
+            Unready::Offscreen(_) => {
+                format!("offscreen: {target} is out of its scroll view's viewport")
+            }
+            Unready::Disabled => format!("disabled: {target}"),
+            Unready::Occluded(by) => {
+                format!("occluded_by: {by} (a press on {target} lands there)")
+            }
+        }
+    }
+}
+
+/// Where `view` can be seen ([`visibility`]).
+enum Visibility {
+    /// This part of it shows (window content points, from the top left).
+    Shown(Bounds<Points>),
+    /// A scroll view has it out of its viewport: scrolling brings it in.
+    Offscreen,
+    /// Hidden, empty, or clipped away where scrolling does not help.
+    Hidden,
+}
+
+/// Where `view` can be seen: not hidden up its chain, with an area, and
+/// left of it by every clipping ancestor (scroll views at their current
+/// offset) and the window's content.
+fn visibility(surface: &Surface, view: &NshView, window: &NSWindow) -> Visibility {
+    let chain = || std::iter::successors(Some(view.clone()), NshView::parent_view);
+    let size = view.ns().frame().size;
+    if size.width <= 0.0 || size.height <= 0.0 || chain().any(|v| v.state().style.hidden) {
+        return Visibility::Hidden;
+    }
+    let cut = || {
+        if chain().skip(1).any(|v| v.kind() == ViewKind::Scroll) {
+            Visibility::Offscreen
+        } else {
+            Visibility::Hidden
+        }
+    };
+    let Some(part) = view.shown_part() else {
+        return cut();
+    };
+    let Some(part) = in_window(surface.root.ns(), part, window) else {
+        return Visibility::Hidden;
+    };
+    let Some(content) = window.contentView().map(|v| v.frame().size) else {
+        return Visibility::Hidden;
+    };
+    match within(part, content.width as f32, content.height as f32) {
+        Some(part) => Visibility::Shown(part),
+        None => cut(),
+    }
+}
+
+/// What of `rect` lies in a `width` × `height` window content, if it has
+/// an area.
+fn within(rect: Bounds<Points>, width: f32, height: f32) -> Option<Bounds<Points>> {
+    let x0 = rect.origin.x.0.max(0.0);
+    let y0 = rect.origin.y.0.max(0.0);
+    let x1 = (rect.origin.x.0 + rect.size.width.0).min(width);
+    let y1 = (rect.origin.y.0 + rect.size.height.0).min(height);
+    (x1 > x0 && y1 > y0).then(|| {
+        Bounds::new(
+            Point::new(Points(x0), Points(y0)),
+            Size::new(Points(x1 - x0), Points(y1 - y0)),
+        )
+    })
+}
+
+/// The point `action` acts at, once its target is actionable.
+fn locate(
+    surface: &Rc<Surface>,
+    window: &NSWindow,
+    action: &Action,
+) -> Result<(f64, f64), Unready> {
+    if let Some(at) = action.at {
+        return Ok(at);
+    }
+    let Some(target) = &action.target else {
+        let b = surface.root.ns().bounds();
+        return Ok((b.size.width / 2.0, b.size.height / 2.0));
+    };
+    let view = resolve(surface, target).ok_or(Unready::Gone)?;
+    actionable(surface, window, &view)
+}
+
+/// The point to press `view` at — the middle of its shown part — when it
+/// is shown, enabled and the press reaches it there.
+fn actionable(
+    surface: &Rc<Surface>,
+    window: &NSWindow,
+    view: &NshView,
+) -> Result<(f64, f64), Unready> {
+    let part = match visibility(surface, view, window) {
+        Visibility::Shown(part) => part,
+        Visibility::Offscreen => return Err(Unready::Offscreen(view.clone())),
+        Visibility::Hidden => return Err(Unready::NotVisible),
+    };
+    if std::iter::successors(Some(view.clone()), NshView::parent_view).any(|v| spec_of(&v).disabled)
+    {
+        return Err(Unready::Disabled);
+    }
+    let (x, y) = (
+        f64::from(part.origin.x.0 + part.size.width.0 / 2.0),
+        f64::from(part.origin.y.0 + part.size.height.0 / 2.0),
+    );
+    match receiver(surface, window, x, y) {
+        Receiver::View(ns) if ns.isDescendantOf(view.ns()) => Ok((x, y)),
+        Receiver::View(ns) => Err(Unready::Occluded(owner(&ns))),
+        Receiver::Nothing => Err(Unready::Occluded("nothing that takes the pointer".into())),
+    }
+}
+
+/// What a press at a point reaches.
+enum Receiver {
+    /// The view it lands on: one of nsh's or a hosted AppKit view.
+    View(objc2::rc::Retained<NSView>),
+    Nothing,
+}
+
+/// What a press at `(x, y)` (content points from the top left) lands
+/// on, as the window delivers it: AppKit's hit test of the content view,
+/// and over the root nsh's own picking (`pointerEvents`, transforms,
+/// views animating out), which the root's `hitTest:` hands the press to.
+fn receiver(surface: &Surface, window: &NSWindow, x: f64, y: f64) -> Receiver {
+    let Some(content) = window.contentView() else {
+        return Receiver::Nothing;
+    };
+    let p = synth::to_window(window, x, y);
+    let in_super = match crate::view::superview(&content) {
+        Some(frame) => frame.convertPoint_fromView(p, None),
+        None => p,
+    };
+    let Some(hit) = content.hitTest(in_super) else {
+        return Receiver::Nothing;
+    };
+    let root = surface.root.ns();
+    if &*hit != root {
+        return Receiver::View(hit);
+    }
+    let r = root.convertPoint_fromView(p, None);
+    match crate::input::view_at(surface, r.x as f32, r.y as f32) {
+        Some(view) => Receiver::View(view.ns().retain()),
+        None => Receiver::Nothing,
+    }
+}
+
+/// Names the view a press landed on: the nsh view it is or is hosted by,
+/// else its AppKit class.
+fn owner(ns: &NSView) -> String {
+    let mut current = Some(ns.retain());
+    while let Some(v) = current {
+        if let Some(view) = NshView::from_ns(&v) {
+            return describe(&view);
+        }
+        current = crate::view::superview(&v);
+    }
+    format!("a {}", ns.class().name().to_string_lossy())
+}
+
 // --- Input ------------------------------------------------------------------
 
 /// `rect` of view `ns` in the window's content, from its top left; `None`
 /// when the view is not in the window or hidden. Same maths as the `nsh
 /// test` agent's (`crate::agent`).
-fn in_window(
-    ns: &NSView,
-    rect: NSRect,
-    window: &NSWindow,
-) -> Option<nsh_core::geometry::Bounds<nsh_core::geometry::Points>> {
-    use nsh_core::geometry::{Bounds, Point, Points, Size};
+fn in_window(ns: &NSView, rect: NSRect, window: &NSWindow) -> Option<Bounds<Points>> {
     if ns.window().is_none() || ns.isHiddenOrHasHiddenAncestor() {
         return None;
     }
@@ -467,92 +904,10 @@ fn activate(window: &NSWindow) {
     }
 }
 
-/// A user's press at `(x, y)` in window content points: hover, down, up.
-fn press_at(window: &NSWindow, x: f64, y: f64) {
-    activate(window);
-    synth::mouse(window, NSEventType::MouseMoved, x, y, 0);
-    synth::mouse(window, NSEventType::LeftMouseDown, x, y, 1);
-    synth::mouse(window, NSEventType::LeftMouseUp, x, y, 1);
-}
-
 fn with_window(surface: &Rc<Surface>, f: impl FnOnce(&NSWindow)) -> Result<DispatchResult, String> {
     let Some(window) = surface.root.ns().window() else {
         return Err("the window is gone".into());
     };
-    f(&window);
-    Ok(DispatchResult::empty())
-}
-
-/// Runs the events `press_at` queued — the run loop's next pass now —
-/// so the press has already executed when keys go out: key events are
-/// sent synchronously and would otherwise reach whatever was focused
-/// before the press.
-fn run_pending(window: &NSWindow) {
-    let app = objc2_app_kit::NSApplication::sharedApplication(MainThreadMarker::from(window));
-    while let Some(event) = app.nextEventMatchingMask_untilDate_inMode_dequeue(
-        NSEventMask::Any,
-        None,
-        // SAFETY: the default mode's name is a constant of Foundation's.
-        unsafe { objc2_foundation::NSDefaultRunLoopMode },
-        true,
-    ) {
-        app.sendEvent(&event);
-    }
-}
-
-/// Resolves `target`, checks the fingerprint gate, then presses its
-/// centre — the click a user gives — and runs `f` while the app has
-/// focus. `needs_focus` asks for the press to have put the responder
-/// inside the view: `f` sends keys, and they must not land on whatever
-/// held focus before. `delivery` is accepted for either mode: this
-/// host's one path posts real events.
-fn with_focused(
-    surface: &Rc<Surface>,
-    target: &str,
-    _delivery: DeliveryMode,
-    expect_fingerprint: Option<u64>,
-    needs_focus: bool,
-    f: impl FnOnce(&NSWindow),
-) -> Result<DispatchResult, String> {
-    if let Some(err) = stale(surface, target, expect_fingerprint) {
-        return Err(err);
-    }
-    let Some(window) = surface.root.ns().window() else {
-        return Err("the window is gone".into());
-    };
-    let Some(view) = resolve(surface, target) else {
-        return Err(format!("target_gone: {target}"));
-    };
-    let Some(bounds) = in_window(view.ns(), view.ns().bounds(), &window) else {
-        return Err(format!(
-            "in_viewport_unavailable: {target} is not in the window"
-        ));
-    };
-    let (x, y) = (
-        f64::from(bounds.origin.x.0) + f64::from(bounds.size.width.0) / 2.0,
-        f64::from(bounds.origin.y.0) + f64::from(bounds.size.height.0) / 2.0,
-    );
-    press_at(&window, x, y);
-    if needs_focus {
-        run_pending(&window);
-        // The responder lands on the engine's reply — a queue pass or
-        // more after the press itself — so wait for it, bounded: a
-        // field that cannot take the focus still fails instead of
-        // eating the keys.
-        for _ in 0..50 {
-            if focused_in(&view, &window) {
-                break;
-            }
-            objc2_foundation::NSRunLoop::currentRunLoop().runUntilDate(
-                &objc2_foundation::NSDate::dateWithTimeIntervalSinceNow(0.01),
-            );
-        }
-        if !focused_in(&view, &window) {
-            return Err(format!(
-                "focus_missed: the press on {target} did not focus it"
-            ));
-        }
-    }
     f(&window);
     Ok(DispatchResult::empty())
 }
@@ -565,111 +920,48 @@ fn focused_in(view: &NshView, window: &NSWindow) -> bool {
         .is_some_and(|v| v.isDescendantOf(view.ns()))
 }
 
-fn click(
-    surface: &Rc<Surface>,
-    target: &str,
-    delivery: DeliveryMode,
-    expect_fingerprint: Option<u64>,
-) -> Result<DispatchResult, String> {
-    // Buttons and links respond without taking the responder: only
-    // keys need the focus check.
-    with_focused(surface, target, delivery, expect_fingerprint, false, |_| {})
+/// Gives `gesture`'s pointer input at `(x, y)`, content points from the
+/// top left.
+fn perform(surface: &Rc<Surface>, window: &NSWindow, gesture: &Gesture, x: f64, y: f64) {
+    activate(window);
+    match *gesture {
+        Gesture::Press | Gesture::Type(_) | Gesture::SetValue(_) | Gesture::Key(_) => {
+            synth::mouse(window, NSEventType::MouseMoved, x, y, 0);
+            synth::mouse(window, NSEventType::LeftMouseDown, x, y, 1);
+            synth::mouse(window, NSEventType::LeftMouseUp, x, y, 1);
+        }
+        Gesture::Hover => hover(surface, window, x, y),
+        Gesture::Drag { dx, dy } => drag(window, x, y, dx, dy),
+        Gesture::Scroll { dx, dy, momentum } => scroll(window, x, y, dx, dy, momentum),
+    }
 }
 
-/// `invoke("drag", {target, dx, dy, expect_fingerprint?})` — a user's
-/// drag on `target`: hover, down at its centre, a run of dragged steps
-/// to centre + `(dx, dy)` (pan gestures need a travel, not one jump),
-/// up at the end. Points are content points, top-left origin.
-fn drag(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchResult, String> {
-    let target = args
-        .get("target")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default();
-    let dx = args.get("dx").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let dy = args.get("dy").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let expect = args.get("expect_fingerprint").and_then(|v| v.as_u64());
-    if let Some(err) = stale(surface, target, expect) {
-        return Err(err);
-    }
-    let Some(window) = surface.root.ns().window() else {
-        return Err("the window is gone".into());
-    };
-    let (x0, y0) = point_of(surface, &window, args)?;
-    activate(&window);
-    synth::mouse(&window, NSEventType::MouseMoved, x0, y0, 0);
-    synth::mouse(&window, NSEventType::LeftMouseDown, x0, y0, 1);
+/// A user's drag: hover, down, a run of dragged steps to `(dx, dy)` away
+/// (pan gestures need a travel, not one jump), up at the end.
+fn drag(window: &NSWindow, x0: f64, y0: f64, dx: f64, dy: f64) {
+    synth::mouse(window, NSEventType::MouseMoved, x0, y0, 0);
+    synth::mouse(window, NSEventType::LeftMouseDown, x0, y0, 1);
     const STEPS: usize = 6;
     for i in 1..=STEPS {
         let t = i as f64 / STEPS as f64;
         synth::mouse(
-            &window,
+            window,
             NSEventType::LeftMouseDragged,
             x0 + dx * t,
             y0 + dy * t,
             1,
         );
     }
-    synth::mouse(&window, NSEventType::LeftMouseUp, x0 + dx, y0 + dy, 1);
-    Ok(DispatchResult::empty())
+    synth::mouse(window, NSEventType::LeftMouseUp, x0 + dx, y0 + dy, 1);
 }
 
-/// The point an invoke's args name: explicit `x`/`y` content points
-/// (top-left origin), `target`'s centre, or the window's centre.
-fn point_of(
-    surface: &Rc<Surface>,
-    window: &NSWindow,
-    args: &serde_json::Value,
-) -> Result<(f64, f64), String> {
-    if let (Some(x), Some(y)) = (
-        args.get("x").and_then(|v| v.as_f64()),
-        args.get("y").and_then(|v| v.as_f64()),
-    ) {
-        return Ok((x, y));
-    }
-    if let Some(target) = args.get("target").and_then(|v| v.as_str()) {
-        let Some(view) = resolve(surface, target) else {
-            return Err(format!("target_gone: {target}"));
-        };
-        let Some(bounds) = in_window(view.ns(), view.ns().bounds(), window) else {
-            return Err(format!(
-                "in_viewport_unavailable: {target} is not in the window"
-            ));
-        };
-        return Ok((
-            f64::from(bounds.origin.x.0) + f64::from(bounds.size.width.0) / 2.0,
-            f64::from(bounds.origin.y.0) + f64::from(bounds.size.height.0) / 2.0,
-        ));
-    }
-    let b = surface.root.ns().bounds();
-    Ok((b.size.width / 2.0, b.size.height / 2.0))
-}
-
-/// `invoke("press", {x?, y?, target?})` — a user's press at a point:
-/// hover, down, up. For content with no accessible node to click, such
-/// as a mini app's inner views.
-fn press(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchResult, String> {
-    let Some(window) = surface.root.ns().window() else {
-        return Err("the window is gone".into());
-    };
-    let (x, y) = point_of(surface, &window, args)?;
-    press_at(&window, x, y);
-    Ok(DispatchResult::empty())
-}
-
-/// `invoke("hover", {x?, y?, target?})` — a pointer move with no press:
-/// the hover a user gives a row to light its action bar. Points are
-/// content points, top-left origin; `target` centres on it.
-fn hover(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchResult, String> {
-    let Some(window) = surface.root.ns().window() else {
-        return Err("the window is gone".into());
-    };
-    let (x, y) = point_of(surface, &window, args)?;
-    activate(&window);
+/// A pointer move with no press.
+fn hover(surface: &Rc<Surface>, window: &NSWindow, x: f64, y: f64) {
     // `postEvent` drops `MouseMoved` when the window's
     // `acceptsMouseMovedEvents` is off (tracking areas opt real moves in,
     // not posted ones): dispatch it through the input path itself.
     if let Some(event) = synth::mouse_event(
-        &window,
+        window,
         NSEventType::MouseMoved,
         x,
         y,
@@ -678,26 +970,21 @@ fn hover(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchResu
     ) {
         crate::input::event(surface, &event);
     }
-    Ok(DispatchResult::empty())
 }
 
-/// `invoke("scroll", {dx, dy, x?, y?, target?})` — a trackpad scroll
-/// gesture of `(dx, dy)` points at `x,y` (or `target`'s centre, or the
-/// window's): began, a run of changed deltas a gesture apart, ended —
-/// the same shape `agent::scroll` feeds the headless driver.
-fn scroll(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchResult, String> {
-    let dx = args.get("dx").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let dy = args.get("dy").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let Some(window) = surface.root.ns().window() else {
-        return Err("the window is gone".into());
-    };
-    let (x, y) = point_of(surface, &window, args)?;
-    activate(&window);
+/// A trackpad scroll gesture of `(dx, dy)` points at `(x, y)`: began, a
+/// run of changed deltas a gesture apart, ended — the same shape
+/// `agent::scroll` feeds the headless driver. `momentum`: that many more
+/// points as the system's coasting momentum (phase events a trackpad
+/// sends after the gesture ends), left running — no end — so a press can
+/// be checked against a live glide. It runs along the gesture's axis, or
+/// vertically on its own.
+fn scroll(window: &NSWindow, x: f64, y: f64, dx: f64, dy: f64, momentum: f64) {
     const STEP: f64 = 24.0;
     let gesture = dx != 0.0 || dy != 0.0;
     let frames = ((dx.abs().max(dy.abs()) / STEP).ceil() as u32).max(1);
     if gesture {
-        synth::wheel_with(&window, x, y, 0, 0, Some(1), 0, synth::timestamp());
+        synth::wheel_with(window, x, y, 0, 0, Some(1), 0, synth::timestamp());
     }
     let (mut sent_x, mut sent_y) = (0i32, 0i32);
     for i in 1..=frames {
@@ -707,7 +994,7 @@ fn scroll(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchRes
             continue;
         }
         synth::wheel_with(
-            &window,
+            window,
             x,
             y,
             to_x - sent_x,
@@ -719,18 +1006,13 @@ fn scroll(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchRes
         (sent_x, sent_y) = (to_x, to_y);
     }
     if gesture {
-        synth::wheel_with(&window, x, y, 0, 0, Some(4), 0, synth::timestamp());
+        synth::wheel_with(window, x, y, 0, 0, Some(4), 0, synth::timestamp());
     }
-    // `momentum`: that many more points as the system's coasting momentum
-    // (phase events a trackpad sends after the gesture ends); left
-    // running — no end — so a press can be checked against a live glide.
-    // It runs along the gesture's axis, or vertically on its own sign.
-    let momentum = args.get("momentum").and_then(|v| v.as_f64()).unwrap_or(0.0);
     if momentum != 0.0 {
         // `dx=dy=0` continues momentum already running (changed deltas
         // only, as the system sends until it decays).
         if gesture {
-            synth::wheel_with(&window, x, y, 0, 0, None, 1, synth::timestamp());
+            synth::wheel_with(window, x, y, 0, 0, None, 1, synth::timestamp());
         }
         let horizontal = dx != 0.0 && dy == 0.0;
         let frames = ((momentum.abs() / STEP).ceil() as u32).max(1);
@@ -740,7 +1022,7 @@ fn scroll(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchRes
             let v = (momentum * t).round() as i32;
             let (to_x, to_y) = if horizontal { (v, 0) } else { (0, v) };
             synth::wheel_with(
-                &window,
+                window,
                 x,
                 y,
                 to_x - sent_x,
@@ -752,7 +1034,6 @@ fn scroll(surface: &Rc<Surface>, args: &serde_json::Value) -> Result<DispatchRes
             (sent_x, sent_y) = (to_x, to_y);
         }
     }
-    Ok(DispatchResult::empty())
 }
 
 fn screenshot(
@@ -826,4 +1107,59 @@ fn assert_spec(surface: &Rc<Surface>, spec: &AssertSpec) -> Result<DispatchResul
         }
     }
     Ok(DispatchResult::empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_invoke_with_a_point_acts_there_whatever_its_target() {
+        let args = serde_json::json!({"x": 10.0, "y": 20.0, "target": "row", "dx": 5.0});
+        let action = invoke_action("drag", &args).unwrap().unwrap();
+        assert_eq!(action.at, Some((10.0, 20.0)));
+        assert_eq!(action.target.as_deref(), Some("row"));
+        assert_eq!(action.gesture, Gesture::Drag { dx: 5.0, dy: 0.0 });
+        assert!(invoke_action("teleport", &args).is_none());
+    }
+
+    #[test]
+    fn only_typing_gestures_wait_for_the_focus() {
+        assert!(Gesture::Type("a".into()).types());
+        assert!(Gesture::Key("Return".into()).types());
+        assert!(!Gesture::Press.types());
+        assert!(!Gesture::Hover.types());
+    }
+
+    #[test]
+    fn a_rect_is_cut_to_the_window_content() {
+        let rect = |x, y, w, h| {
+            Bounds::new(
+                Point::new(Points(x), Points(y)),
+                Size::new(Points(w), Points(h)),
+            )
+        };
+        assert_eq!(
+            within(rect(-10.0, 790.0, 50.0, 40.0), 400.0, 800.0),
+            Some(rect(0.0, 790.0, 40.0, 10.0))
+        );
+        assert_eq!(within(rect(0.0, 800.0, 50.0, 40.0), 400.0, 800.0), None);
+        assert_eq!(within(rect(10.0, 10.0, 0.0, 40.0), 400.0, 800.0), None);
+    }
+
+    #[test]
+    fn unready_targets_fail_with_a_code_first() {
+        assert_eq!(Unready::Gone.error("save"), "target_gone: save");
+        assert!(
+            Unready::NotVisible
+                .error("save")
+                .starts_with("not_visible: save")
+        );
+        assert_eq!(Unready::Disabled.error("save"), "disabled: save");
+        let occluded = Unready::Occluded("n42 \"FPS\"".into()).error("close");
+        assert!(
+            occluded.starts_with("occluded_by: n42 \"FPS\""),
+            "{occluded}"
+        );
+    }
 }
