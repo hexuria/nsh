@@ -804,11 +804,11 @@ fn locate(source: &str, base: Option<&AssetBase>) -> Option<Location> {
 /// CoreMedia's `CMTime`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-struct CMTime {
-    value: i64,
-    timescale: i32,
-    flags: u32,
-    epoch: i64,
+pub(crate) struct CMTime {
+    pub(crate) value: i64,
+    pub(crate) timescale: i32,
+    pub(crate) flags: u32,
+    pub(crate) epoch: i64,
 }
 
 // SAFETY: the layout and encoding of CoreMedia's `CMTime` (`{?=qiIq}`).
@@ -817,6 +817,12 @@ unsafe impl Encode for CMTime {
         "?",
         &[i64::ENCODING, i32::ENCODING, u32::ENCODING, i64::ENCODING],
     );
+}
+
+// SAFETY: a pointer to a `CMTime` (`^{?=qiIq}`), as AVFoundation takes an
+// out time.
+unsafe impl objc2::RefEncode for CMTime {
+    const ENCODING_REF: Encoding = Encoding::Pointer(&Self::ENCODING);
 }
 
 impl CMTime {
