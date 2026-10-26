@@ -280,7 +280,7 @@ pub(crate) enum Action {
     HoverAt(NodeId, Option<crate::MouseEvent>),
     /// A list's item start in content coordinates, with the layout of the
     /// commit the action goes out with; resolves the slot.
-    ItemOffset(NodeId, u32, AnswerSlot<Option<f32>>),
+    ItemOffset(NodeId, u32, AnswerSlot<Option<crate::geometry::Points>>),
 }
 
 /// What a speech recognition session asks of the core
