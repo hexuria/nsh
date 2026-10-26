@@ -6,7 +6,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use nsh_core::{Command, LayoutAnimation, MountItem, NodeId, ROOT_ID, ViewKind, canvas::Damage};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{surface::Surface, view::NshView};
 
@@ -24,6 +24,9 @@ pub(crate) struct Mounter {
     /// Views whose drawing changed while they could not be seen
     /// ([`Mounter::draw_when_shown`]).
     stale: RefCell<Vec<NshView>>,
+    /// The views the batch being applied deletes
+    /// ([`Mounter::begin_batch`]).
+    deleting: FxHashSet<NodeId>,
 }
 
 impl Mounter {
@@ -36,6 +39,7 @@ impl Mounter {
             layout_animation: None,
             rtl: false,
             stale: RefCell::default(),
+            deleting: FxHashSet::default(),
         }
     }
 
@@ -99,8 +103,20 @@ impl Mounter {
         self.views.get(&view.state().id) == Some(view)
     }
 
+    /// A batch is about to be applied: notes what it deletes, so a
+    /// subtree leaves its window with its root alone.
+    pub(crate) fn begin_batch(&mut self, items: &[MountItem]) {
+        self.deleting.clear();
+        self.deleting
+            .extend(items.iter().filter_map(|item| match item {
+                MountItem::Delete { id } => Some(*id),
+                _ => None,
+            }));
+    }
+
     /// The batch is applied.
     pub(crate) fn end_batch(&mut self, surface: &Rc<Surface>) {
+        self.deleting.clear();
         self.layout_animation = None;
         crate::navigation::end_batch(surface);
         crate::system::end_batch(surface);
@@ -182,8 +198,21 @@ impl Mounter {
                 crate::file_drop::deleted(surface, *id);
                 if let Some(view) = self.views.remove(id) {
                     crate::native::deleted(surface, &view);
+                    // A view whose parent the batch deletes too stays in it:
+                    // the subtree leaves the window with its root, in one
+                    // `removeFromSuperview`, not one per view while still
+                    // in the window (a chat's thousand views, a frame of
+                    // 30 ms and more).
+                    let inside = view
+                        .parent_view()
+                        .is_some_and(|p| self.deleting.contains(&p.id()));
                     // A removal animation detaches the view when it ends.
-                    if !crate::transition::removing(surface, &view, self.layout_animation.as_ref())
+                    if !inside
+                        && !crate::transition::removing(
+                            surface,
+                            &view,
+                            self.layout_animation.as_ref(),
+                        )
                     {
                         crate::transition::deleted(&view);
                         self.detach(surface, &view);

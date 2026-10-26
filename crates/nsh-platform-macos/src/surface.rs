@@ -631,6 +631,7 @@ impl Surface {
 
     fn apply(self: &Rc<Self>, batch: &MountBatch) {
         crate::access::prepare(batch);
+        self.mounter.borrow_mut().begin_batch(&batch.items);
         for item in &batch.items {
             self.anim.borrow_mut().apply(item);
             if !matches!(
