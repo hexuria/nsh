@@ -148,6 +148,12 @@ macro_rules! events {
                 #[allow(unreachable_patterns)]
                 match name {
                     $(events!(@js $prop $($js)?) => Some(EventKind::$variant),)*
+                    // React Native's names for the renamed handlers, which
+                    // apps (and generated ones) still write
+                    "onChangeText" => Some(EventKind::ChangeText),
+                    "onSubmitEditing" => Some(EventKind::SubmitEditing),
+                    "onPressIn" => Some(EventKind::PressDown),
+                    "onPressOut" => Some(EventKind::PressUp),
                     _ => None,
                 }
             }
