@@ -216,6 +216,10 @@ pub(crate) struct Surface {
     /// The model of a test session's app (`nsh test --target`).
     #[cfg(feature = "dev")]
     test_model: RefCell<Option<std::sync::Arc<nsh_testing::agent::Model>>>,
+    /// Batches applied so far: the gpui-agent waits for them to stop
+    /// coming ([`Surface::activity`]).
+    #[cfg(feature = "gpui-agent")]
+    batches: Cell<u64>,
     /// The display link, while it runs.
     link: RefCell<Option<Retained<CADisplayLink>>>,
     /// The performance monitor ([`Surface::set_perf_monitor`]), and whether
@@ -278,6 +282,8 @@ impl Surface {
             frame_callbacks: RefCell::default(),
             #[cfg(feature = "dev")]
             test_model: RefCell::default(),
+            #[cfg(feature = "gpui-agent")]
+            batches: Cell::new(0),
             link: RefCell::new(None),
             perf: RefCell::new(None),
             perf_on: Arc::new(AtomicBool::new(false)),
@@ -561,6 +567,8 @@ impl Surface {
                     monitor.record_latency(sent.elapsed());
                 }
                 self.apply(&batch);
+                #[cfg(feature = "gpui-agent")]
+                self.batches.set(self.batches.get() + 1);
                 return true;
             }
             Message::Error(message) => {
@@ -672,6 +680,17 @@ impl Surface {
         self.anim.borrow().animating()
             || !self.frame_callbacks.borrow().is_empty()
             || !self.queued.borrow().is_empty()
+    }
+
+    /// How many batches it has applied, and whether it is busy: messages
+    /// from the engine on their way to the main thread or waiting for a
+    /// frame, a display frame JS asked for, native animations or the
+    /// platform's own (scroll glides, transitions) running. The gpui-agent
+    /// settles on both standing still.
+    #[cfg(feature = "gpui-agent")]
+    pub(crate) fn activity(&self) -> (u64, bool) {
+        let incoming = self.pending.borrow().load(Ordering::Acquire);
+        (self.batches.get(), incoming || self.wants_frames())
     }
 
     /// Keeps the model `nsh test --target` steps see of the app
