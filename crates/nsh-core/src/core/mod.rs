@@ -2883,7 +2883,7 @@ impl<M: TextEngine> Core<M> {
                 .key(id)
                 .ok()
                 .and_then(|k| self.nodes[k as usize].list.as_ref())
-                .map(|l| l.item_offset(index));
+                .map(|l| Points(l.item_offset(index)));
             answer.borrow_mut().deliver(offset);
         }
         // And their transitions' time, with this commit's styles.
