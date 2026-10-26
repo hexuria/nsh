@@ -26,9 +26,14 @@ use std::{
 
 use gpui_agent::{
     AgentMailbox, DispatchResult,
+    keybinding::{
+        KeybindingInfo, KeybindingRequest, authorize_keybinding, binding_is_dangerous,
+        keybinding_list_json,
+    },
     mailbox::MailboxRequest,
     protocol::{
-        AssertSpec, DeliveryMode, HelloInfo, Op, PROTOCOL_VERSION, PlatformKind, Request, Response,
+        AssertSpec, DeliveryMode, HelloInfo, KeybindingScope, Op, PROTOCOL_VERSION, PlatformKind,
+        Request, Response,
     },
     server,
     tree::{Bounds as TreeBounds, UiNode, UiTree},
@@ -264,9 +269,25 @@ fn start(surface: &Rc<Surface>, request: &Request) -> Start {
                 Gesture::Key(key.clone()),
             );
         }
-        Op::Keybinding { binding, .. } => with_window(surface, |window| {
-            synth::key(window, binding);
-        }),
+        Op::Keybinding {
+            binding,
+            chord,
+            scope,
+            confirm,
+            activate,
+        } => {
+            let request = KeybindingRequest {
+                binding,
+                chord: chord.as_deref(),
+                scope: *scope,
+                confirm: *confirm,
+                activate: *activate,
+            };
+            match keybinding(surface, request) {
+                Ok(()) => return Start::Settle(SETTLE, Reply::Action),
+                Err(err) => Err(err),
+            }
+        }
         Op::Assert { spec } => assert_spec(surface, spec),
         Op::Invoke { name, args } if name == "viewport" => match surface.root.ns().window() {
             None => Err("the window is gone".into()),
@@ -294,7 +315,10 @@ fn start(surface: &Rc<Surface>, request: &Request) -> Start {
         },
         Op::Screenshot { path, mode, .. } => screenshot(surface, path.as_deref(), *mode),
         Op::Shutdown => with_window(surface, |window| window.close()),
-        Op::Keybindings => Ok(DispatchResult::json(serde_json::json!([]))),
+        Op::Keybindings => {
+            let infos: Vec<_> = catalog(surface).into_iter().map(|e| e.info).collect();
+            Ok(DispatchResult::json(keybinding_list_json(&infos)))
+        }
         Op::WaitUntil { .. } => Err("wait_until is served by the server".into()),
     };
     Start::Done(response(id, result))
@@ -1264,6 +1288,253 @@ fn scroll(window: &NSWindow, x: f64, y: f64, dx: f64, dy: f64, momentum: f64) {
     }
 }
 
+// --- Key bindings -----------------------------------------------------------
+
+/// A key binding of the app, and how to fire it.
+struct Binding {
+    info: KeybindingInfo,
+    fire: Fire,
+}
+
+enum Fire {
+    /// Keys, as [`synth::key`] names them: a binding of the app's keymap.
+    Keys(String),
+    /// The menu item at this index path of the main menu.
+    Menu(Vec<isize>),
+}
+
+/// The app's key bindings: its keymap's (`nsh/keymap`; focused scope,
+/// they fire in its window), then its menus' key equivalents (global
+/// scope, the application's). Keymap ids are `keymap.<chord>`, menu ids
+/// `menu.<title>/<title>`. Menu items that close, quit or delete are
+/// dangerous: firing them needs `confirm`.
+fn catalog(surface: &Surface) -> Vec<Binding> {
+    let mut out: Vec<Binding> = Vec::new();
+    // The newest binding of a keystroke is the one that fires.
+    for binding in crate::keymap::bindings(surface).iter().rev() {
+        let chord = chord_of(&binding.keystroke);
+        let id = format!("keymap.{chord}");
+        if out.iter().any(|b| b.info.id == id) {
+            continue;
+        }
+        let mut info = KeybindingInfo::new(id, chord, KeybindingScope::Focused, false);
+        info.dangerous = binding_is_dangerous(&info);
+        out.push(Binding {
+            info,
+            fire: Fire::Keys(synth::keystroke_name(&binding.keystroke)),
+        });
+    }
+    out.reverse();
+    let app = objc2_app_kit::NSApplication::sharedApplication(surface.mtm);
+    if let Some(menu) = app.mainMenu() {
+        menu_bindings(&menu, "menu.", &mut Vec::new(), &mut out);
+    }
+    out
+}
+
+/// Adds the key equivalents of `menu` and its submenus (paths `path`) to
+/// `out`. The app menu's title is the app's name: it is named `app`.
+fn menu_bindings(
+    menu: &objc2_app_kit::NSMenu,
+    prefix: &str,
+    path: &mut Vec<isize>,
+    out: &mut Vec<Binding>,
+) {
+    for index in 0..menu.numberOfItems() {
+        let Some(item) = menu.itemAtIndex(index) else {
+            continue;
+        };
+        if item.isSeparatorItem() || item.isHidden() {
+            continue;
+        }
+        let title = if prefix == "menu." && index == 0 {
+            "app".to_owned()
+        } else {
+            item.title().to_string()
+        };
+        path.push(index);
+        if let Some(submenu) = item.submenu() {
+            menu_bindings(&submenu, &format!("{prefix}{title}/"), path, out);
+        } else if let Some(chord) = menu_chord(
+            &item.keyEquivalent().to_string(),
+            item.keyEquivalentModifierMask(),
+        ) {
+            let dangerous = dangerous_menu_item(&title, item.action());
+            let mut info = KeybindingInfo::new(
+                format!("{prefix}{title}"),
+                chord,
+                KeybindingScope::Global,
+                dangerous,
+            );
+            info.dangerous = binding_is_dangerous(&info);
+            out.push(Binding {
+                info,
+                fire: Fire::Menu(path.clone()),
+            });
+        }
+        path.pop();
+    }
+}
+
+/// A menu item that ends something the user may want back: closing a
+/// window or the app, deleting. Its role's action says so, or for the
+/// app's own items (which carry no role) its title.
+fn dangerous_menu_item(title: &str, action: Option<objc2::runtime::Sel>) -> bool {
+    use objc2::sel;
+    let by_action =
+        action.is_some_and(|a| [sel!(terminate:), sel!(performClose:), sel!(delete:)].contains(&a));
+    let words = [
+        "quit", "close", "delete", "remove", "discard", "erase", "sign out", "log out",
+    ];
+    let title = title.to_lowercase();
+    by_action || words.iter().any(|w| title.starts_with(w))
+}
+
+/// `stroke` as a chord, as gpui-agent writes them: `cmd-shift-k`.
+fn chord_of(stroke: &nsh_core::keymap::Keystroke) -> String {
+    let m = stroke.modifiers;
+    let mut chord = String::new();
+    let mut prefix = 0;
+    for (on, name, written) in [
+        (m.ctrl, "ctrl-", "ctrl+"),
+        (m.alt, "alt-", "alt+"),
+        (m.shift, "shift-", "shift+"),
+        (m.cmd, "cmd-", "cmd+"),
+    ] {
+        if on {
+            chord.push_str(name);
+            prefix += written.len();
+        }
+    }
+    // The key as the keystroke's canonical text names it, after its
+    // modifiers (`ctrl+alt+shift+cmd+<key>`).
+    chord.push_str(&stroke.to_string()[prefix..]);
+    chord
+}
+
+/// A menu item's key equivalent as a chord (`None`: it has none). An
+/// upper-case letter is typed with Shift.
+fn menu_chord(key: &str, mask: NSEventModifierFlags) -> Option<String> {
+    let mut chars = key.chars();
+    let c = chars.next()?;
+    if chars.next().is_some() {
+        return None;
+    }
+    let shift = mask.contains(NSEventModifierFlags::Shift) || c.is_uppercase();
+    let name = match c {
+        '\r' => "enter".to_owned(),
+        '\u{1b}' => "escape".to_owned(),
+        '\t' => "tab".to_owned(),
+        '\u{8}' | '\u{7f}' => "backspace".to_owned(),
+        ' ' => "space".to_owned(),
+        '\u{f700}' => "up".to_owned(),
+        '\u{f701}' => "down".to_owned(),
+        '\u{f702}' => "left".to_owned(),
+        '\u{f703}' => "right".to_owned(),
+        '\u{f704}'..='\u{f71b}' => format!("f{}", c as u32 - 0xf703),
+        '\u{f728}' => "delete".to_owned(),
+        c => c.to_lowercase().to_string(),
+    };
+    let mut chord = String::new();
+    for (on, prefix) in [
+        (mask.contains(NSEventModifierFlags::Control), "ctrl-"),
+        (mask.contains(NSEventModifierFlags::Option), "alt-"),
+        (shift, "shift-"),
+        (mask.contains(NSEventModifierFlags::Command), "cmd-"),
+    ] {
+        if on {
+            chord.push_str(prefix);
+        }
+    }
+    chord.push_str(&name);
+    Some(chord)
+}
+
+/// `keybinding`: fires a binding of [`catalog`] by id (or, as clients
+/// used to, by its chord), after gpui-agent's gate: the scope must be
+/// the binding's, a focused binding needs the app focused (or
+/// `activate`), and a dangerous one `confirm`.
+fn keybinding(surface: &Rc<Surface>, request: KeybindingRequest<'_>) -> Result<(), String> {
+    let window = surface.root.ns().window().ok_or("the window is gone")?;
+    let catalog = catalog(surface);
+    let infos: Vec<KeybindingInfo> = catalog.iter().map(|b| b.info.clone()).collect();
+    let wanted = chord_text(request.binding);
+    let by_chord = (!infos.iter().any(|i| i.id == request.binding))
+        .then(|| infos.iter().find(|i| chord_text(&i.chord) == wanted))
+        .flatten();
+    let request = KeybindingRequest {
+        binding: by_chord.map_or(request.binding, |info| &info.id),
+        ..request
+    };
+    let app = objc2_app_kit::NSApplication::sharedApplication(surface.mtm);
+    let focused = app.isActive() && window.isKeyWindow();
+    let info = authorize_keybinding(&infos, request, focused)?;
+    let Some(binding) = catalog.iter().find(|b| b.info.id == info.id) else {
+        return Err(format!("unknown binding `{}`", info.id));
+    };
+    if request.activate {
+        activate(&window);
+        window.makeKeyAndOrderFront(None);
+    }
+    match &binding.fire {
+        Fire::Keys(keys) => synth::key(&window, keys),
+        Fire::Menu(path) => {
+            let mut menu = app.mainMenu().ok_or("the app has no menu")?;
+            let (last, parents) = path.split_last().ok_or("an empty menu path")?;
+            for &index in parents {
+                menu = menu
+                    .itemAtIndex(index)
+                    .and_then(|item| item.submenu())
+                    .ok_or("the menu changed")?;
+            }
+            // AppKit enables items as it validates them: as when the user
+            // opens the menu.
+            menu.update();
+            let enabled = menu.itemAtIndex(*last).is_some_and(|item| item.isEnabled());
+            if !enabled {
+                return Err(gpui_agent::keybinding::keybinding_unavailable(format!(
+                    "{} is disabled",
+                    info.id
+                )));
+            }
+            menu.performActionForItemAtIndex(*last);
+        }
+    }
+    Ok(())
+}
+
+/// A chord's text to compare: lower case, its modifiers in one order
+/// whatever their spelling, `-` between them.
+fn chord_text(chord: &str) -> String {
+    let lower = chord.trim().to_lowercase();
+    // A trailing `+` or `-` after a separator is the key itself (`cmd++`).
+    let (body, key) = match lower.char_indices().last() {
+        Some((i, c)) if i > 0 && (c == '+' || c == '-') => (&lower[..i - 1], c.to_string()),
+        _ => match lower.rfind(['+', '-', ' ']) {
+            Some(i) => (&lower[..i], lower[i + 1..].to_owned()),
+            None => ("", lower.clone()),
+        },
+    };
+    let mods: Vec<&str> = body
+        .split(['+', '-', ' '])
+        .map(|m| match m {
+            "command" | "super" | "meta" => "cmd",
+            "control" => "ctrl",
+            "option" | "opt" => "alt",
+            m => m,
+        })
+        .collect();
+    let mut text = String::new();
+    for m in ["ctrl", "alt", "shift", "cmd"] {
+        if mods.contains(&m) {
+            text.push_str(m);
+            text.push('-');
+        }
+    }
+    text.push_str(&key);
+    text
+}
+
 fn screenshot(
     surface: &Rc<Surface>,
     path: Option<&str>,
@@ -1456,6 +1727,60 @@ mod tests {
         };
         assert_eq!(revision(&tree("Save")), revision(&tree("Save")));
         assert_ne!(revision(&tree("Save")), revision(&tree("Saved")));
+    }
+
+    #[test]
+    fn keystrokes_are_chords_as_gpui_agent_writes_them() {
+        use nsh_core::{keymap::Keystroke, platform::Os};
+        let chord = |text| chord_of(&Keystroke::parse(text, Os::MacOs).unwrap());
+        assert_eq!(chord("cmd+shift+k"), "shift-cmd-k");
+        assert_eq!(chord("ctrl+f5"), "ctrl-f5");
+    }
+
+    #[test]
+    fn menu_key_equivalents_are_chords() {
+        let cmd = NSEventModifierFlags::Command;
+        assert_eq!(menu_chord("w", cmd).as_deref(), Some("cmd-w"));
+        assert_eq!(menu_chord("Z", cmd).as_deref(), Some("shift-cmd-z"));
+        assert_eq!(menu_chord("\u{f704}", cmd).as_deref(), Some("cmd-f1"));
+        assert_eq!(menu_chord("", cmd), None);
+    }
+
+    #[test]
+    fn chords_compare_whatever_their_separators() {
+        assert_eq!(chord_text("Cmd+Shift+K"), "shift-cmd-k");
+        assert_eq!(chord_text("command-shift-k"), "shift-cmd-k");
+        assert_eq!(chord_text("cmd++"), "cmd-+");
+        assert_eq!(chord_text("cmd--"), "cmd--");
+        assert_eq!(chord_text("escape"), "escape");
+    }
+
+    #[test]
+    fn closing_quitting_and_deleting_menu_items_are_dangerous() {
+        use objc2::sel;
+        assert!(dangerous_menu_item("Quit Rox", None));
+        assert!(dangerous_menu_item("Close Window", None));
+        assert!(dangerous_menu_item("Anything", Some(sel!(terminate:))));
+        assert!(!dangerous_menu_item("New Chat", Some(sel!(newDocument:))));
+    }
+
+    #[test]
+    fn a_dangerous_binding_needs_confirm() {
+        let catalog = [KeybindingInfo::new(
+            "menu.File/Close Window",
+            "cmd-w",
+            KeybindingScope::Global,
+            dangerous_menu_item("Close Window", None),
+        )];
+        let request = |confirm| KeybindingRequest {
+            binding: "menu.File/Close Window",
+            chord: None,
+            scope: KeybindingScope::Global,
+            confirm,
+            activate: false,
+        };
+        assert!(authorize_keybinding(&catalog, request(false), true).is_err());
+        assert!(authorize_keybinding(&catalog, request(true), true).is_ok());
     }
 
     #[test]
