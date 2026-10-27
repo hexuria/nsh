@@ -1579,7 +1579,12 @@ impl Agent {
         let geometry = self
             .target_geometry(target)
             .ok_or_else(|| format!("`{selector}` is offscreen (no native bounds)"))?;
-        let at = self.actionable_point(id, geometry.owner, selected, &selector)?;
+        let native_owner = if geometry.synthetic {
+            geometry.owner
+        } else {
+            owner
+        };
+        let at = self.actionable_point(id, native_owner, selected, &selector)?;
         self.native.press(at);
         self.settled()
     }
@@ -2821,6 +2826,47 @@ mod tests {
             pressable,
             native_target,
             ..SemanticNode::default()
+        }
+    }
+
+    #[test]
+    fn button_label_press_accepts_its_parent_or_descendant_but_not_foreign_hits() {
+        let label_bounds = Bounds::new(point(px(20.0), px(10.0)), size(px(40.0), px(20.0)));
+        for hit in [2, 3, 99] {
+            let nodes = vec![
+                semantic_node(1, None, false, SemanticTarget::View),
+                semantic_node(2, Some(1), true, SemanticTarget::View),
+                semantic_node(3, Some(2), false, SemanticTarget::View),
+            ];
+            let presses = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let pressed_at = Arc::new(Mutex::new(Vec::new()));
+            let agent = Agent::requiring_native_hit_test(
+                target_scene(nodes),
+                Box::new(GateNative {
+                    bounds: [
+                        (2, Bounds::new(Point::default(), size(px(80.0), px(40.0)))),
+                        (3, label_bounds),
+                    ]
+                    .into(),
+                    text_bounds: Default::default(),
+                    hit: Ok(Some(hit)),
+                    hits: Arc::new(Mutex::new(Vec::new())),
+                    presses: presses.clone(),
+                    pressed_at: pressed_at.clone(),
+                    typed: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                    viewport: size(px(100.0), px(100.0)),
+                }),
+            );
+            let result = agent.press_node(3);
+            if hit == 99 {
+                assert!(result.unwrap_err().contains("occluded_by: 99"));
+                assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 0);
+                assert!(pressed_at.lock().unwrap().is_empty());
+            } else {
+                result.unwrap();
+                assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 1);
+                assert_eq!(*pressed_at.lock().unwrap(), vec![label_bounds.center()]);
+            }
         }
     }
 
