@@ -334,6 +334,14 @@ fn run_rust_app(
     device: Option<&str>,
     work: &Path,
 ) -> anyhow::Result<()> {
+    // A Rust app's page runs its own runtime, which takes no agent's
+    // questions (no test hooks): say so rather than run without the agent.
+    if target == Target::Web && crate::web_agent::config()?.is_some() {
+        anyhow::bail!(
+            "GPUI_AGENT=1 attaches to a JS app on the web; a Rust app (nsh.json \"root\") runs a \
+             runtime that takes no agent's questions there"
+        );
+    }
     let app =
         crate::rust_app::current().context("nsh.json: \"root\" needs \"rust\", the app's crate")?;
     let entry = dunce::canonicalize(entry)?;
