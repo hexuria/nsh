@@ -146,7 +146,7 @@ pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) -> Result<(), String
     let (min_w, min_h) = (crate::window::MIN_WIDTH, crate::window::MIN_HEIGHT);
     if w < min_w || h < min_h {
         return Err(format!(
-            "{w}x{h} is below the window's {min_w}x{min_h} minimum"
+            "{w}x{h} is below the window's minimum of about {min_w}x{min_h}"
         ));
     }
     let dpi = crate::window::dpi(hwnd);
