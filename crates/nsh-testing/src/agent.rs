@@ -1873,8 +1873,18 @@ impl Agent {
         if !node.enabled {
             return Err(format!("node {id} is disabled"));
         }
+        // A text view nothing pressable owns may still take the press in
+        // one of its spans (a link): the platform's press handler finds it
+        // from the character under the finger.
+        let mut target = id;
         if pressable && press_owner(&nodes, node).is_none() {
-            return Err(format!("node {id} is not pressable"));
+            let link = self
+                .pressable_span_at(&nodes, id, at)
+                .ok_or_else(|| format!("node {id} is not pressable"))?;
+            if !link.enabled {
+                return Err(format!("node {} is disabled", link.id));
+            }
+            target = link.id;
         }
         let bounds = self
             .native
@@ -1887,7 +1897,26 @@ impl Agent {
         {
             return Err(format!("offscreen: coordinate is outside node {id}"));
         }
-        self.explicit_actionable_point(id, id, at, &format!("node {id}"))
+        self.explicit_actionable_point(target, id, at, &format!("node {target}"))
+    }
+
+    /// The pressable span of text view `text` whose characters are at
+    /// `at` (on their first line, as [`Native::text_bounds`] gives them).
+    fn pressable_span_at<'a>(
+        &self,
+        nodes: &'a [SemanticNode],
+        text: NodeId,
+        at: Point<Points>,
+    ) -> Option<&'a SemanticNode> {
+        nodes.iter().find(|node| {
+            node.pressable
+                && matches!(node.native_target, SemanticTarget::Text { owner, start, end }
+                    if owner == text
+                        && self
+                            .native
+                            .text_bounds(owner, start, end)
+                            .is_some_and(|bounds| bounds.contains(&at)))
+        })
     }
 
     fn node_point_without_reveal(
@@ -3093,6 +3122,70 @@ mod tests {
             } else {
                 assert_eq!(result.unwrap_err(), "node 3 is not pressable");
                 assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 0);
+            }
+        }
+    }
+
+    /// A coordinate press on a link in a text nothing pressable owns goes
+    /// to the link; elsewhere in the text it is refused.
+    #[test]
+    fn press_at_takes_a_link_in_text_nothing_pressable_owns() {
+        let text_bounds = Bounds::new(point(px(10.0), px(10.0)), size(px(200.0), px(40.0)));
+        let link_bounds = Bounds::new(point(px(40.0), px(15.0)), size(px(30.0), px(10.0)));
+        let link_at = link_bounds.center();
+        let plain_at = point(px(150.0), px(30.0));
+        for (hit, at, enabled, expected) in [
+            (4, link_at, true, Ok(())),
+            (4, plain_at, true, Err("node 4 is not pressable")),
+            (4, link_at, false, Err("node 11 is disabled")),
+            (
+                9,
+                link_at,
+                true,
+                Err("target_gone: coordinate has no semantic target"),
+            ),
+        ] {
+            let mut link = semantic_node(
+                11,
+                Some(4),
+                true,
+                SemanticTarget::Text {
+                    owner: 4,
+                    start: 6,
+                    end: 10,
+                },
+            );
+            link.enabled = enabled;
+            let nodes = vec![
+                semantic_node(1, None, false, SemanticTarget::View),
+                semantic_node(4, Some(1), false, SemanticTarget::View),
+                link,
+            ];
+            let presses = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let pressed_at = Arc::new(Mutex::new(Vec::new()));
+            let agent = Agent::requiring_native_hit_test(
+                target_scene(nodes),
+                Box::new(GateNative {
+                    bounds: [(4, text_bounds)].into(),
+                    text_bounds: [((4, 6, 10), link_bounds)].into(),
+                    hit: Ok(Some(hit)),
+                    hits: Arc::new(Mutex::new(Vec::new())),
+                    presses: presses.clone(),
+                    pressed_at: pressed_at.clone(),
+                    typed: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                    viewport: size(px(300.0), px(200.0)),
+                }),
+            );
+            let result = agent.press_at(at);
+            match expected {
+                Ok(()) => {
+                    result.unwrap();
+                    assert_eq!(*pressed_at.lock().unwrap(), vec![link_at]);
+                }
+                Err(message) => {
+                    assert_eq!(result.unwrap_err(), message);
+                    assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 0);
+                }
             }
         }
     }
