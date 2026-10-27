@@ -207,11 +207,20 @@ impl Native for AndroidNative {
             .map(Some)
         });
         let hit = hit.ok_or_else(|| "Android hit testing failed".to_string())?;
-        Ok(match hit {
-            -1 => None,
-            i32::MIN => Some(NodeId::MAX),
-            id => Some(id as NodeId),
-        })
+        // `TestAgent.HIT_*`.
+        match hit {
+            -1 => Ok(None),
+            // A view that is not one of the app's (a system dialog's)
+            // occludes the point; it has no node id.
+            -2 => Ok(Some(NodeId::MAX)),
+            i32::MIN => Err(
+                "Android hit testing failed: the main thread did not answer \
+                             within 10 s, or the hit walk threw"
+                    .to_owned(),
+            ),
+            id if id < 0 => Err(format!("Android hit testing failed: unknown result {id}")),
+            id => Ok(Some(id as NodeId)),
+        }
     }
 
     fn bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
