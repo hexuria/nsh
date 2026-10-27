@@ -1371,6 +1371,11 @@ pub trait Native: Send + Sync {
     fn laid_out(&self) -> Result<(), String> {
         Ok(())
     }
+    /// A failure an earlier call met without returning it (a main thread
+    /// that did not answer), taken once.
+    fn take_failure(&self) -> Option<String> {
+        None
+    }
     /// A picture of the window: PNG bytes, or UTF-8 Cell JSON on the terminal target.
     fn screenshot(&self) -> Result<Vec<u8>, String>;
     /// Makes the window `size` points.
@@ -1746,6 +1751,11 @@ impl Agent {
     /// ([`Native::laid_out`]).
     pub fn native_laid_out(&self) -> Result<(), String> {
         self.native.laid_out()
+    }
+
+    /// [`Native::take_failure`].
+    pub fn take_native_failure(&self) -> Option<String> {
+        self.native.take_failure()
     }
 
     /// Whether the native app window currently has focus.
@@ -3113,6 +3123,9 @@ impl Agent {
                 break;
             }
             self.scene.wait_for_batch(activity.batches, POLL);
+        }
+        if let Some(failure) = self.native.take_failure() {
+            return Err(failure);
         }
         self.native.laid_out()?;
         self.check()
