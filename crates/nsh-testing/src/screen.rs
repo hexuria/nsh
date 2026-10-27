@@ -990,7 +990,8 @@ impl Screen {
                     .label
                     .as_deref()
                     .map(str::to_owned)
-                    .or_else(|| view.text.clone()),
+                    .or_else(|| view.text.clone())
+                    .or_else(|| view.span.as_ref().map(|span| span.text.clone())),
                 hint: view.accessibility_hint.as_deref().map(str::to_owned),
                 value,
                 enabled: !disabled,
@@ -1001,6 +1002,23 @@ impl Screen {
                 scroll: view.kind == Some(ViewKind::Scroll) || view.scroll.is_some(),
                 pressable: view.events.contains(EventKind::Press),
                 states,
+                native_target: if view.canvas_node {
+                    view.parent
+                        .map_or_else(crate::agent::SemanticTarget::default, |owner| {
+                            crate::agent::SemanticTarget::Canvas {
+                                owner,
+                                bounds: view.frame,
+                            }
+                        })
+                } else if let Some(span) = &view.span {
+                    crate::agent::SemanticTarget::Text {
+                        owner: span.view,
+                        start: span.start,
+                        end: span.end,
+                    }
+                } else {
+                    crate::agent::SemanticTarget::View
+                },
             });
             stack.extend(
                 children
@@ -1478,15 +1496,23 @@ impl Screen {
         Some(self.bounds_in_root(id)?.center())
     }
 
-    /// The canvas containing the one node `selector` names, and its
-    /// center in that canvas's coordinates; `None` for ordinary views.
-    pub(crate) fn canvas_node(&self, selector: &Selector) -> Option<(NodeId, Point<Points>)> {
+    /// The canvas semantic node, its native owner, and canvas-local bounds.
+    pub(crate) fn canvas_target(
+        &self,
+        selector: &Selector,
+    ) -> Option<(NodeId, NodeId, Bounds<Points>)> {
         let [id] = self.resolve(selector)[..] else {
             return None;
         };
         let view = self.nodes.get(&id)?;
-        view.canvas_node
-            .then_some((view.parent?, view.frame.center()))
+        view.canvas_node.then_some((id, view.parent?, view.frame))
+    }
+
+    /// The canvas containing the one node `selector` names, and its
+    /// center in that canvas's coordinates; `None` for ordinary views.
+    pub(crate) fn canvas_node(&self, selector: &Selector) -> Option<(NodeId, Point<Points>)> {
+        self.canvas_target(selector)
+            .map(|(_, owner, bounds)| (owner, bounds.center()))
     }
 
     /// The view a pointer at `at` (in the root) reaches: the topmost,
@@ -2438,6 +2464,64 @@ mod tests {
         screen.apply(&batch(vec![linked(Vec::new())]));
         assert_eq!(pick(&screen, "Privacy"), Pick::None);
         assert_eq!(screen.span(102), None);
+    }
+
+    #[cfg(feature = "agent")]
+    #[test]
+    fn semantic_targets_preserve_canvas_bounds_and_text_span_offsets() {
+        let canvas = canvas_screen();
+        let cell = canvas
+            .semantic_nodes()
+            .into_iter()
+            .find(|node| node.test_id.as_deref() == Some("cell"))
+            .unwrap();
+        assert_eq!(
+            cell.native_target,
+            crate::agent::SemanticTarget::Canvas {
+                owner: 4,
+                bounds: Bounds::new(Point::default(), Size::new(Points(100.0), Points(40.0))),
+            }
+        );
+
+        let mut screen = Screen::default();
+        let link = nsh_core::TextLink {
+            start: 0,
+            end: 7,
+            node: 102,
+            events: EventMask::default(),
+        };
+        screen.apply(&batch(vec![
+            create(4, ViewKind::Text),
+            insert(1, 4),
+            MountItem::Text {
+                id: 4,
+                text: Arc::new(nsh_core::AttributedText {
+                    text: "Privacy".into(),
+                    links: vec![link],
+                    ..Default::default()
+                }),
+                layout: nsh_core::TextLayout(Arc::new(())),
+                content: Bounds::default(),
+            },
+        ]));
+        let span = screen
+            .semantic_nodes()
+            .into_iter()
+            .find(|node| node.id == 102)
+            .unwrap();
+        assert_eq!(span.label.as_deref(), Some("Privacy"));
+        assert_eq!(
+            span.native_target,
+            crate::agent::SemanticTarget::Text {
+                owner: 4,
+                start: 0,
+                end: 7,
+            }
+        );
+        let mut legacy = serde_json::to_value(crate::agent::SemanticNode::default()).unwrap();
+        legacy.as_object_mut().unwrap().remove("native_target");
+        let legacy: crate::agent::SemanticNode = serde_json::from_value(legacy).unwrap();
+        assert_eq!(legacy.native_target, crate::agent::SemanticTarget::View);
     }
 
     #[cfg(feature = "agent")]
