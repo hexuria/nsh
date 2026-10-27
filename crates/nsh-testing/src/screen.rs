@@ -912,7 +912,9 @@ impl Screen {
 
     #[cfg(feature = "agent")]
     pub(crate) fn semantic_nodes(&self) -> Vec<crate::agent::SemanticNode> {
-        let mut nodes = Vec::new();
+        let mut nodes: Vec<crate::agent::SemanticNode> = Vec::new();
+        // Where each node is in `nodes`, for the hidden views under it.
+        let mut at = std::collections::HashMap::new();
         let mut stack = vec![(ROOT, None, false, false)];
         while let Some((id, parent, inherited_hidden, inherited_disabled)) = stack.pop() {
             if self.closed.contains(&id) {
@@ -928,14 +930,26 @@ impl Screen {
             };
             let hidden = inherited_hidden || view.hidden || view.accessibility_hidden;
             let disabled = inherited_disabled || view.disabled;
-            if hidden {
-                continue;
-            }
             let children: Vec<NodeId> = if self.kind(id) == Some(ViewKind::Stack) {
                 self.screens(id).last().copied().into_iter().collect()
             } else {
                 self.children.get(&id).cloned().unwrap_or_default()
             };
+            if hidden {
+                // Left out, but still under `parent` (the nearest node in
+                // the tree) for native hits.
+                if let Some(owner) = parent.and_then(|parent| at.get(&parent).copied()) {
+                    let owner: &mut crate::agent::SemanticNode = &mut nodes[owner];
+                    owner.hidden_descendants.push(id);
+                }
+                stack.extend(
+                    children
+                        .into_iter()
+                        .rev()
+                        .map(|child| (child, parent, true, disabled)),
+                );
+                continue;
+            }
             let role = semantic_role(view.role, view.kind, view.events.contains(EventKind::Press));
             let input_value = view.input.as_ref().map(|input| input.text.clone());
             let value = input_value.or_else(|| {
@@ -971,6 +985,7 @@ impl Screen {
             if let Some(expanded) = state.expanded {
                 states.push(if expanded { "expanded" } else { "collapsed" }.to_owned());
             }
+            at.insert(id, nodes.len());
             nodes.push(crate::agent::SemanticNode {
                 id,
                 parent,
@@ -1009,6 +1024,7 @@ impl Screen {
                 } else {
                     crate::agent::SemanticTarget::View
                 },
+                hidden_descendants: Vec::new(),
             });
             stack.extend(
                 children
@@ -2503,6 +2519,9 @@ mod tests {
         assert!(!nodes[1].enabled);
         assert!(!nodes[2].enabled);
         assert_eq!(nodes[2].parent, Some(10));
+        // Left out, the hidden views still link to the node they are under.
+        assert_eq!(nodes[0].hidden_descendants, [12, 13]);
+        assert!(nodes[1].hidden_descendants.is_empty());
     }
 
     #[cfg(feature = "agent")]
