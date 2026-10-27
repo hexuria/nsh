@@ -173,31 +173,50 @@ pub(crate) fn choose_open_menu(surface: &Surface, path: &[String]) -> Result<(),
         .borrow()
         .clone()
         .ok_or("no context menu is open")?;
-    let mut level: &[MenuItem] = &items;
+    if let Some(action) = find_menu_action(&items, path, false, |_| true)
+        .map_err(|label| format!("the menu has no item {label:?}"))?
+    {
+        surface
+            .chrome
+            .test_choice
+            .set(Some((action.id, action.role)));
+    }
+    // SAFETY: ends the menu this thread tracks.
+    let _ = unsafe { EndMenu() };
+    Ok(())
+}
+
+/// The action at the end of `path` in `items` (the labels of the submenus
+/// on the way, then its own) that `leaf` accepts, through enabled submenus
+/// only if `enabled_only`: `None` for an empty path, the first label with
+/// no match as the error.
+#[cfg(feature = "dev")]
+fn find_menu_action<'a, 'p>(
+    items: &'a [MenuItem],
+    path: &'p [String],
+    enabled_only: bool,
+    leaf: impl Fn(&MenuAction) -> bool,
+) -> Result<Option<&'a MenuAction>, &'p str> {
+    let mut level = items;
     for (n, label) in path.iter().enumerate() {
         let last = n + 1 == path.len();
         let item = level
             .iter()
             .find(|item| match item {
-                MenuItem::Action(action) => last && action.label == *label,
-                MenuItem::Submenu { label: l, .. } => !last && l == label,
+                MenuItem::Action(action) => last && action.label == *label && leaf(action),
+                MenuItem::Submenu {
+                    label: l, enabled, ..
+                } => !last && l == label && (*enabled || !enabled_only),
                 MenuItem::Separator => false,
             })
-            .ok_or_else(|| format!("the menu has no item {label:?}"))?;
+            .ok_or(label.as_str())?;
         match item {
-            MenuItem::Action(action) => {
-                surface
-                    .chrome
-                    .test_choice
-                    .set(Some((action.id, action.role)));
-            }
+            MenuItem::Action(action) => return Ok(Some(action)),
             MenuItem::Submenu { items, .. } => level = items,
             MenuItem::Separator => {}
         }
     }
-    // SAFETY: ends the menu this thread tracks.
-    let _ = unsafe { EndMenu() };
-    Ok(())
+    Ok(None)
 }
 
 /// Closes the app's open context menu with nothing chosen.
@@ -1029,31 +1048,12 @@ fn resolve_menu_keybinding(
     action_id: u32,
     path: &[String],
 ) -> Result<(u32, Option<MenuRole>), String> {
-    let mut level: &[MenuItem] = items;
-    let mut chosen = None;
-    for (index, label) in path.iter().enumerate() {
-        let last = index + 1 == path.len();
-        let item = level
-            .iter()
-            .find(|item| match item {
-                MenuItem::Action(action) => {
-                    last && action.enabled && action.id == action_id && action.label == *label
-                }
-                MenuItem::Submenu {
-                    label: submenu,
-                    enabled: true,
-                    ..
-                } => !last && submenu == label,
-                MenuItem::Separator | MenuItem::Submenu { .. } => false,
-            })
-            .ok_or_else(|| format!("the application menu has no action {label:?}"))?;
-        match item {
-            MenuItem::Action(action) => chosen = Some((action.id, action.role)),
-            MenuItem::Submenu { items, .. } => level = items,
-            MenuItem::Separator => {}
-        }
-    }
-    let (id, role) = chosen.ok_or("no menu action chosen")?;
+    let action = find_menu_action(items, path, true, |action| {
+        action.enabled && action.id == action_id
+    })
+    .map_err(|label| format!("the application menu has no action {label:?}"))?
+    .ok_or("no menu action chosen")?;
+    let (id, role) = (action.id, action.role);
     if unsupported(role) {
         return Err("the menu action is unsupported on Windows".into());
     }
