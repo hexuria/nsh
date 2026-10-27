@@ -26,6 +26,8 @@ nsh-js.workspace = true
 nsh-base.workspace = true
 nsh-package.workspace = true
 nsh-testing = { workspace = true, features = ["agent", "bundle"] }
+nsh-gpui-agent = { workspace = true, features = ["dev-agent"] }
+getrandom.workspace = true
 crossbeam-channel.workspace = true
 anyhow.workspace = true
 clap = { workspace = true, features = ["env"] }

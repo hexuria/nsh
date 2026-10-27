@@ -292,17 +292,31 @@ pub(crate) fn run(
 /// every browser that opens the page (on this machine or, at the LAN
 /// address, on a phone) runs the app until the session ends. The browser
 /// is the user's to open: a session that starts again (the app's Rust code
-/// changed) finds its page still open, and it reloads by itself.
+/// changed) finds its page still open, and it reloads by itself. With
+/// `GPUI_AGENT=1` a GPUI agent drives a page of its own as well
+/// ([`crate::web_agent`]).
 fn run_web(
     entry: &Path,
     port: u16,
     release: bool,
     limits: Option<HostLimits>,
 ) -> anyhow::Result<()> {
+    // Before anything starts: a wrong agent configuration stops the run.
+    let agent = crate::web_agent::config()?;
     // Built first in a checkout: the session serves the runtime it finds.
     crate::runtime::web(crate::runtime::WebKind::Dev, true)?.context("no web runtime")?;
     let session = DevSession::start(entry, port, release, limits)?;
     session.print_web_url();
+    // A GPUI agent's page, in a browser of its own, until the session ends.
+    let _agent = match agent {
+        Some((addr, token)) => Some(crate::web_agent::start(
+            session.server(),
+            &dunce::canonicalize(entry)?,
+            addr,
+            token,
+        )?),
+        None => None,
+    };
     session.watch(|| Ok(false))
 }
 
