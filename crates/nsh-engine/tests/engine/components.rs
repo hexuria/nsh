@@ -1390,7 +1390,7 @@ import { TextField } from "test/ui";
 const name = signal("Ada");
 mount(() => (
   <View>
-    <TextField value={name()} onChange={(v: string) => name.set(v)} />
+    <TextField value={name()} onChange={({ value }: { value: string }) => name.set(value)} />
     <Text>{`name ${name()}`}</Text>
   </View>
 ));
@@ -1706,7 +1706,7 @@ function App() {
         testID="wifi"
         checked={on()}
         checkedStyle={{ backgroundColor: "#0000ff" }}
-        onChange={(next) => {
+        onChange={({ checked: next }) => {
           changes.set([...changes(), next]);
           on.set(next);
         }}
@@ -1718,7 +1718,7 @@ function App() {
         testID="locked"
         checked
         accessibilityLabel="Locked"
-        onChange={(next) => changes.set([...changes(), next])}
+        onChange={({ checked: next }) => changes.set([...changes(), next])}
         {...parts}
       />
       <Switch testID="off" checked disabled {...parts} />
@@ -1877,7 +1877,7 @@ function App() {
         indeterminate={some() && !all()}
         checkedStyle={{ backgroundColor: "#0000ff" }}
         indeterminateStyle={{ backgroundColor: "#ffff00" }}
-        onChange={(next) => {
+        onChange={({ checked: next }) => {
           changes.set([...changes(), next]);
           all.set(next);
         }}
@@ -1890,7 +1890,7 @@ function App() {
         testID="kept"
         checked
         accessibilityLabel="Kept"
-        onChange={(next) => changes.set([...changes(), next])}
+        onChange={({ checked: next }) => changes.set([...changes(), next])}
         {...parts}
       />
       <Checkbox testID="off" checked disabled role="menuitem" {...parts} />
@@ -2041,7 +2041,7 @@ function App() {
       accessibilityLabel={label}
       class="group flex-row disabled:opacity-50"
       checkedStyle={{ backgroundColor: "#0000ff" }}
-      onChange={(next) => {
+      onChange={({ checked: next }) => {
         changes.set([...changes(), `${value}:${next}`]);
         plan.set(value);
       }}
@@ -2387,7 +2387,7 @@ function App() {
       testID={value}
       checked={plan() === value}
       disabled={disabled}
-      onChange={(next) => {
+      onChange={({ checked: next }) => {
         say(`radio ${value}:${next}`);
         plan.set(value);
       }}
@@ -2909,7 +2909,7 @@ function App() {
   return (
     <View>
       <Menu
-        onOpenChange={(open, reason) => hear(`menu ${open} ${reason}`)}
+        onOpenChange={({ open, reason }) => hear(`menu ${open} ${reason}`)}
         onOpen={() => hear("menu open")}
         onClose={() => hear("menu close")}
         trigger={
@@ -2923,7 +2923,7 @@ function App() {
         </MenuItem>
       </Menu>
       <Popover
-        onOpenChange={(open, reason) => hear(`popover ${open} ${reason}`)}
+        onOpenChange={({ open, reason }) => hear(`popover ${open} ${reason}`)}
         onOpen={() => hear("popover open")}
         onClose={() => hear("popover close")}
         trigger={
@@ -3255,8 +3255,8 @@ function App() {
       <Slider
         testID="price"
         value={price()}
-        onChange={(next) => price.set(next as [number, number])}
-        onChangeEnd={(next) => ended.set(`end ${next}`)}
+        onChange={({ value: next }) => price.set(next as [number, number])}
+        onChangeEnd={({ value: next }) => ended.set(`end ${next}`)}
         accessibilityLabel="Maximum price"
         startAccessibilityLabel="Minimum price"
         class="w-[200px]"
@@ -3444,7 +3444,7 @@ function App() {
       <Select
         items={items}
         value={value()}
-        onChange={(next) => {
+        onChange={({ value: next }) => {
           changes.set([...changes(), next]);
           value.set(next);
         }}
@@ -3634,7 +3634,7 @@ function App() {
     <View>
       <NumberInput
         value={quantity()}
-        onChange={(next) => quantity.set(next)}
+        onChange={({ value }) => quantity.set(value)}
         min={0}
         max={10}
         step={0.5}
@@ -3777,7 +3777,7 @@ function App() {
         length={4}
         groups={2}
         value={code()}
-        onChange={(next) => code.set(next)}
+        onChange={({ value }) => code.set(value)}
         onComplete={({ value }) => completes.set([...completes(), value])}
         accessibilityLabel="Code"
         class="flex-row w-[200px] h-[40px]"
@@ -3961,7 +3961,7 @@ function App() {
         { title: "Stats", icon: "chart.bar" },
       ]}
       selectedIndex={selected()}
-      onChange={(index: number) => selected.set(index)}
+      onChange={({ index }: { index: number }) => selected.set(index)}
     />
   );
 }
@@ -4069,7 +4069,7 @@ const selected = signal<number | undefined>(0);
 const items = signal([{ title: "Records" }, { title: "Stats" }]);
 mount(() => <View>
   <TabBar items={items()} selectedIndex={selected()}
-    onChange={(index) => {
+    onChange={({ index }) => {
       selected.set(index);
       items.set([{ title: "Records" }, { title: "Statistics" }]);
     }} />
@@ -4151,7 +4151,7 @@ function App() {
         accessibilityLabel="Price"
         class="w-[200px] h-[100px] stroke-[#ff0000]"
         style={{ color: "#0000ff" }}
-        onHoverChange={(index) => hovered.set(index)}
+        onHoverChange={({ index }) => hovered.set(index)}
       >
         <Grid y={[0, 20, 40]} class="stroke-[#00ff00]" style={{ strokeDasharray: "2 2" }} />
         <Area class="fill-[#0000ff]/50" curve="linear" />
@@ -4636,7 +4636,7 @@ function App() {
         crossLineClass="w-px bg-[#999999]"
         dotClass="size-2 rounded-full bg-[#3366ff]"
         tooltipContent={<Text>tip</Text>}
-        onHoverChange={(index) => hovered.set(index)}
+        onHoverChange={({ index }) => hovered.set(index)}
         style={{ width: 200, height: 100 }}
       >
         <Line dot dotClass="size-1" />
@@ -4785,7 +4785,7 @@ function App() {
         tooltipContent={<View testID="tip" style={{ width: 60, height: 20 }} />}
         tooltipPlacement={placement()}
         tooltipOffset={8}
-        onHoverChange={(index) => hovered.set(index)}
+        onHoverChange={({ index }) => hovered.set(index)}
         style={{ width: 200, height: 100 }}
       >
         <Area curve="linear" backgroundClass="bg-linear-to-b from-[#ff0000] to-transparent" hoverDotClass="hidden" />
@@ -5003,7 +5003,7 @@ function App() {
         testID="plot"
         data={rows}
         accessibilityLabel="Shares"
-        onHoverChange={(index) => hovered.set(index)}
+        onHoverChange={({ index }) => hovered.set(index)}
         style={{ width: 200, height: 100 }}
       >
         <Arc innerRadius="50%" class="fill-[#999999]" />
@@ -5259,7 +5259,7 @@ function App() {
         y="v"
         appearGeneration={1}
         motion={{ appear: { duration: 300 }, enter: { duration: 120 }, pointer: { stiffness: 300, damping: 30 } }}
-        onHoverChange={(index) => hovered.set(index)}
+        onHoverChange={({ index }) => hovered.set(index)}
         style={{ width: 100, height: 100 }}
       >
         <Pie hoverLift={4} />
@@ -5674,7 +5674,7 @@ function App() {
         xScale={{ type: "band", paddingInner: 0.25, paddingOuter: 0.125 }}
         yScale={{ type: "linear", domain: [-20, 60] }}
         crossLineClass="w-full bg-[#eeeeee]"
-        onHoverChange={(index) => hovered.set(index)}
+        onHoverChange={({ index }) => hovered.set(index)}
         style={{ width: 300, height: 80 }}
       >
         <Bar value="a" class="fill-[#ff0000]" cornerRadii={{ topLeft: 2, topRight: 2 }} inactiveOpacity={0.4} label="a" />
@@ -5871,7 +5871,7 @@ function App() {
         xScale={{ type: "band" }}
         appearGeneration={1}
         motion={{ appear: { duration: 300, easing: "easeOut" }, enter: { duration: 120 }, pointer: { stiffness: 300, damping: 30 } }}
-        onHoverChange={(index) => hovered.set(index)}
+        onHoverChange={({ index }) => hovered.set(index)}
         style={{ width: 300, height: 100 }}
       >
         <Bar stagger={0.5} inactiveOpacity={0.3} label="v" />
@@ -5957,4 +5957,374 @@ fn base_plot_bars_grow_and_fade_natively() {
     let drawings = plot_drawings(&batches);
     assert!(drawings.iter().all(|(_, d)| !grows(d)));
     assert_eq!(bar_rects(&drawings[0].1.ops).len(), 3);
+}
+
+const BASE_PLOT_AXIS: &str = r##"import { mount, signal, View } from "nsh";
+import { Bar, Line, Plot, PlotAxis } from "nsh/base/plot";
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr"];
+
+function App() {
+  const domain = signal<[number, number]>([0, 100]);
+  return (
+    <View style={{ padding: 40, gap: 40 }}>
+      <Plot testID="linear" data={[{ v: 0 }, { v: 100 }]} y="v" yScale={{ type: "linear", domain: domain() }} style={{ width: 200, height: 100 }}>
+        <Line />
+        <PlotAxis placement="left" ticks={5} labelStyle={{ width: 20, height: 10 }} tickClass="w-[4px] h-px" tickStyle={{ backgroundColor: "#ff0000" }} />
+        <PlotAxis placement="right" labelPlacement="inside" tickValues={[0, 50]} format={(v) => `${v}%`} labelStyle={{ width: 20, height: 10 }} />
+        <PlotAxis tickValues={[0, 1]} format={(v, i) => `r${v}#${i}`} labelStyle={{ width: 30, height: 10 }} lineClass="h-px" lineStyle={{ backgroundColor: "#00ff00" }} />
+      </Plot>
+      <Plot testID="band" data={[{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }]} y="v" xScale={{ type: "band" }} style={{ width: 200, height: 100 }}>
+        <Bar />
+        <PlotAxis format={(v) => MONTHS[v]} labelStyle={{ width: 20, height: 10 }} />
+        <PlotAxis placement="top" ticks={2} format={(v) => `top ${MONTHS[v]}`} labelStyle={{ width: 40, height: 10 }} />
+      </Plot>
+      <View testID="domain" onPress={() => domain.set([0, 10])} style={{ height: 20 }} />
+    </View>
+  );
+}
+
+mount(App);
+"##;
+
+/// `nsh/base/plot`'s `PlotAxis` (`gpui-base`'s `PlotAxis`, d3's axes): the
+/// ticks of the scale its edge carries (d3's nice values on a linear
+/// scale, about `ticks` of them; every band, or `ticks` of them spread
+/// from the first to the last; the app's `tickValues`, those outside the
+/// domain dropped), each labeled with the app's `format(value, index)`
+/// (d3's default text without one) and laid out by the plot's layout:
+/// centered on its tick along the edge, the first and last kept within
+/// the plot's ends, past the edge or (`labelPlacement="inside"`) above
+/// its grid line inside it; its tick marks and line on the labels' side
+/// of the edge. A new domain writes the labels again.
+#[test]
+fn base_plot_axis_labels_the_ticks_of_its_scale() {
+    use nsh_core::Color;
+    let (engine, rx) = start(BASE_PLOT_AXIS);
+    let mut all = until(&rx, |b| shows(b, "top Apr"));
+    all.extend(until(&rx, |_| false));
+    let parent_of = |all: &[MountBatch], child: u32| {
+        all.iter()
+            .flat_map(|b| b.items.iter())
+            .find_map(|i| match i {
+                MountItem::Insert {
+                    parent, child: c, ..
+                } if *c == child => Some(*parent),
+                _ => None,
+            })
+            .unwrap()
+    };
+    // A view's frame in the plot `plot`'s coordinates.
+    let within = |all: &[MountBatch], id: u32, plot: u32| {
+        let f = frame_of(all, id).unwrap();
+        let (mut x, mut y) = (f.origin.x.0, f.origin.y.0);
+        let mut at = parent_of(all, id);
+        while at != plot {
+            let f = frame_of(all, at).unwrap();
+            x += f.origin.x.0;
+            y += f.origin.y.0;
+            at = parent_of(all, at);
+        }
+        (x, y, f.size.width.0, f.size.height.0)
+    };
+    let label = |all: &[MountBatch], text: &str, plot: &str| {
+        let id = all
+            .iter()
+            .rev()
+            .find_map(|b| text_ids(b, text))
+            .expect(text);
+        let (x, y, ..) = within(all, id, test_view(all, plot));
+        (x, y)
+    };
+    let near = |all: &[MountBatch], text: &str, plot: &str, (x, y): (f32, f32)| {
+        let (lx, ly) = label(all, text, plot);
+        assert!(
+            (lx - x).abs() <= 0.5 && (ly - y).abs() <= 0.5,
+            "{text} at ({lx}, {ly}), not ({x}, {y})"
+        );
+    };
+
+    // Left, outside: d3's ticks of 0 to 100, about 5 (a step of 20),
+    // written as d3 writes them; each right of the edge's left, centered
+    // on its tick, the ends kept within the plot's top and bottom.
+    near(&all, "100", "linear", (-20.0, 0.0));
+    near(&all, "80", "linear", (-20.0, 15.0));
+    near(&all, "60", "linear", (-20.0, 35.0));
+    near(&all, "40", "linear", (-20.0, 55.0));
+    near(&all, "20", "linear", (-20.0, 75.0));
+    near(&all, "0", "linear", (-20.0, 90.0));
+    // Its tick marks: one per tick, from the edge toward the labels.
+    let red = all
+        .iter()
+        .flat_map(|b| b.items.iter())
+        .filter_map(|i| match i {
+            MountItem::ViewStyle { id, style } if style.background_color == Color(0xff00_00ff) => {
+                Some(*id)
+            }
+            _ => None,
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(red.len(), 6);
+    let linear = test_view(&all, "linear");
+    for &tick in &red {
+        let (x, _, w, h) = within(&all, tick, linear);
+        assert_eq!((x, w, h), (-4.0, 4.0, 1.0));
+    }
+    // Right, inside: the app's values and texts, above each grid line,
+    // against the right edge.
+    near(&all, "0%", "linear", (180.0, 90.0));
+    near(&all, "50%", "linear", (180.0, 40.0));
+    // Bottom: the app's function of each value and index, the first and
+    // last labels kept within the plot's ends; the line along the edge.
+    near(&all, "r0#0", "linear", (0.0, 100.0));
+    near(&all, "r1#1", "linear", (170.0, 100.0));
+    let green = all
+        .iter()
+        .flat_map(|b| b.items.iter())
+        .find_map(|i| match i {
+            MountItem::ViewStyle { id, style } if style.background_color == Color(0x00ff_00ff) => {
+                Some(*id)
+            }
+            _ => None,
+        })
+        .expect("the line");
+    assert_eq!(within(&all, green, linear), (0.0, 100.0, 200.0, 1.0));
+
+    // A band scale: every band's middle (25, 75, 125, 175); on top, 2 of
+    // them, the first and the last, above the edge.
+    near(&all, "Jan", "band", (15.0, 100.0));
+    near(&all, "Feb", "band", (65.0, 100.0));
+    near(&all, "Mar", "band", (115.0, 100.0));
+    near(&all, "Apr", "band", (165.0, 100.0));
+    near(&all, "top Jan", "band", (5.0, -10.0));
+    near(&all, "top Apr", "band", (155.0, -10.0));
+    assert!(!all.iter().any(|b| shows(b, "top Feb")));
+
+    // A new domain: d3's ticks of 0 to 10, the right axis' 50 outside it.
+    let domain = test_view(&all, "domain");
+    engine
+        .control()
+        .dispatch_event(domain, EventKind::Press, EventPayload::None);
+    all.extend(until(&rx, |b| shows(b, "10")));
+    all.extend(until(&rx, |_| false));
+    near(&all, "10", "linear", (-20.0, 0.0));
+    near(&all, "4", "linear", (-20.0, 55.0));
+    near(&all, "0%", "linear", (180.0, 90.0));
+}
+
+const BASE_PLOT_DOMAIN_UPDATE: &str = r##"import { mount, signal, Text, View } from "nsh";
+import { Line, Plot } from "nsh/base/plot";
+
+const ROWS = [{ t: 0, v: 0 }, { t: 1, v: 50 }, { t: 2, v: 100 }];
+
+function App() {
+  const top = signal(100);
+  setTimeout(() => top.set(200), 50);
+  return (
+    <View>
+      <Plot
+        data={ROWS}
+        x="t"
+        y="v"
+        xScale={{ type: "linear", domain: [0, top() / 50] }}
+        yScale={{ type: "linear", domain: [0, top()] }}
+        motion={{ update: { duration: 200, easing: "linear" } }}
+        style={{ width: 200, height: 100 }}
+      >
+        <Line curve="linear" />
+      </Plot>
+      <Plot
+        data={ROWS}
+        x="t"
+        y="v"
+        xScale={{ type: "linear", domain: [0, top() / 50] }}
+        yScale={{ type: "linear", domain: [0, top()] }}
+        style={{ width: 200, height: 100 }}
+      >
+        <Line curve="linear" />
+      </Plot>
+      <Text>{`top ${top()}`}</Text>
+    </View>
+  );
+}
+
+mount(App);
+"##;
+
+/// A scale's domain changing (`motion.update`), as d3 transitions it: the
+/// marks are recorded once on the new scales, through a transform the
+/// platform's animator moves from the old domains to the new ones, so a
+/// point is where the interpolated domains put it (between its old place
+/// and its new one halfway through) and ends at its new place. Without an
+/// `update` timing, and with reduced motion, the new domain shows at once.
+#[test]
+fn base_plot_domains_move_with_the_update_motion() {
+    use nsh_core::{
+        animation::{AnimationOp, Animator, Driver},
+        canvas::{CanvasOp, Num},
+    };
+    let moves = |item: &MountItem| {
+        matches!(
+            item,
+            MountItem::Animation(AnimationOp::Start {
+                driver: Driver::Timing { duration_ms, .. },
+                ..
+            }) if *duration_ms == 200.0
+        )
+    };
+    let transform = |d: &nsh_core::canvas::Drawing| {
+        d.ops.iter().find_map(|op| match op {
+            CanvasOp::Transform(m) => Some(*m),
+            _ => None,
+        })
+    };
+
+    let (_engine, rx) = start(BASE_PLOT_DOMAIN_UPDATE);
+    let mut all = until(&rx, |b| shows(b, "top 200"));
+    all.extend(until(&rx, |_| false));
+    let switched = all.iter().position(|b| shows(b, "top 200")).unwrap();
+    // The batches up to the move's start and its drawing through the
+    // transform (the move's end draws without one, once the platform
+    // reports it).
+    let mut animator = Animator::default();
+    let mut moving = None;
+    let mut started = false;
+    for batch in &all {
+        for item in &batch.items {
+            animator.apply(item);
+            started |= moves(item);
+        }
+        if let Some(drawn) = plot_drawings(std::slice::from_ref(batch))
+            .into_iter()
+            .find(|(_, d)| transform(d).is_some())
+        {
+            moving = Some(drawn);
+        }
+        if started && moving.is_some() {
+            break;
+        }
+    }
+    let (moving_id, drawing) = moving.expect("a mark drawn through the move");
+    // Its points on the new scales: x over 0 to 4, y over 0 to 200.
+    assert_eq!(
+        path_points(&drawing.ops),
+        [(0.0, 100.0), (50.0, 75.0), (100.0, 50.0)]
+    );
+    let m = transform(&drawing).unwrap();
+    let shown = |animator: &Animator, (x, y): (f32, f32)| {
+        let n = |n: Num| match n {
+            Num::Const(c) => c,
+            Num::Slot(s) => animator.value(drawing.slots[s as usize]),
+        };
+        (
+            n(m[0]) * x + n(m[2]) * y + n(m[4]),
+            n(m[1]) * x + n(m[3]) * y + n(m[5]),
+        )
+    };
+    let near = |(x, y): (f32, f32), (wx, wy): (f32, f32)| {
+        assert!(
+            (x - wx).abs() < 0.01 && (y - wy).abs() < 0.01,
+            "({x}, {y}) is not ({wx}, {wy})"
+        );
+    };
+    // At the start, the old domains: the middle row at x 1 of 2 and y 50
+    // of 100.
+    animator.tick(0.0);
+    near(shown(&animator, (50.0, 75.0)), (100.0, 50.0));
+    near(shown(&animator, (0.0, 100.0)), (0.0, 100.0));
+    // Halfway, the domains 0 to 3 and 0 to 150: between the two places.
+    animator.tick(0.1);
+    near(
+        shown(&animator, (50.0, 75.0)),
+        (200.0 / 3.0, 100.0 - 100.0 / 3.0),
+    );
+    near(shown(&animator, (100.0, 50.0)), (400.0 / 3.0, 100.0 / 3.0));
+    // At the end, the new places.
+    animator.tick(0.25);
+    near(shown(&animator, (50.0, 75.0)), (50.0, 75.0));
+    near(shown(&animator, (100.0, 50.0)), (100.0, 50.0));
+
+    // Without `update`: the new places at once, no transform.
+    let still: Vec<_> = plot_drawings(&all[switched..])
+        .into_iter()
+        .filter(|(id, _)| *id != moving_id)
+        .collect();
+    assert!(!still.is_empty());
+    assert!(still.iter().all(|(_, d)| transform(d).is_none()));
+    assert!(
+        still
+            .iter()
+            .any(|(_, d)| path_points(&d.ops) == [(0.0, 100.0), (50.0, 75.0), (100.0, 50.0)])
+    );
+
+    // Reduced motion: no move, no transform.
+    let environment = Environment {
+        reduce_motion: true,
+        ..Environment::default()
+    };
+    let (_engine, rx) = start_in(BASE_PLOT_DOMAIN_UPDATE, environment);
+    let mut all = until(&rx, |b| shows(b, "top 200"));
+    all.extend(until(&rx, |_| false));
+    assert!(!all.iter().flat_map(|b| b.items.iter()).any(moves));
+    assert!(
+        plot_drawings(&all)
+            .iter()
+            .all(|(_, d)| transform(d).is_none())
+    );
+}
+
+const BASE_PLOT_AXIS_GLIDE: &str = r##"import { mount, signal, Text, View } from "nsh";
+import { Line, Plot, PlotAxis } from "nsh/base/plot";
+
+function App() {
+  const top = signal(2);
+  setTimeout(() => top.set(4), 50);
+  return (
+    <View>
+      <Plot
+        data={[{ t: 0, v: 0 }, { t: 2, v: 1 }]}
+        x="t"
+        y="v"
+        xScale={{ type: "linear", domain: [0, top()] }}
+        motion={{ update: { duration: 200, easing: "linear" } }}
+        style={{ width: 200, height: 100 }}
+      >
+        <Line curve="linear" />
+        <PlotAxis tickValues={[2]} labelStyle={{ width: 20, height: 10 }} />
+      </Plot>
+      <Text>{`top ${top()}`}</Text>
+    </View>
+  );
+}
+
+mount(App);
+"##;
+
+/// A `PlotAxis` glides with its domain (`motion.update`), as d3's axis
+/// transitions: a tick is laid out at its place on the new scale and
+/// moved from where the old domain put it. The tick at 2 of 0 to 4 sits
+/// at 100 of 200; it starts 100 further on, at 2 of 0 to 2, and ends in
+/// its place.
+#[test]
+fn base_plot_axis_moves_with_the_domain() {
+    use nsh_core::animation::Animator;
+    let (_engine, rx) = start(BASE_PLOT_AXIS_GLIDE);
+    let mut all = until(&rx, |b| shows(b, "top 4"));
+    all.extend(until(&rx, |_| false));
+    let mut animator = Animator::default();
+    for item in all.iter().flat_map(|b| b.items.iter()) {
+        animator.apply(item);
+    }
+    let moved = |animator: &mut Animator, t: f64| {
+        animator.tick(t);
+        let mut out = Vec::new();
+        animator.write(Some, |_, values, _| {
+            out.extend(values.transform.iter().flatten().copied())
+        });
+        out
+    };
+    let start = moved(&mut animator, 0.0);
+    assert!(start.iter().any(|&x| (x - 100.0).abs() < 0.01), "{start:?}");
+    let end = moved(&mut animator, 0.25);
+    assert!(end.iter().all(|&x| x.abs() < 0.01), "{end:?}");
 }

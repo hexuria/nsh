@@ -1,6 +1,6 @@
 import type { JSX } from "nsh";
-import { cleanup, reduceMotion, signal, Text, View } from "nsh";
-import { Arc, Area, Bar, Grid, Line, Pie, Plot } from "nsh/base/plot";
+import { cleanup, LayoutAnimation, reduceMotion, signal, Text, View } from "nsh";
+import { Arc, Area, Bar, Grid, Line, Pie, Plot, PlotAxis } from "nsh/base/plot";
 import { platform } from "nsh";
 import { alpha, Button, Card, chart, colors, DemoPage, finish, focusRing, Legend, mono, Segmented, toneColor, type Tone } from "../ui";
 
@@ -18,6 +18,10 @@ function random(seed: number) {
 
 /** Values on the axes: small, monospaced and faint, so the marks lead. */
 const axis = { fontSize: 10.5, fontFamily: mono, color: colors.faint, fontVariant: ["tabular-nums" as const] };
+/** An axis' labels under a plot: a line of `axis` text 8 below its edge. */
+const below = { ...axis, lineHeight: 13, paddingTop: 8 };
+/** The room under a plot for those labels: its margin. */
+const BELOW = 8 + 13;
 /** A tooltip's title: a small monospaced caps label over its values. */
 const tipTitle = { fontSize: 10, fontFamily: mono, letterSpacing: 0.8, color: colors.muted };
 /** A floating tooltip card. */
@@ -60,10 +64,20 @@ const CHANNEL = 10;
 const LIVE_HEIGHT = 176;
 /** The gutter right of the live plot: the y labels and the last price's tag. */
 const GUTTER = 58;
+/** The window's seconds, under its five ticks from the first row to the last. */
+const SECONDS = ["−60s", "−45s", "−30s", "−15s", "now"];
 /** The session's open. */
 const OPEN = 41.2;
 /** The first tick's time of day, in seconds. */
 const START = 10 * 3600 + 42 * 60;
+/** How a re-fit of the live plot's y domain glides: its marks over `motion.update`, the gutter with the layout. */
+const REFIT = { duration: 450, easing: "easeInOut" } as const;
+const refitLayout = {
+  duration: REFIT.duration,
+  update: { type: "easeInEaseOut" },
+  create: { type: "easeInEaseOut", property: "opacity" },
+  delete: { type: "easeInEaseOut", property: "opacity" },
+} as const;
 const clock = (t: number) => {
   const s = START + t;
   const two = (n: number) => String(n).padStart(2, "0");
@@ -77,7 +91,9 @@ const clock = (t: number) => {
  * over the last ten (an area whose `y0` is a field of each row: a band).
  * The y domain holds still while the window fits in it and re-fits only
  * when the price leaves it or uses too little of it, so the grid does not
- * jump with every tick.
+ * jump with every tick; a re-fit glides, the line, the band and the grid
+ * on the plot's `motion.update`, the gutter's labels and the newest dot
+ * with a layout animation of the same length.
  */
 function Live() {
   const next = random(29);
@@ -105,10 +121,12 @@ function Live() {
   const timer = setInterval(() => {
     if (!running()) return;
     const rows = [...points().slice(1), step()];
-    points.set(rows);
     const [lo, hi] = domain();
     const [min, max] = [Math.min(...rows.map((r) => r.low)), Math.max(...rows.map((r) => r.high))];
-    if (min < lo || max > hi || max - min < (hi - lo) * 0.3) domain.set(fit(rows));
+    const refit = min < lo || max > hi || max - min < (hi - lo) * 0.3;
+    if (refit && !reduceMotion()) LayoutAnimation.configureNext(refitLayout);
+    points.set(rows);
+    if (refit) domain.set(fit(rows));
   }, 1000);
   cleanup(() => clearInterval(timer));
 
@@ -151,13 +169,13 @@ function Live() {
           onPress={() => running.set(!running())}
         />
       </View>
-      <View style={{ flexDirection: "row", marginTop: size.gap }}>
+      <View style={{ marginTop: size.gap }}>
         <Plot
           data={points()}
           y="price"
           yScale={{ type: "linear", domain: domain() }}
           appearGeneration={1}
-          motion={{ appear: { duration: 900, easing: "easeOut" }, enter: { duration: 120 }, exit: { duration: 160 }, pointer: { stiffness: 380, damping: 36 } }}
+          motion={{ appear: { duration: 900, easing: "easeOut" }, update: REFIT, enter: { duration: 120 }, exit: { duration: 160 }, pointer: { stiffness: 380, damping: 36 } }}
           accessibilityLabel={`NSHL, the last minute, ${fixed(last())}, ${signed((change() / OPEN) * 100)}% on the day`}
           accessibilityValue={{ text: hover() == null ? undefined : `${clock(points()[hover()!].t)}, ${fixed(points()[hover()!].price)}` }}
           crossLineClass="w-px h-full"
@@ -171,12 +189,12 @@ function Live() {
               <Text style={{ fontSize: 13, fontWeight: "500", color: colors.text, fontVariant: ["tabular-nums"] }}>{fixed(points()[tip()].price)}</Text>
             </View>
           }
-          onHoverChange={(index) => {
+          onHoverChange={({ index }) => {
             hover.set(index);
             if (index != null) tip.set(index);
           }}
           focusStyle={focusRing(4)}
-          style={{ flex: 1, height: LIVE_HEIGHT }}
+          style={{ height: LIVE_HEIGHT, marginRight: GUTTER, marginBottom: BELOW }}
         >
           <Grid y={grid()} style={{ stroke: colors.line }} />
           {/* The open: a faint dashed reference, while it is in view. */}
@@ -192,34 +210,32 @@ function Live() {
             </If>
             <View style={{ position: "absolute", left: -4.5, top: -4.5, width: 9, height: 9, borderRadius: 4.5, borderWidth: 2, borderColor: colors.inset, backgroundColor: toneColor(tone()) }} />
           </View>
-        </Plot>
-        {/* The gutter: the grid's values, and over them the last price's tag at its height. */}
-        <View style={{ width: GUTTER, height: LIVE_HEIGHT }}>
-          {grid()
-            .filter((v) => Math.abs(y(v) - y(last())) > 14)
-            .map((v) => (
-              <Text style={{ ...axis, position: "absolute", left: 10, top: y(v) - 7 }}>{fixed(v)}</Text>
-            ))}
+          {/* The gutter: the grid's values clear of the last price's tag, the tag at its height. */}
+          <PlotAxis
+            placement="right"
+            tickValues={grid().filter((v) => Math.abs(y(v) - y(last())) > 14)}
+            format={(v) => fixed(v)}
+            labelStyle={{ ...axis, paddingLeft: 10 }}
+          />
           <View
             style={{
               position: "absolute",
-              left: 6,
+              left: "100%",
+              marginLeft: 6,
               top: y(last()) - 10,
               height: 20,
               paddingHorizontal: 6,
               borderRadius: 6,
               justifyContent: "center",
               backgroundColor: toneColor(tone()),
+              pointerEvents: "none",
             }}
           >
             <Text style={{ fontSize: 11, fontFamily: mono, fontWeight: "600", color: colors.surface, fontVariant: ["tabular-nums"] }}>{fixed(last())}</Text>
           </View>
-        </View>
-      </View>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 8, marginRight: GUTTER }}>
-        {["−60s", "−45s", "−30s", "−15s", "now"].map((label) => (
-          <Text style={axis}>{label}</Text>
-        ))}
+          {/* The window's seconds under it, the first and last at its ends. */}
+          <PlotAxis ticks={SECONDS.length} format={(_, i) => SECONDS[i]} labelStyle={below} />
+        </Plot>
       </View>
       <View style={{ marginTop: size.gap + 4 }}>
         <Figures>
@@ -325,12 +341,12 @@ function Depth() {
               <Text style={{ fontSize: 13, fontWeight: "500", color: colors.text, fontVariant: ["tabular-nums"] }}>{count(shown().bid ?? shown().ask ?? 0)}</Text>
             </View>
           }
-          onHoverChange={(index) => {
+          onHoverChange={({ index }) => {
             hover.set(index);
             if (index != null) tip.set(index);
           }}
           focusStyle={focusRing(4)}
-          style={{ height: DEPTH_HEIGHT }}
+          style={{ height: DEPTH_HEIGHT, marginBottom: BELOW }}
         >
           <Grid y={ticks(0, top(), 3)} style={{ stroke: colors.line }} />
           {/* The middle: a dashed hairline in the spread. */}
@@ -340,12 +356,10 @@ function Depth() {
           <Line y="bid" curve="stepAfter" style={{ stroke: toneColor("up"), strokeWidth: 1.5 }} hoverDotStyle={dot("bid", "up")} />
           <Line y="ask" curve="stepAfter" style={{ stroke: toneColor("down"), strokeWidth: 1.5 }} hoverDotStyle={dot("ask", "down")} />
           <Grid y={[0]} style={{ stroke: colors.border }} />
+          {/* The prices at the ends, and the middle a shade firmer. */}
+          <PlotAxis tickValues={[lo(), hi()]} format={(v) => fixed(v)} labelStyle={below} />
+          <PlotAxis tickValues={[MID]} format={(v) => fixed(v)} labelStyle={{ ...below, color: colors.muted }} />
         </Plot>
-      </View>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 8 }}>
-        <Text style={axis}>{fixed(lo())}</Text>
-        <Text style={{ ...axis, color: colors.muted }}>{fixed(MID)}</Text>
-        <Text style={axis}>{fixed(hi())}</Text>
       </View>
       {/* The balance: each side's share of what the book holds in view. */}
       <View style={{ marginTop: size.gap + 4, gap: 8 }}>
@@ -391,6 +405,8 @@ const VALUE_LO = Math.min(...EQUITY.map((d) => d.value)) * 0.97;
 const VALUE_HI = Math.max(...EQUITY.map((d) => d.value)) * 1.03;
 /** Where day `i` is across both plots (their rows are evenly spread). */
 const across = (i: number): `${number}%` => `${(i / (EQUITY.length - 1)) * 100}%`;
+/** The rows of the days the axis names: day 1, then days 30, 60, 90 and 120. */
+const DAYS = [0, 29, 59, 89, 119];
 
 /**
  * A portfolio's value over its drawdown: the equity curve, the worst run
@@ -403,7 +419,7 @@ function Drawdown() {
   // Which plot the pointer is over: the other one marks the day itself.
   const over = signal<"equity" | "water" | null>(null);
   const shown = () => EQUITY[hover() ?? EQUITY.length - 1];
-  const follow = (which: "equity" | "water") => (index: number | null) => {
+  const follow = (which: "equity" | "water") => ({ index }: { index: number | null }) => {
     hover.set(index);
     over.set(index == null ? null : which);
   };
@@ -481,7 +497,7 @@ function Drawdown() {
           dotClass="size-2 rounded-full border-2"
           onHoverChange={follow("water")}
           focusStyle={focusRing(4)}
-          style={{ height: WATER_HEIGHT }}
+          style={{ height: WATER_HEIGHT, marginBottom: BELOW }}
         >
           <Area
             y0={0}
@@ -489,20 +505,17 @@ function Drawdown() {
             hoverDotClass="hidden"
           />
           <Line style={{ stroke: toneColor("danger"), strokeWidth: 1.25 }} hoverDotStyle={{ backgroundColor: toneColor("danger"), borderColor: colors.inset }} />
-          {/* The floor's value, and the low marked where it is. */}
-          <Text style={{ ...axis, position: "absolute", left: 0, bottom: 2, pointerEvents: "none" }}>{`${DD_FLOOR}%`}</Text>
+          {/* The floor's value over its edge, and the low marked where it is. */}
+          <PlotAxis placement="left" labelPlacement="inside" tickValues={[DD_FLOOR]} format={(v) => `${v}%`} labelStyle={{ ...axis, paddingBottom: 2 }} />
           <View style={{ position: "absolute", left: across(TROUGH.day), top: (TROUGH.drawdown / DD_FLOOR) * WATER_HEIGHT, width: 0, height: 0, pointerEvents: "none" }}>
             <View style={{ position: "absolute", left: -3.5, top: -3.5, width: 7, height: 7, borderRadius: 3.5, borderWidth: 1.5, borderColor: colors.inset, backgroundColor: toneColor("danger") }} />
             {/* A width of its own: the zero-width anchor would wrap it at every break. */}
             <Text style={{ ...axis, position: "absolute", left: 8, top: -6, width: 64, color: toneColor("danger") }}>{`${signed(TROUGH.drawdown, 1)}%`}</Text>
           </View>
           {mark("water", "danger")}
+          {/* The days under both plots: the first, then every 30th. */}
+          <PlotAxis tickValues={DAYS} format={(v) => (v === 0 ? "Day 1" : String(v + 1))} labelStyle={below} />
         </Plot>
-      </View>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 8 }}>
-        {["Day 1", "30", "60", "90", "120"].map((label) => (
-          <Text style={axis}>{label}</Text>
-        ))}
       </View>
       <View style={{ marginTop: size.gap + 4 }}>
         <Figures>
@@ -637,7 +650,7 @@ function Revenue() {
           accessibilityValue={{ text: shown() && `${shown()!.name}: ${money(shown()!.revenue)}, ${portion(shown()!.revenue)}` }}
           appearGeneration={1}
           motion={{ appear: { duration: 900, easing: "easeOut" }, update: { duration: 450, easing: "easeInOut" }, enter: { duration: 120 }, exit: { duration: 180 }, pointer: { stiffness: 420, damping: 40 } }}
-          onHoverChange={(index) => hover.set(index)}
+          onHoverChange={({ index }) => hover.set(index)}
           focusStyle={{ ...focusRing(4), borderRadius: RING / 2 }}
           style={{ width: RING, height: RING }}
         >
@@ -742,11 +755,11 @@ function Sales() {
         <Legend color={chart.s1} label="Online" value={`${shown().online}k`} />
         <Legend color={chart.s2} label="In store" value={`${shown().store}k`} />
       </View>
-      <View style={{ flexDirection: "row", gap: 8, marginTop: size.gap }}>
+      <View style={{ marginTop: size.gap }}>
         <Plot
           data={SALES}
           // Bands with half their gap at the ends: their middles divide
-          // the width evenly, under the month labels' equal cells.
+          // the width evenly, each month's label centered under its band.
           xScale={{ type: "band", paddingInner: 0.3, paddingOuter: 0.15, maxBandWidth: 56, groupPadding: 0.12 }}
           yScale={{ type: "linear", domain: [0, SALES_TOP] }}
           appearGeneration={stacked() ? 1 : 0}
@@ -756,9 +769,9 @@ function Sales() {
           // The band of the month under the pointer: a faint tint over it.
           crossLineClass="w-full h-full"
           crossLineStyle={{ backgroundColor: alpha(colors.text, 0.05) }}
-          onHoverChange={(index) => hover.set(index)}
+          onHoverChange={({ index }) => hover.set(index)}
           focusStyle={focusRing(4)}
-          style={{ flex: 1, height: SALES_HEIGHT }}
+          style={{ height: SALES_HEIGHT, marginRight: AXIS + 8, marginBottom: BELOW }}
         >
           <Grid y={[40, 80, 120]} style={{ stroke: colors.line }} />
           <Grid y={[0]} style={{ stroke: colors.border }} />
@@ -783,19 +796,10 @@ function Sales() {
             labelStyle={labelStyle}
             style={{ fill: chart.s2 }}
           />
+          {/* The grid's values right of it, as d3 writes them, and a month under each band. */}
+          <PlotAxis placement="right" tickValues={[0, 40, 80, 120]} labelStyle={{ ...axis, width: AXIS + 8, paddingLeft: 8, textAlign: "right" }} />
+          <PlotAxis format={(v) => MONTHS[v]} labelStyle={below} />
         </Plot>
-        {/* The y axis' labels at the grid's values. */}
-        <View style={{ width: AXIS, height: SALES_HEIGHT }}>
-          {[0, 40, 80, 120].map((v) => (
-            <Text style={{ ...axis, position: "absolute", right: 0, top: (1 - v / SALES_TOP) * SALES_HEIGHT - 7 }}>{String(v)}</Text>
-          ))}
-        </View>
-      </View>
-      {/* A month under each band: equal cells, as the bands' middles. */}
-      <View style={{ flexDirection: "row", marginTop: 8, marginRight: AXIS + 8 }}>
-        {MONTHS.map((m) => (
-          <Text style={{ ...axis, flex: 1, textAlign: "center" }}>{m}</Text>
-        ))}
       </View>
       <View style={{ marginTop: size.gap + 4, alignSelf: pointer ? "flex-start" : "stretch", width: pointer ? 220 : undefined }}>
         <Segmented
@@ -821,8 +825,8 @@ function Sales() {
  * worst run shaded and the hovered day marked on both; capacity rings that
  * sweep in for each period; revenue as a donut whose hovered slice lifts;
  * and sales as bars side by side or stacked. Values on the axes are small
- * monospaced figures, grids hairlines, tooltips floating cards with a caps
- * title.
+ * monospaced figures the plots' `PlotAxis` parts lay along their edges,
+ * grids hairlines, tooltips floating cards with a caps title.
  */
 export function Charts() {
   return <DemoPage cards={[Live, Depth, Drawdown, Capacity, Revenue, Sales]} />;
