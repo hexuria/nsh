@@ -103,6 +103,18 @@ pub(crate) struct Host {
 
 impl Host {
     #[cfg(feature = "dev-agent")]
+    fn reset_agent_scene(&self) {
+        let model = self.agent_model.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(model) = model.as_ref() {
+            model.reset();
+        }
+        self.agent_batches
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+    }
+
+    #[cfg(feature = "dev-agent")]
     fn start_agent(
         self: &Arc<Self>,
         address: &str,
@@ -197,15 +209,6 @@ impl Host {
 
     /// Runs `app`, replacing the running app.
     pub(crate) fn load(self: &Arc<Self>, app: impl Into<App>) {
-        #[cfg(feature = "dev-agent")]
-        if let Some(model) = &*self.agent_model.lock().unwrap_or_else(|e| e.into_inner()) {
-            model.reset();
-        }
-        #[cfg(feature = "dev-agent")]
-        self.agent_batches
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clear();
         let mut app = app.into();
         let access = match &mut app {
             App::Js(bundle) => {
@@ -232,6 +235,8 @@ impl Host {
             // are told here (`NshComponent.destroy`).
             self.app_stopped();
         }
+        #[cfg(feature = "dev-agent")]
+        self.reset_agent_scene();
         *self.animation_queue.lock().expect("queue") = VecDeque::new();
         self.keymap
             .lock()
@@ -1655,6 +1660,7 @@ extern "system" fn Java_com_longbridge_nsh_Native_afterBatch(
     #[cfg(feature = "dev-agent")]
     {
         let mut applied = Vec::new();
+        let model = host.agent_model.lock().unwrap_or_else(|e| e.into_inner());
         let mut queue = host.agent_batches.lock().unwrap_or_else(|e| e.into_inner());
         while queue
             .front()
@@ -1663,7 +1669,7 @@ extern "system" fn Java_com_longbridge_nsh_Native_afterBatch(
             applied.push(queue.pop_front().expect("front").1);
         }
         drop(queue);
-        if let Some(model) = &*host.agent_model.lock().unwrap_or_else(|e| e.into_inner()) {
+        if let Some(model) = model.as_ref() {
             for batch in applied {
                 model.apply(&batch);
             }
