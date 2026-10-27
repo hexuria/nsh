@@ -873,7 +873,11 @@ pub fn answer(model: &Model, step: &TestStep) -> Option<Result<serde_json::Value
             | SceneQuery::Viewport
             | SceneQuery::InputText { .. }
             | SceneQuery::Animating
-            | SceneQuery::DialogPoint { .. } => return None,
+            | SceneQuery::DialogPoint { .. }
+            | SceneQuery::HitAt { .. }
+            | SceneQuery::Focus { .. }
+            | SceneQuery::AppFocused
+            | SceneQuery::TextBounds { .. } => return None,
         },
         _ => return None,
     })
@@ -2171,6 +2175,17 @@ impl Agent {
             SceneQuery::Animating => Ok(Value::from(self.native.animating())),
             SceneQuery::DialogPoint { .. } => {
                 Err("this host answers dialogs itself (`AnswerDialog`)".into())
+            }
+            SceneQuery::HitAt { x, y } => self
+                .native
+                .hit_at(Point::new(Points(x), Points(y)))
+                .map(|hit| hit.map_or(Value::Null, Value::from)),
+            SceneQuery::Focus { id } => Ok(Value::from(self.native.focus_node(id).is_ok())),
+            SceneQuery::AppFocused => Ok(Value::from(self.native.app_focused())),
+            SceneQuery::TextBounds { id, start, end } => {
+                json(to_value(self.native.text_bounds(id, start, end).map(|b| {
+                    [b.origin.x.0, b.origin.y.0, b.size.width.0, b.size.height.0]
+                })))
             }
         }
     }
@@ -3923,5 +3938,54 @@ mod tests {
         ));
         assert!(typed.lock().unwrap().is_empty());
         drop(engine);
+    }
+
+    /// The questions a GPUI agent asks of the platform's views: a host
+    /// answers them from its `Native`, and the web's model leaves them to
+    /// the page.
+    #[test]
+    fn hit_focus_and_text_questions_go_to_the_platform() {
+        use nsh_dev::protocol::SceneQuery;
+        let text = Bounds::new(point(px(4.0), px(5.0)), size(px(6.0), px(7.0)));
+        let agent = Agent::requiring_native_hit_test(
+            target_scene(Vec::new()),
+            Box::new(GateNative {
+                bounds: Default::default(),
+                text_bounds: [((9, 1, 3), text)].into(),
+                hit: Ok(Some(4)),
+                hits: Arc::default(),
+                presses: Arc::default(),
+                pressed_at: Arc::default(),
+                typed: Arc::default(),
+                viewport: Size::new(px(300.0), px(200.0)),
+            }),
+        );
+        let ask = |query| agent.scene_query(query).unwrap();
+        assert_eq!(ask(SceneQuery::HitAt { x: 1.0, y: 2.0 }), 4);
+        assert_eq!(
+            ask(SceneQuery::TextBounds {
+                id: 9,
+                start: 1,
+                end: 3
+            }),
+            serde_json::json!([4.0, 5.0, 6.0, 7.0])
+        );
+        // The trait's defaults: no focus without a press, not focused.
+        assert_eq!(ask(SceneQuery::Focus { id: 9 }), false);
+        assert_eq!(ask(SceneQuery::AppFocused), false);
+
+        let model = Model::default();
+        for query in [
+            SceneQuery::HitAt { x: 1.0, y: 2.0 },
+            SceneQuery::Focus { id: 9 },
+            SceneQuery::AppFocused,
+            SceneQuery::TextBounds {
+                id: 9,
+                start: 1,
+                end: 3,
+            },
+        ] {
+            assert!(answer(&model, &TestStep::Scene { query }).is_none());
+        }
     }
 }

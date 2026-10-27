@@ -690,6 +690,35 @@ pub enum SceneQuery {
         /// The button's text.
         button: Option<String>,
     },
+    /// The view the platform's hit testing finds at a point (in points
+    /// from the viewport's top left), or `null`.
+    HitAt {
+        /// From the left.
+        #[serde(deserialize_with = "float::f32")]
+        x: f32,
+        /// From the top.
+        #[serde(deserialize_with = "float::f32")]
+        y: f32,
+    },
+    /// Gives view `id` (a text input, or a focus stop) the keyboard focus
+    /// without pressing it: whether it has it.
+    Focus {
+        /// The view.
+        id: u32,
+    },
+    /// Whether the app's window has the system's focus.
+    AppFocused,
+    /// Where the characters `start..end` (UTF-16 units) of text view `id`
+    /// are on screen, on their first line: `[x, y, width, height]` or
+    /// `null`.
+    TextBounds {
+        /// The text view.
+        id: u32,
+        /// The first character.
+        start: u32,
+        /// After the last.
+        end: u32,
+    },
 }
 
 /// An app's HTTP request, as a test session's host forwards it
@@ -997,6 +1026,26 @@ mod tests {
             serde_json::to_string(&message).unwrap(),
             r#"{"type":"step","id":2,"step":{"step":"scene","query":{"query":"keybindings"}}}"#
         );
+        // What a GPUI agent's page answers (`nsh.js` `testPage`).
+        for (query, wire) in [
+            (
+                SceneQuery::HitAt { x: 1.5, y: 2.0 },
+                r#"{"query":"hit_at","x":1.5,"y":2.0}"#,
+            ),
+            (SceneQuery::Focus { id: 4 }, r#"{"query":"focus","id":4}"#),
+            (SceneQuery::AppFocused, r#"{"query":"app_focused"}"#),
+            (
+                SceneQuery::TextBounds {
+                    id: 4,
+                    start: 1,
+                    end: 3,
+                },
+                r#"{"query":"text_bounds","id":4,"start":1,"end":3}"#,
+            ),
+        ] {
+            assert_eq!(serde_json::to_string(&query).unwrap(), wire);
+            assert_eq!(serde_json::from_str::<SceneQuery>(wire).unwrap(), query);
+        }
     }
 
     /// The messages with float fields, each with fractions.
@@ -1035,6 +1084,9 @@ mod tests {
                     width: 1200.5,
                     height: 800.25,
                 },
+            }),
+            step(TestStep::Scene {
+                query: SceneQuery::HitAt { x: 10.5, y: 0.25 },
             }),
         ]
     }
