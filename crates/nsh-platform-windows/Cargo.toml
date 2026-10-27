@@ -18,6 +18,7 @@ default = ["js"]
 js = ["nsh-engine/js"]
 # Development support: dev server client, log forwarding, error overlay.
 dev = ["js", "dep:nsh-dev", "dep:nsh-testing"]
+dev-agent = ["dev", "dep:nsh-gpui-agent", "nsh-gpui-agent/dev-agent"]
 
 [dependencies]
 log.workspace = true
@@ -40,3 +41,4 @@ ttf-parser.workspace = true
 crossbeam-channel.workspace = true
 nsh-dev = { workspace = true, features = ["client"], optional = true }
 nsh-testing = { workspace = true, features = ["agent"], optional = true }
+nsh-gpui-agent = { workspace = true, optional = true }
