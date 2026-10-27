@@ -133,7 +133,8 @@ impl Native {
 #[derive(Default)]
 struct Gestures {
     press: Option<Retained<PressRecognizer>>,
-    /// Reports `hover:` and the hover events (pointers).
+    /// Reports `hover:` and the mouse events (pointers): `onMouseEnter`,
+    /// `onMouseMove`, `onMouseLeave`.
     hover: Option<Retained<objc2_ui_kit::UIHoverGestureRecognizer>>,
     /// `onContextMenu`: secondary clicks (iPad pointers, Mac Catalyst's
     /// mouse).
@@ -466,9 +467,9 @@ struct Slot {
     /// The image (not its placeholder) is shown.
     image_shown: bool,
     /// Interaction states the core wants reported (`tailwind::state`).
-    tracked: u8,
+    tracked: u16,
     /// Current interaction states.
-    states: u8,
+    states: u16,
 }
 
 impl Slot {
@@ -561,6 +562,8 @@ pub(crate) struct Mounter {
     hosts: rustc_hash::FxHashMap<NodeId, NodeId>,
     /// Stacks whose screens changed in the current batch.
     dirty_stacks: Vec<NodeId>,
+    /// A retained tab changed visibility; sync the newly visible stack.
+    bottom_bar_dirty: bool,
     /// Stacks whose screens changed during a push or pop transition: they
     /// catch up when it ends (UIKit breaks transitions that start while
     /// another one is running).
@@ -601,6 +604,8 @@ pub(crate) struct Mounter {
     areas: Vec<(NodeId, Retained<crate::selectable_view::AreaResponder>)>,
     /// The performance monitor, while it measures ([`Mounter::measure`]).
     fps: Option<std::rc::Rc<crate::fps::Fps>>,
+    /// Shader views and the GPU device they render with.
+    shaders: crate::shader::Shaders,
     mtm: MainThreadMarker,
 }
 
@@ -656,8 +661,10 @@ impl Mounter {
             created: Vec::new(),
             disappearing: Default::default(),
             frame_link: crate::animation::frame_link(&target_for_link),
+            shaders: crate::shader::Shaders::new(&target_for_link),
             hosts: Default::default(),
             dirty_stacks: Vec::new(),
+            bottom_bar_dirty: false,
             deferred_stacks: Vec::new(),
             dirty_headers: Vec::new(),
             dirty_modals: Vec::new(),
@@ -1021,6 +1028,7 @@ impl Mounter {
                     }
                     self.animated.retain(|&v| v != id);
                 }
+                self.shaders.remove(id);
             }
             MountItem::Frame { id, frame } => {
                 self.frames_applied = true;
@@ -1115,6 +1123,9 @@ impl Mounter {
                         .view()
                         .layer()
                         .setTransform(dynamic_transform(s, &self.animator));
+                }
+                if self.shaders.has(id) {
+                    self.layout_shader(id);
                 }
             }
             MountItem::TrackStates { id, states } => self.track_states(id, states),
@@ -1330,6 +1341,15 @@ impl Mounter {
             }
             MountItem::Refreshing { id, refreshing } => self.set_refreshing(id, refreshing),
             MountItem::Canvas { id, drawing } => self.set_drawing(id, drawing),
+            MountItem::Shader { id, layer } => {
+                let scale = self.display_scale();
+                if let Some(s) = self.views.get(id as usize).and_then(Option::as_ref) {
+                    self.shaders
+                        .set(id, s.native.view(), &s.style, scale, layer);
+                }
+                // Bindings that came before it.
+                self.push_shader_args(id);
+            }
             MountItem::AnimationBindings { id, bindings } => {
                 if let Some(s) = self.slot_mut(id) {
                     // Properties no longer animated fall back to the static style.
@@ -1346,6 +1366,7 @@ impl Mounter {
                     if let Some(s) = self.slot(id) {
                         apply_dynamic(s, &self.animator);
                     }
+                    self.push_shader_args(id);
                     // A component gets what is bound again.
                     if let Some(Some(s)) = self.views.get_mut(id as usize)
                         && let Native::Component(host) = &mut s.native
@@ -1372,7 +1393,11 @@ impl Mounter {
                     ..
                 }) = self.slot_mut(id)
                 {
+                    let hides = config.hides_bottom_bar_when_pushed;
                     screen.config = *config;
+                    // Before the push that shows it: `willShow` reads this the
+                    // moment the screen goes on the stack.
+                    screen.set_hides_bottom_bar(hides);
                     self.dirty_headers.push(id);
                     if let Some(&stack) = self.hosts.get(&id) {
                         self.dirty_stacks.push(stack);
@@ -2060,6 +2085,12 @@ impl Mounter {
     fn set_view_style(&mut self, id: NodeId, style: ViewStyle) {
         let mtm = self.mtm;
         let target = self.target.clone();
+        if self
+            .slot(id)
+            .is_some_and(|s| s.style.hidden != style.hidden)
+        {
+            self.bottom_bar_dirty = true;
+        }
         let Some(s) = self.slot_mut(id) else { return };
         let view = s.native.view().retain();
         let layer = view.layer();
@@ -2145,6 +2176,10 @@ impl Mounter {
                 self.pending_images.push(id);
             }
         }
+        // Its corners clip the shader.
+        if self.shaders.has(id) {
+            self.layout_shader(id);
+        }
     }
 
     /// Restyles with Core Animation's implicit animations on.
@@ -2169,7 +2204,7 @@ impl Mounter {
     }
 
     /// The core asked for the states of `id` it reads (`active:`, ...).
-    fn track_states(&mut self, id: NodeId, states: u8) {
+    fn track_states(&mut self, id: NodeId, states: u16) {
         let Some(s) = self.slot_mut(id) else { return };
         if s.tracked == states {
             return;
@@ -2180,7 +2215,7 @@ impl Mounter {
     }
 
     /// An interaction state of `id` changed: tells the core if it reads it.
-    fn report_state(&mut self, id: NodeId, bit: u8, on: bool) {
+    fn report_state(&mut self, id: NodeId, bit: u16, on: bool) {
         let Some(s) = self.slot_mut(id) else { return };
         let states = if on { s.states | bit } else { s.states & !bit };
         if states == s.states {
@@ -2194,7 +2229,8 @@ impl Mounter {
     }
 
     /// A pointer (an iPad's, a Mac's mouse) entered (`Began`), moved over
-    /// or left view `id`, at `in_window` (the window's coordinates).
+    /// (`Changed`) or left view `id`, at `in_window` (the window's
+    /// coordinates): `onMouseEnter`, `onMouseMove`, `onMouseLeave`.
     pub(crate) fn hover(
         &mut self,
         id: NodeId,
@@ -2210,30 +2246,30 @@ impl Mounter {
         let Some(events) = self.slot(id).map(|s| s.events) else {
             return;
         };
-        let changed = match state {
-            UIGestureRecognizerState::Began => Some(EventKind::HoverIn),
+        // The movement that brings the pointer in is a move too, as on the
+        // desktops and in the DOM.
+        let kinds: &[EventKind] = match state {
+            UIGestureRecognizerState::Began => &[EventKind::MouseEnter, EventKind::MouseMove],
+            UIGestureRecognizerState::Changed => &[EventKind::MouseMove],
             UIGestureRecognizerState::Ended | UIGestureRecognizerState::Cancelled => {
-                Some(EventKind::HoverOut)
+                &[EventKind::MouseLeave]
             }
-            _ => None,
+            _ => return,
         };
-        if let Some(kind) = changed.filter(|k| events.contains(*k)) {
-            self.control.dispatch_event(id, kind, EventPayload::None);
-        }
-        if !on || !events.contains(EventKind::HoverMove) {
+        if !kinds.iter().any(|&k| events.contains(k)) {
             return;
         }
         let Some(view) = self.slot(id).map(|s| s.native.view().retain()) else {
             return;
         };
         let (position, page_position) = self.pointer_positions(&view, in_window);
-        let event = nsh_core::HoverEvent {
-            position,
-            page_position,
-            modifiers: key_modifiers(modifiers),
-        };
-        self.control
-            .dispatch_event(id, EventKind::HoverMove, EventPayload::Hover(event));
+        // A hover recognizer only reports a pointer with no button down.
+        let event =
+            nsh_core::MouseEvent::new(position, page_position, key_modifiers(modifiers), None);
+        for &kind in kinds.iter().filter(|&&k| events.contains(k)) {
+            self.control
+                .dispatch_event(id, kind, EventPayload::Mouse(event));
+        }
     }
 
     /// A secondary click on view `id`, at `in_window` (the window's
@@ -2370,7 +2406,9 @@ impl Mounter {
     /// The surface's traits changed: on a screen of another scale (an
     /// external display, Catalyst), images decode again for it.
     pub(crate) fn traits_changed(&mut self) {
-        if self.display_scale() == self.image_scale {
+        let scale = self.display_scale();
+        self.shaders.rescale(scale);
+        if scale == self.image_scale {
             return;
         }
         for (id, slot) in self.views.iter_mut().enumerate() {
@@ -2727,10 +2765,7 @@ impl Mounter {
             press.set_own(own_press, handles_press);
             press.set_long_press_delay(slot.long_press_delay);
         }
-        let wants_hover = slot.tracked & nsh_core::tailwind::state::HOVERED != 0
-            || events.contains(EventKind::HoverIn)
-            || events.contains(EventKind::HoverOut)
-            || events.contains(EventKind::HoverMove);
+        let wants_hover = nsh_core::input::hoverable(slot.tracked, events);
         toggle(&mut slot.gestures.hover, wants_hover, view, || {
             // SAFETY: `handleHover:` is implemented by the target, which
             // outlives the recognizer.
@@ -2980,12 +3015,22 @@ impl Mounter {
                     _ => None,
                 });
             stack.reconcile(&screens, leaving);
+            // A page whose options arrive while it is already on screen: the
+            // stack itself does not change, and the bar still has to follow.
+            stack.sync_bottom_bar();
             if let Some(Slot {
                 native: Native::Stack(stack),
                 ..
             }) = self.slot_mut(id)
             {
                 stack.contain();
+            }
+        }
+        if std::mem::take(&mut self.bottom_bar_dirty) {
+            for slot in self.views.iter().flatten() {
+                if let Native::Stack(stack) = &slot.native {
+                    stack.sync_bottom_bar();
+                }
             }
         }
         let mut headers = std::mem::take(&mut self.dirty_headers);
@@ -3626,6 +3671,28 @@ impl Mounter {
         self.control.frame();
     }
 
+    /// The shaders' display link fired.
+    pub(crate) fn shader_frame(&mut self) {
+        self.shaders.frame();
+    }
+
+    /// Shader view `id` follows its frame and corners.
+    fn layout_shader(&mut self, id: NodeId) {
+        let scale = self.display_scale();
+        if let Some(s) = self.views.get(id as usize).and_then(Option::as_ref) {
+            self.shaders.layout(id, &s.style, scale);
+        }
+    }
+
+    /// The bound uniforms of shader view `id` onto its shader.
+    fn push_shader_args(&mut self, id: NodeId) {
+        if let Some(s) = self.views.get(id as usize).and_then(Option::as_ref)
+            && self.shaders.has(id)
+        {
+            self.shaders.set_args(id, shader_args(s, &self.animator));
+        }
+    }
+
     /// Fades or grows in the views a layout animation created.
     fn animate_appearing(&mut self, animation: &LayoutAnimation) {
         let Some(t) = animation.create else { return };
@@ -3882,6 +3949,14 @@ impl Mounter {
                 apply_dynamic(s, animator);
             }
         }
+        // Shaders get their bound uniforms.
+        for &id in &self.animated {
+            if self.shaders.has(id)
+                && let Some(s) = self.views.get(id as usize).and_then(Option::as_ref)
+            {
+                self.shaders.set_args(id, shader_args(s, animator));
+            }
+        }
         // Components get their bound props' changes (no view borrowed while
         // they run but their own slot).
         for &id in &self.animated {
@@ -4123,6 +4198,17 @@ fn apply_bound_decor(slot: &Slot, animator: &Animator) {
             slot.decor.set_border_color(view, Color(c))
         }
     }
+}
+
+/// The values of a shader view's animated uniforms (its slots).
+fn shader_args<'a>(
+    slot: &'a Slot,
+    animator: &'a Animator,
+) -> impl Iterator<Item = (u16, AnimationValue)> + 'a {
+    slot.bindings.iter().filter_map(|&(prop, node)| match prop {
+        AnimationProp::CanvasArg(k) => Some((k, animator.eval(node))),
+        _ => None,
+    })
 }
 
 /// Opacity, background color and transform: static values overridden by

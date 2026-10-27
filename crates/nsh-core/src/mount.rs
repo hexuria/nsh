@@ -389,6 +389,8 @@ pub struct ScreenConfig {
     pub large_title: bool,
     /// The content extends under the header.
     pub header_transparent: bool,
+    /// The system tab bar leaves while this page is on top.
+    pub hides_bottom_bar_when_pushed: bool,
     /// Color of the back button and bar buttons.
     pub tint_color: Option<Color>,
     /// Header background.
@@ -437,6 +439,7 @@ impl Default for ScreenConfig {
             header_visible: true,
             large_title: false,
             header_transparent: false,
+            hides_bottom_bar_when_pushed: false,
             tint_color: None,
             background_color: None,
             title_color: None,
@@ -650,7 +653,7 @@ pub enum MountItem {
         /// View id.
         id: NodeId,
         /// The states.
-        states: u8,
+        states: u16,
     },
     /// Insert (or move) `child` into `parent`, below sibling `before` (or
     /// on top when `None`). Siblings rather than indices, so platform-owned
@@ -815,6 +818,16 @@ pub enum MountItem {
         id: NodeId,
         /// The drawing.
         drawing: Arc<crate::canvas::Drawing>,
+    },
+    /// What a shader view draws under its children (`None`: nothing); the
+    /// animated values among its uniforms come as
+    /// [`crate::animation::AnimationProp::CanvasArg`] bindings of its
+    /// [`crate::shader::ShaderLayer::slots`].
+    Shader {
+        /// The view.
+        id: NodeId,
+        /// The program and its uniforms.
+        layer: Option<Arc<crate::shader::ShaderLayer>>,
     },
     /// Bind visual properties to native animation nodes.
     AnimationBindings {

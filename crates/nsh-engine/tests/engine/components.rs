@@ -2361,6 +2361,227 @@ fn a_base_tab_reports_presses_and_its_list_holds_no_value() {
     assert_eq!(style(initial, c).opacity, 0.5);
 }
 
+const BASE_ROVING: &str = r##"import { mount, signal, Text, View } from "nsh";
+import { Radio, RadioGroup, Tab, Tabs } from "nsh/base";
+
+function App() {
+  const current = signal("b");
+  const plan = signal("");
+  const log = signal<string[]>([]);
+  const say = (s: string) => log.set([...log(), s]);
+  const tab = (value: string, disabled = false) => (
+    <Tab
+      testID={value}
+      selected={current() === value}
+      disabled={disabled}
+      onPress={() => {
+        say(`tab ${value}`);
+        current.set(value);
+      }}
+    >
+      <Text>{value}</Text>
+    </Tab>
+  );
+  const radio = (value: string, disabled = false) => (
+    <Radio
+      testID={value}
+      checked={plan() === value}
+      disabled={disabled}
+      onChange={(next) => {
+        say(`radio ${value}:${next}`);
+        plan.set(value);
+      }}
+    >
+      <Text>{value}</Text>
+    </Radio>
+  );
+  return (
+    <View>
+      <Tabs class="flex-row">
+        {tab("a")}
+        {tab("b")}
+        {tab("c", true)}
+        {tab("d")}
+      </Tabs>
+      <RadioGroup>
+        {radio("x")}
+        {radio("y", true)}
+        {radio("z")}
+      </RadioGroup>
+      <Text>{`Log: ${log().join(",")}`}</Text>
+    </View>
+  );
+}
+
+mount(App);
+"##;
+
+/// `nsh/base`'s `Tabs` and `RadioGroup` as WAI-ARIA's roving focus: only
+/// the selected tab (the first enabled radio while none is checked) is a
+/// stop of the keyboard focus; while an item has the focus the group binds
+/// its arrow keys, which make the next enabled item the stop, focus it and
+/// activate it (a tab's `onPress`, a radio's `onChange(true)`), around the
+/// ends; the bindings go when the focus leaves.
+#[test]
+fn base_tabs_and_radio_groups_rove_the_keyboard_focus() {
+    use std::sync::Arc;
+
+    use nsh_core::keymap::{KeyMatch, Keymap, Keystroke};
+
+    let (engine, rx) = start_in(
+        BASE_ROVING,
+        Environment {
+            os: nsh_engine::Os::MacOs,
+            ..Environment::default()
+        },
+    );
+    let mut batches = until(&rx, |batch| shows(batch, "Log: "));
+    let id = |batches: &[MountBatch], test_id: &str| {
+        batches
+            .iter()
+            .flat_map(|b| b.items.iter())
+            .find_map(|i| match i {
+                MountItem::ViewProps { id, props } if props.test_id.as_deref() == Some(test_id) => {
+                    Some(*id)
+                }
+                _ => None,
+            })
+            .expect(test_id)
+    };
+    let [a, b, c, d, x, y, z] = ["a", "b", "c", "d", "x", "y", "z"].map(|t| id(&batches, t));
+    // The newest `focusable` of each view.
+    let stops = |batches: &[MountBatch], views: &[u32]| -> Vec<u32> {
+        views
+            .iter()
+            .copied()
+            .filter(|&view| {
+                batches
+                    .iter()
+                    .rev()
+                    .flat_map(|b| b.items.iter().rev())
+                    .find_map(|i| match i {
+                        MountItem::ViewProps { id, props } if *id == view => Some(props.focusable),
+                        _ => None,
+                    })
+                    .flatten()
+                    == Some(true)
+            })
+            .collect()
+    };
+    let keymap = |batches: &[MountBatch]| -> Option<Arc<Keymap>> {
+        batches
+            .iter()
+            .rev()
+            .flat_map(|b| b.items.iter().rev())
+            .find_map(|i| match i {
+                MountItem::Keymap(keymap) => Some(keymap.clone()),
+                _ => None,
+            })
+    };
+    let bound = |keymap: &Keymap, keystroke: &str| {
+        let stroke = Keystroke::parse(keystroke, nsh_engine::Os::MacOs).unwrap();
+        match keymap.find(stroke, false, false) {
+            KeyMatch::Fire(id) => Some(id),
+            _ => None,
+        }
+    };
+    let focus_calls = |batches: &[MountBatch]| -> Vec<u32> {
+        batches
+            .iter()
+            .flat_map(|b| b.items.iter())
+            .filter_map(|i| match i {
+                MountItem::Command {
+                    id,
+                    command: Command::Focus,
+                } => Some(*id),
+                _ => None,
+            })
+            .collect()
+    };
+    let press = |keymap: &Keymap, keystroke: &str| {
+        let id = bound(keymap, keystroke).unwrap_or_else(|| panic!("{keystroke} is not bound"));
+        engine.control().dispatch_event(
+            ROOT_ID,
+            EventKind::KeyCommand,
+            EventPayload::Value(PayloadValue::Number(f64::from(id))),
+        );
+    };
+
+    // One stop per group: the selected tab; the first radio, none checked.
+    assert_eq!(stops(&batches, &[a, b, c, d]), [b]);
+    assert_eq!(stops(&batches, &[x, y, z]), [x]);
+    // No arrow keys while the focus is elsewhere.
+    assert!(keymap(&batches).is_none_or(|k| bound(&k, "right").is_none()));
+
+    // The focus reaches the selected tab: the list's keys are bound.
+    engine
+        .control()
+        .dispatch_event(b, EventKind::Focus, EventPayload::None);
+    batches.extend(until(&rx, |batch| {
+        batch
+            .items
+            .iter()
+            .any(|i| matches!(i, MountItem::Keymap(_)))
+    }));
+    let keys = keymap(&batches).expect("the list's keys");
+    for keystroke in ["left", "right", "up", "down", "home", "end"] {
+        assert!(bound(&keys, keystroke).is_some(), "{keystroke}");
+    }
+    // Right passes the disabled tab: d becomes the stop, gets the focus
+    // and reports a press.
+    press(&keys, "right");
+    let after = until(&rx, |batch| shows(batch, "Log: tab d"));
+    assert_eq!(focus_calls(&after), [d]);
+    batches.extend(after);
+    assert_eq!(stops(&batches, &[a, b, c, d]), [d]);
+    // Around the end, to the first.
+    press(&keys, "right");
+    let after = until(&rx, |batch| shows(batch, "Log: tab d,tab a"));
+    assert_eq!(focus_calls(&after), [a]);
+    batches.extend(after);
+    // End: the last enabled tab.
+    press(&keys, "end");
+    batches.extend(until(&rx, |batch| shows(batch, "Log: tab d,tab a,tab d")));
+    assert_eq!(stops(&batches, &[a, b, c, d]), [d]);
+
+    // The focus leaves the list: its keys go.
+    engine
+        .control()
+        .dispatch_event(d, EventKind::Blur, EventPayload::None);
+    batches.extend(until(&rx, |batch| {
+        batch
+            .items
+            .iter()
+            .any(|i| matches!(i, MountItem::Keymap(_)))
+    }));
+    assert!(bound(&keymap(&batches).unwrap(), "right").is_none());
+
+    // The radio group: Down past the disabled radio checks z, Down again
+    // wraps to x.
+    engine
+        .control()
+        .dispatch_event(x, EventKind::Focus, EventPayload::None);
+    batches.extend(until(&rx, |batch| {
+        batch
+            .items
+            .iter()
+            .any(|i| matches!(i, MountItem::Keymap(_)))
+    }));
+    let keys = keymap(&batches).expect("the group's keys");
+    assert!(bound(&keys, "home").is_none(), "radio groups have no Home");
+    press(&keys, "down");
+    let after = until(&rx, |batch| {
+        shows(batch, "Log: tab d,tab a,tab d,radio z:true")
+    });
+    assert_eq!(focus_calls(&after), [z]);
+    batches.extend(after);
+    assert_eq!(stops(&batches, &[x, y, z]), [z]);
+    press(&keys, "down");
+    let log = "Log: tab d,tab a,tab d,radio z:true,radio x:true";
+    let after = until(&rx, |batch| shows(batch, log));
+    assert!(after.iter().any(|batch| shows(batch, log)));
+}
+
 const BASE_COLLAPSIBLE: &str = r##"import { mount, signal, Text, View } from "nsh";
 import { Collapsible } from "nsh/base";
 
@@ -2720,6 +2941,81 @@ function App() {
 
 mount(App);
 "##;
+
+const EXPANDED_TRIGGER: &str = r##"import { mount, Text, View } from "nsh";
+import { Popover } from "nsh/base";
+
+mount(() => (
+  <Popover
+    trigger={
+      <View
+        testID="trigger"
+        class="bg-white aria-expanded:bg-black"
+        expandedStyle={{ opacity: 0.5 }}
+      >
+        <Text>Details</Text>
+      </View>
+    }
+  >
+    <Text>Body</Text>
+  </Popover>
+));
+"##;
+
+/// A popover's trigger takes its `aria-expanded:` classes and its
+/// `expandedStyle` while the popover is open, and drops them when it
+/// closes: the core follows the expanded state the popover sets.
+#[test]
+fn a_popovers_trigger_is_styled_while_open() {
+    let (engine, rx) = start_in(
+        EXPANDED_TRIGGER,
+        Environment {
+            os: nsh_engine::Os::Windows,
+            ..Environment::default()
+        },
+    );
+    let first = rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("first frame");
+    let trigger = first
+        .items
+        .iter()
+        .find_map(|i| match i {
+            MountItem::ViewProps { id, props } if props.test_id.as_deref() == Some("trigger") => {
+                Some(*id)
+            }
+            _ => None,
+        })
+        .expect("the trigger");
+    let style = |batches: &[MountBatch]| {
+        batches
+            .iter()
+            .rev()
+            .flat_map(|b| b.items.iter().rev())
+            .find_map(|i| match i {
+                MountItem::ViewStyle { id, style } if *id == trigger => Some(style.clone()),
+                _ => None,
+            })
+    };
+    let closed = style(std::slice::from_ref(&first)).expect("styled");
+    assert_eq!(closed.background_color.0, 0xffff_ffff);
+    assert_eq!(closed.opacity, 1.0);
+    let press = || {
+        engine
+            .control()
+            .dispatch_event(trigger, EventKind::Press, EventPayload::None)
+    };
+    press();
+    let opened = until(&rx, |b| shows(b, "Body"));
+    let open = style(&opened).expect("restyled");
+    assert_eq!(open.background_color.0, 0x0000_00ff);
+    assert_eq!(open.opacity, 0.5);
+    press();
+    let closed = until(&rx, |b| {
+        style(std::slice::from_ref(b)).is_some_and(|s| s.opacity == 1.0)
+    });
+    assert_eq!(style(&closed).unwrap().background_color.0, 0xffff_ffff);
+}
 
 /// A popup reports a change of its open state before its lifecycle
 /// follows it: `onOpenChange`, then `onOpen` / `onClose` once it is all
@@ -3131,6 +3427,527 @@ fn a_base_slider_moves_the_nearer_thumb_and_tells_screen_readers_each_value() {
     assert!(after.iter().any(|b| shows(b, "Price 21-75")));
 }
 
+const BASE_SELECT: &str = r##"import { mount, signal, Text, View } from "nsh";
+import { Select } from "nsh/base";
+
+const items = [
+  { value: "apple", title: "Apple" },
+  { value: "rice", title: "Rice", group: "Grains" },
+  { value: "kale", title: "Kale", disabled: true },
+];
+
+function App() {
+  const value = signal<string | null>(null);
+  const changes = signal<string[]>([]);
+  return (
+    <View>
+      <Select
+        items={items}
+        value={value()}
+        onChange={(next) => {
+          changes.set([...changes(), next]);
+          value.set(next);
+        }}
+        accessibilityLabel="Controlled"
+        trigger={<View><Text>Pick</Text></View>}
+        renderItem={(item) => <Text>{`${item.title}${item.selected ? " chosen" : ""}!`}</Text>}
+        renderGroup={(group) => <Text>{`[${group.title}]`}</Text>}
+      />
+      <Select
+        items={items}
+        defaultValue="rice"
+        accessibilityLabel="Own"
+        trigger={<View><Text>Own</Text></View>}
+      />
+      <Text>{`Changes: ${changes().join(",")}`}</Text>
+    </View>
+  );
+}
+
+mount(App);
+"##;
+
+/// `nsh/base`'s `Select` through its JS face: `value={null}` is nothing
+/// chosen (the app's), a left-out `value` the select's own from
+/// `defaultValue`; the items' objects, the app's `renderItem` and
+/// `renderGroup`, and `onChange` with the chosen value.
+#[test]
+fn a_base_select_reads_null_as_nothing_chosen_and_renders_the_apps_rows() {
+    use nsh_core::{AccessibilityRole, ViewProps};
+    let (engine, rx) = start(BASE_SELECT);
+    let props = |batches: &[MountBatch], label: &str, role: AccessibilityRole| {
+        batches
+            .iter()
+            .rev()
+            .flat_map(|b| b.items.iter().rev())
+            .find_map(|i| match i {
+                MountItem::ViewProps { id, props }
+                    if props.accessibility.role == role
+                        && props.accessibility.label.as_deref() == Some(label) =>
+                {
+                    Some((*id, (**props).clone()))
+                }
+                _ => None,
+            })
+    };
+    let chosen = |p: &ViewProps| {
+        p.accessibility
+            .value
+            .as_ref()
+            .and_then(|v| v.text.as_deref().map(str::to_owned))
+    };
+    let (mut own, mut controlled) = (false, false);
+    let first = until(&rx, |b| {
+        let b = std::slice::from_ref(b);
+        own |= props(b, "Own", AccessibilityRole::Combobox).is_some();
+        controlled |= props(b, "Controlled", AccessibilityRole::Combobox).is_some();
+        own && controlled
+    });
+    assert!(first.iter().any(|b| shows(b, "Changes: ")));
+    let first = &first[..];
+    let (controlled, trigger) = props(first, "Controlled", AccessibilityRole::Combobox).unwrap();
+    assert_eq!(chosen(&trigger), None, "null: nothing chosen");
+    assert_eq!(trigger.accessibility.state.expanded, Some(false));
+    let (_, own) = props(first, "Own", AccessibilityRole::Combobox).unwrap();
+    assert_eq!(
+        chosen(&own).as_deref(),
+        Some("Rice"),
+        "its own, from defaultValue"
+    );
+
+    // The list, its rows drawn by the app.
+    engine
+        .control()
+        .dispatch_event(controlled, EventKind::Press, EventPayload::None);
+    let opened = until(&rx, |b| shows(b, "Apple!"));
+    assert!(opened.iter().any(|b| shows(b, "[Grains]")));
+    let (apple, _) = props(&opened, "Apple", AccessibilityRole::Option).expect("an option");
+    let (_, kale) = props(&opened, "Kale", AccessibilityRole::Option).expect("an option");
+    assert!(kale.accessibility.state.disabled);
+
+    // A choice: `onChange` with its value; the app's value follows.
+    engine
+        .control()
+        .dispatch_event(apple, EventKind::Press, EventPayload::None);
+    let chose = until(&rx, |b| {
+        props(
+            std::slice::from_ref(b),
+            "Controlled",
+            AccessibilityRole::Combobox,
+        )
+        .is_some_and(|(_, p)| chosen(&p).as_deref() == Some("Apple"))
+    });
+    assert!(chose.iter().any(|b| shows(b, "Changes: apple")));
+    let (_, trigger) = props(&chose, "Controlled", AccessibilityRole::Combobox).unwrap();
+    assert_eq!(chosen(&trigger).as_deref(), Some("Apple"));
+}
+
+const BASE_SELECT_DESKTOP: &str = r##"import { mount, Text, View } from "nsh";
+import { Select } from "nsh/base";
+
+const items = [
+  { value: "apple", title: "Apple" },
+  { value: "rice", title: "Rice" },
+];
+
+mount(() => (
+  <View style={{ paddingTop: 100, paddingLeft: 40 }}>
+    <Select
+      items={items}
+      defaultOpen
+      accessibilityLabel="Food"
+      trigger={
+        <View testID="trigger" style={{ width: 120, height: 30 }}>
+          <Text>Pick</Text>
+        </View>
+      }
+    />
+  </View>
+));
+"##;
+
+/// On a desktop, a TSX `Select`'s trigger is the app's element: the
+/// combobox, and what the popup is placed against and as wide as (not the
+/// slot's view, which the column stretches); open at first (`defaultOpen`),
+/// the popup shows its rows once the trigger is laid out.
+#[test]
+fn a_base_select_on_a_desktop_places_its_popup_at_the_apps_trigger() {
+    use nsh_core::AccessibilityRole;
+    let (_engine, rx) = start_in(
+        BASE_SELECT_DESKTOP,
+        Environment {
+            os: nsh_engine::Os::MacOs,
+            idiom: nsh_engine::Idiom::Desktop,
+            ..Environment::default()
+        },
+    );
+    let mut all = until(&rx, |b| shows(b, "Apple"));
+    all.extend(until(&rx, |_| false));
+    let trigger = test_view(&all, "trigger");
+    let role_of = |id: u32| {
+        all.iter()
+            .flat_map(|b| b.items.iter())
+            .filter_map(|i| match i {
+                MountItem::ViewProps { id: v, props } if *v == id => Some(props.accessibility.role),
+                _ => None,
+            })
+            .next_back()
+    };
+    assert_eq!(role_of(trigger), Some(AccessibilityRole::Combobox));
+    let list = all
+        .iter()
+        .flat_map(|b| b.items.iter())
+        .find_map(|i| match i {
+            MountItem::ViewProps { id, props }
+                if props.accessibility.role == AccessibilityRole::Listbox =>
+            {
+                Some(*id)
+            }
+            _ => None,
+        })
+        .expect("the list");
+    let popup = all
+        .iter()
+        .flat_map(|b| b.items.iter())
+        .find_map(|i| match i {
+            MountItem::Insert { parent, child, .. } if *child == list => Some(*parent),
+            _ => None,
+        })
+        .expect("the popup");
+    let frame = frame_of(&all, popup).expect("placed");
+    // Below the trigger (120 × 30 at 40, 100), at its start, as wide.
+    assert_eq!(
+        frame_of(&all, trigger).map(|f| f.size.width),
+        Some(px(120.0))
+    );
+    assert_eq!(frame.origin.x, px(40.0), "{frame:?}");
+    assert_eq!(frame.origin.y, px(130.0), "{frame:?}");
+    assert_eq!(frame.size.width, px(120.0), "{frame:?}");
+}
+
+const BASE_NUMBER_INPUT: &str = r##"import { mount, signal, Text, View } from "nsh";
+import { NumberInput } from "nsh/base";
+
+function App() {
+  const quantity = signal<number | null>(2);
+  return (
+    <View>
+      <NumberInput
+        value={quantity()}
+        onChange={(next) => quantity.set(next)}
+        min={0}
+        max={10}
+        step={0.5}
+        accessibilityLabel="Quantity"
+        decrementButton={<Text>Less</Text>}
+        incrementButton={<Text>More</Text>}
+        class="flex-row"
+        inputClass="w-[100px] h-[30px]"
+        incrementButtonClass="size-[30px]"
+        decrementButtonClass="size-[30px]"
+      />
+      <Text>{`Quantity ${quantity()}`}</Text>
+    </View>
+  );
+}
+
+mount(App);
+"##;
+
+/// `nsh/base`'s `NumberInput` from TSX: its field is a spin button for
+/// screen readers with its label and value, whose increment steps it (the
+/// field's text follows the app's value); an edit that is no number goes
+/// back natively, one that is reaches the app; the step buttons, hidden
+/// from screen readers and no stops of Tab, step it too.
+#[test]
+fn a_base_number_input_steps_its_field_and_refuses_text_that_is_no_number() {
+    use nsh_core::{AccessibilityRole, AccessibilityValue};
+    let (engine, rx) = start(BASE_NUMBER_INPUT);
+    let first = until(&rx, |b| shows(b, "Quantity 2"));
+    let items = || first.iter().flat_map(|b| &b.items);
+    let field = items()
+        .find_map(|i| match i {
+            MountItem::Create {
+                id,
+                kind: nsh_core::ViewKind::Input,
+            } => Some(*id),
+            _ => None,
+        })
+        .expect("the field");
+    let props_of = |batches: &[MountBatch], view: u32| {
+        batches
+            .iter()
+            .rev()
+            .flat_map(|b| b.items.iter().rev())
+            .find_map(|i| match i {
+                MountItem::ViewProps { id, props } if *id == view => Some(props.clone()),
+                _ => None,
+            })
+    };
+    let props = props_of(&first, field).expect("the field's props");
+    assert_eq!(props.accessibility.role, AccessibilityRole::Spinbutton);
+    assert_eq!(props.accessibility.label.as_deref(), Some("Quantity"));
+    let value = |now: f32| AccessibilityValue {
+        min: Some(0.0),
+        max: Some(10.0),
+        now: Some(now),
+        text: Some(format!("{now}").into()),
+    };
+    assert_eq!(props.accessibility.value, Some(value(2.0)));
+    let text_of = |batches: &[MountBatch]| {
+        batches
+            .iter()
+            .flat_map(|b| &b.items)
+            .filter_map(|i| match i {
+                MountItem::InputValue { id, text, count } if *id == field => {
+                    Some((text.clone(), *count))
+                }
+                _ => None,
+            })
+            .next_back()
+    };
+    assert_eq!(text_of(&first).map(|(t, _)| t).as_deref(), Some("2"));
+    let control = engine.control();
+
+    // A screen reader's increment: a step, which the app takes.
+    control.dispatch_event(
+        field,
+        EventKind::AccessibilityAction,
+        EventPayload::Map(vec![("actionName", PayloadValue::Str("increment".into()))]),
+    );
+    let after = until(&rx, |b| shows(b, "Quantity 2.5"));
+    assert_eq!(text_of(&after).map(|(t, _)| t).as_deref(), Some("2.5"));
+    assert_eq!(
+        props_of(&after, field).and_then(|p| p.accessibility.value),
+        Some(value(2.5))
+    );
+
+    // A letter: the field goes back to its number, based on that edit.
+    control.dispatch_event(
+        field,
+        EventKind::ChangeText,
+        EventPayload::Text {
+            text: "2.5a".into(),
+            count: 1,
+        },
+    );
+    let after = until(&rx, |b| text_of(std::slice::from_ref(b)).is_some());
+    assert_eq!(text_of(&after), Some(("2.5".to_owned(), 1)));
+    // A number: the app hears it, and nothing goes back.
+    control.dispatch_event(
+        field,
+        EventKind::ChangeText,
+        EventPayload::Text {
+            text: "7".into(),
+            count: 2,
+        },
+    );
+    let after = until(&rx, |b| shows(b, "Quantity 7"));
+    assert_eq!(text_of(&after), None);
+
+    // The step buttons: hidden from screen readers, no Tab stops; the
+    // increment (after the field) steps.
+    let buttons: Vec<u32> = items()
+        .filter_map(|i| match i {
+            MountItem::Events { id, events } if events.contains(EventKind::Press) => Some(*id),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(buttons.len(), 2, "a button each way");
+    for &button in &buttons {
+        let props = props_of(&first, button).expect("the button's props");
+        assert!(props.accessibility.hidden);
+        assert_eq!(props.focusable, Some(false));
+    }
+    control.dispatch_event(buttons[1], EventKind::Press, EventPayload::None);
+    let after = until(&rx, |b| shows(b, "Quantity 7.5"));
+    assert_eq!(text_of(&after).map(|(t, _)| t).as_deref(), Some("7.5"));
+}
+
+const BASE_OTP_INPUT: &str = r##"import { mount, signal, Text, View } from "nsh";
+import { OtpInput } from "nsh/base";
+
+function App() {
+  const code = signal("");
+  const completes = signal<string[]>([]);
+  return (
+    <View>
+      <OtpInput
+        testID="otp"
+        length={4}
+        groups={2}
+        value={code()}
+        onChange={(next) => code.set(next)}
+        onComplete={({ value }) => completes.set([...completes(), value])}
+        accessibilityLabel="Code"
+        class="flex-row w-[200px] h-[40px]"
+        groupClass="flex-row"
+        cellClass="w-[40px] h-[40px] opacity-50 focus:opacity-100"
+        caretClass="w-[2px] h-[20px]"
+      />
+      <Text>{`Code: ${code()}`}</Text>
+      <Text>{`Completes: ${completes().join(",")}`}</Text>
+    </View>
+  );
+}
+
+mount(App);
+"##;
+
+/// `nsh/base`'s `OtpInput`: one native field over the cells, set up for
+/// one-time codes, the only element screen readers get; the cell that
+/// takes the next digit `focus:` while the field has the focus, with the
+/// caret in it; the app's code in the cells, `onComplete` once full.
+#[test]
+fn a_base_otp_input_types_into_one_field_over_its_cells() {
+    use nsh_core::{AutoFill, ViewKind};
+    let (engine, rx) = start(BASE_OTP_INPUT);
+    let first = rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("first frame");
+    assert!(shows(&first, "Code: "));
+    let created = |kind: ViewKind| -> Vec<u32> {
+        first
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                MountItem::Create { id, kind: k } if *k == kind => Some(*id),
+                _ => None,
+            })
+            .collect()
+    };
+    let children = |parent: u32| -> Vec<u32> {
+        let views = created(ViewKind::View);
+        first
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                MountItem::Insert {
+                    parent: p, child, ..
+                } if *p == parent && views.contains(child) => Some(*child),
+                _ => None,
+            })
+            .collect()
+    };
+    let props_of = |id: u32| {
+        first.items.iter().find_map(|i| match i {
+            MountItem::ViewProps { id: v, props } if *v == id => Some(props.clone()),
+            _ => None,
+        })
+    };
+    let root = first
+        .items
+        .iter()
+        .find_map(|i| match i {
+            MountItem::ViewProps { id, props } if props.test_id.as_deref() == Some("otp") => {
+                Some(*id)
+            }
+            _ => None,
+        })
+        .expect("the input's root");
+
+    // The field: over the whole input, set up for a code, named for screen
+    // readers.
+    let [field] = created(ViewKind::Input)[..] else {
+        panic!("one field");
+    };
+    let config = first
+        .items
+        .iter()
+        .find_map(|i| match i {
+            MountItem::Input { id, config } if *id == field => Some(config.clone()),
+            _ => None,
+        })
+        .expect("the field's config");
+    assert_eq!(config.keyboard, nsh_core::KeyboardType::Number);
+    assert_eq!(config.auto_fill, AutoFill::OneTimeCode);
+    assert!(config.caret_hidden);
+    assert!(!config.auto_correct);
+    assert!(!config.secure);
+    assert_eq!(
+        props_of(field).unwrap().accessibility.label.as_deref(),
+        Some("Code")
+    );
+    let all = std::slice::from_ref(&first);
+    let frame = |id| frame_of(all, id).expect("a frame");
+    assert_eq!(frame(field).size, frame(root).size);
+    assert_eq!(
+        frame(field).origin,
+        nsh_core::geometry::point(px(0.0), px(0.0))
+    );
+
+    // Two groups of two cells, hidden from screen readers.
+    // In the order they are laid out, left to right (the batch inserts
+    // siblings in an order of its own).
+    let in_row = |mut views: Vec<u32>| {
+        views.sort_by(|a, b| frame(*a).origin.x.0.total_cmp(&frame(*b).origin.x.0));
+        views
+    };
+    let groups = in_row(children(root));
+    assert_eq!(groups.len(), 2);
+    for group in &groups {
+        assert!(props_of(*group).unwrap().accessibility.hidden);
+    }
+    let cells: Vec<u32> = groups.iter().flat_map(|g| in_row(children(*g))).collect();
+    assert_eq!(cells.len(), 4);
+    assert!(frame(groups[1]).origin.x > frame(groups[0]).origin.x);
+    let opacity = |batches: &[MountBatch], cell: u32| {
+        batches
+            .iter()
+            .rev()
+            .flat_map(|b| b.items.iter().rev())
+            .find_map(|i| match i {
+                MountItem::ViewStyle { id, style } if *id == cell => Some(style.opacity),
+                _ => None,
+            })
+    };
+    for cell in &cells {
+        assert_eq!(opacity(all, *cell), Some(0.5));
+    }
+
+    // The focus: the first cell is `focus:`, with the caret in it.
+    engine
+        .control()
+        .dispatch_event(field, EventKind::Focus, EventPayload::None);
+    let after = until(&rx, |b| {
+        opacity(std::slice::from_ref(b), cells[0]).is_some()
+    });
+    assert_eq!(opacity(&after, cells[0]), Some(1.0));
+    assert!(after.iter().flat_map(|b| b.items.iter()).any(|i| matches!(
+        i,
+        MountItem::Insert { parent, .. } if *parent == cells[0]
+    )));
+
+    // Typing: the app's code fills the cells; the next cell is `focus:`.
+    let edit = |text: &str, count: u32| {
+        engine.control().dispatch_event(
+            field,
+            EventKind::ChangeText,
+            EventPayload::Text {
+                text: text.into(),
+                count,
+            },
+        )
+    };
+    edit("1２", 1);
+    let after = until(&rx, |b| shows(b, "Code: 12"));
+    assert!(after.iter().any(|b| shows(b, "1")));
+    assert!(after.iter().any(|b| shows(b, "2")));
+    assert_eq!(opacity(&after, cells[0]), Some(0.5));
+    assert_eq!(opacity(&after, cells[2]), Some(1.0));
+    // The full-width digit goes back to the field as an ASCII one.
+    assert!(after.iter().flat_map(|b| b.items.iter()).any(|i| matches!(
+        i,
+        MountItem::InputValue { id, text, .. } if *id == field && text == "12"
+    )));
+
+    // Full: reported once, the last cell `focus:`.
+    edit("1234", 2);
+    let after = until(&rx, |b| shows(b, "Completes: 1234"));
+    assert!(after.iter().any(|b| shows(b, "Code: 1234")));
+    assert_eq!(opacity(&after, cells[3]), Some(1.0));
+}
+
 const TAB_BAR: &str = r##"import { mount, signal } from "nsh";
 import { TabBar } from "nsh/mobile";
 
@@ -3359,7 +4176,7 @@ mount(App);
 #[test]
 fn a_base_plot_draws_its_marks_from_the_rows() {
     use nsh_core::{
-        AccessibilityRole, Color, HoverEvent,
+        AccessibilityRole, Color,
         canvas::{CanvasOp, Num, Paint, PathOp},
     };
     let (engine, rx) = start(BASE_PLOT);
@@ -3468,20 +4285,24 @@ fn a_base_plot_draws_its_marks_from_the_rows() {
     let hover = |x: f32| {
         engine.control().dispatch_event(
             plot.0,
-            EventKind::HoverMove,
-            EventPayload::Hover(HoverEvent {
-                position: nsh_core::geometry::point(px(x), px(10.0)),
-                ..Default::default()
-            }),
+            EventKind::MouseMove,
+            EventPayload::Mouse(nsh_core::MouseEvent::new(
+                nsh_core::geometry::point(px(x), px(10.0)),
+                nsh_core::geometry::point(px(x), px(10.0)),
+                Default::default(),
+                None,
+            )),
         )
     };
     hover(90.0);
     until(&rx, |b| shows(b, "hover 1"));
     hover(160.0);
     until(&rx, |b| shows(b, "hover 2"));
-    engine
-        .control()
-        .dispatch_event(plot.0, EventKind::HoverOut, EventPayload::None);
+    engine.control().dispatch_event(
+        plot.0,
+        EventKind::MouseLeave,
+        EventPayload::Mouse(nsh_core::MouseEvent::default()),
+    );
     until(&rx, |b| shows(b, "hover null"));
 
     // New rows: the marks drawn again, in one batch, nothing for the grid
@@ -3721,6 +4542,83 @@ fn base_plot_marks_draw_the_edges_of_their_data() {
     assert!(!plot_drawings(&after).is_empty());
 }
 
+const BASE_PLOT_BAND: &str = r##"import { mount, View } from "nsh";
+import { Area, Plot } from "nsh/base/plot";
+
+type Day = { hi: number; lo: number | null };
+
+function App() {
+  const days: Day[] = [
+    { hi: 30, lo: 10 },
+    { hi: 40, lo: 20 },
+    { hi: 30, lo: null },
+    { hi: 20, lo: 0 },
+  ];
+  return (
+    <View>
+      {/* A band: the bottom edge a field of each row, a row without one skipped. */}
+      <Plot data={days} y="hi" style={{ width: 200, height: 100 }}>
+        <Area y0="lo" curve="linear" />
+      </Plot>
+      {/* A number: a constant baseline. */}
+      <Plot data={[{ v: 10 }, { v: 20 }]} y="v" style={{ width: 200, height: 100 }}>
+        <Area y0={0} curve="linear" />
+      </Plot>
+      {/* A function of each row, with steps. */}
+      <Plot data={[{ hi: 20 }, { hi: 50 }]} style={{ width: 200, height: 100 }}>
+        <Area y1="hi" y0={(d: { hi: number }) => d.hi - 10} curve="stepAfter" />
+      </Plot>
+    </View>
+  );
+}
+
+mount(App);
+"##;
+
+/// `Area`'s `y0` of each row (d3's `area().y0(accessor)`): the bottom edge
+/// goes back through those values with the area's curve, a row without one
+/// is skipped on both edges, and the values widen the y domain; a number
+/// is still a constant baseline in the domain.
+#[test]
+fn a_base_plot_area_with_a_y0_of_each_row_is_a_band() {
+    let (_engine, rx) = start(BASE_PLOT_BAND);
+    // The function's values come a turn after the rows.
+    let steps = [
+        (0.0, 75.0),
+        (200.0, 75.0),
+        (200.0, 0.0),
+        (200.0, 25.0),
+        (200.0, 100.0),
+        (0.0, 100.0),
+    ];
+    let batches = until_drawn(&rx, |d| path_points(&d.ops).starts_with(&steps));
+    let latest = plot_drawings(&batches);
+    let [(_, band), (_, base), (_, stepped)] = &latest[..] else {
+        panic!("three areas: {latest:?}")
+    };
+    // The domain is 0 (the lowest `lo`) to 40: the top edge through `hi`,
+    // then back through `lo` from the last row, the third row (no `lo`)
+    // on neither edge.
+    assert_eq!(
+        path_points(&band.ops)[..6],
+        [
+            (0.0, 25.0),
+            (66.666664, 0.0),
+            (200.0, 50.0),
+            (200.0, 100.0),
+            (66.666664, 50.0),
+            (0.0, 75.0)
+        ]
+    );
+    // A number: down to its value, 0, which the domain takes in.
+    assert_eq!(
+        path_points(&base.ops)[..4],
+        [(0.0, 50.0), (200.0, 0.0), (200.0, 100.0), (0.0, 100.0)]
+    );
+    // The function's: 10 to 50, the bottom edge stepping as the top one.
+    assert_eq!(path_points(&stepped.ops)[..6], steps);
+}
+
 const BASE_PLOT_MOTION: &str = r##"import { mount, signal, Text, View } from "nsh";
 import { Line, Plot } from "nsh/base/plot";
 
@@ -3818,11 +4716,13 @@ fn base_plot_moves_natively_with_its_motion() {
     let hover = |x: f32| {
         engine.control().dispatch_event(
             plot,
-            EventKind::HoverMove,
-            EventPayload::Hover(nsh_core::HoverEvent {
-                position: nsh_core::geometry::point(px(x), px(10.0)),
-                ..Default::default()
-            }),
+            EventKind::MouseMove,
+            EventPayload::Mouse(nsh_core::MouseEvent::new(
+                nsh_core::geometry::point(px(x), px(10.0)),
+                nsh_core::geometry::point(px(x), px(10.0)),
+                Default::default(),
+                None,
+            )),
         )
     };
     // Entering: the parts placed at once, then faded in over 120 ms; the
@@ -3843,9 +4743,11 @@ fn base_plot_moves_natively_with_its_motion() {
     assert!(springs(&glided) > 0);
     assert!(plot_drawings(&glided).is_empty());
     // Leaving: faded out over 80 ms.
-    engine
-        .control()
-        .dispatch_event(plot, EventKind::HoverOut, EventPayload::None);
+    engine.control().dispatch_event(
+        plot,
+        EventKind::MouseLeave,
+        EventPayload::Mouse(nsh_core::MouseEvent::default()),
+    );
     let left = until(&rx, |b| shows(b, "hover null"));
     assert!(timings(&left).contains(&(0.0, 80.0)));
 
@@ -3909,7 +4811,7 @@ mount(App);
 #[test]
 fn base_plot_marks_have_parts_of_their_own_and_the_tooltip_stays_inside() {
     use nsh_core::{
-        Color, HoverEvent,
+        Color,
         animation::Animator,
         canvas::{CanvasOp, GradientShape, Paint},
         geometry::point,
@@ -3984,11 +4886,13 @@ fn base_plot_marks_have_parts_of_their_own_and_the_tooltip_stays_inside() {
     let hover = |x: f32, y: f32| {
         engine.control().dispatch_event(
             plot,
-            EventKind::HoverMove,
-            EventPayload::Hover(HoverEvent {
-                position: point(px(x), px(y)),
-                ..Default::default()
-            }),
+            EventKind::MouseMove,
+            EventPayload::Mouse(nsh_core::MouseEvent::new(
+                point(px(x), px(y)),
+                point(px(x), px(y)),
+                Default::default(),
+                None,
+            )),
         )
     };
     // The tooltip: the view around the app's content, and the point it is
@@ -4175,7 +5079,7 @@ fn base_plot_pie_draws_a_slice_per_row_and_follows_the_pointer() {
     use std::f32::consts::{FRAC_PI_2, PI};
 
     use nsh_core::{
-        Color, HoverEvent,
+        Color,
         animation::{AnimationValue, Animator},
         canvas::{CanvasOp, FillRule, Paint},
         geometry::point,
@@ -4280,11 +5184,13 @@ fn base_plot_pie_draws_a_slice_per_row_and_follows_the_pointer() {
     let hover = |x: f32, y: f32| {
         engine.control().dispatch_event(
             plot,
-            EventKind::HoverMove,
-            EventPayload::Hover(HoverEvent {
-                position: point(px(x), px(y)),
-                ..Default::default()
-            }),
+            EventKind::MouseMove,
+            EventPayload::Mouse(nsh_core::MouseEvent::new(
+                point(px(x), px(y)),
+                point(px(x), px(y)),
+                Default::default(),
+                None,
+            )),
         )
     };
     // What the animator shows of a slice: its opacity and its rim.
@@ -4373,7 +5279,6 @@ mount(App);
 #[test]
 fn base_plot_pie_sweeps_in_and_lifts_on_the_pointer_spring() {
     use nsh_core::{
-        HoverEvent,
         animation::{AnimationOp, Driver},
         geometry::point,
     };
@@ -4400,11 +5305,13 @@ fn base_plot_pie_sweeps_in_and_lifts_on_the_pointer_spring() {
     // The second row's slice, past 3 o'clock: it lifts on the spring.
     engine.control().dispatch_event(
         plot,
-        EventKind::HoverMove,
-        EventPayload::Hover(HoverEvent {
-            position: point(px(30.0), px(60.0)),
-            ..Default::default()
-        }),
+        EventKind::MouseMove,
+        EventPayload::Mouse(nsh_core::MouseEvent::new(
+            point(px(30.0), px(60.0)),
+            point(px(30.0), px(60.0)),
+            Default::default(),
+            None,
+        )),
     );
     let mut over = until(&rx, |b| shows(b, "hover 1"));
     over.extend(until(&rx, |_| false));
@@ -4517,6 +5424,236 @@ fn base_plot_pie_radii_move_with_the_update_motion() {
     assert!(edges.iter().all(|e| e.1.is_some()), "{edges:?}");
 }
 
+const BASE_PLOT_ARC_CORNERS: &str = r##"import { mount, Text, View } from "nsh";
+import { Arc, Plot } from "nsh/base/plot";
+
+function App() {
+  return (
+    <View>
+      <Plot testID="plot" data={[{ v: 1 }]} y="v" style={{ width: 100, height: 100 }}>
+        <Arc endAngle={Math.PI / 2} innerRadius={30} outerRadius={50} cornerRadius={20} />
+        <Arc endAngle={0.2} innerRadius={30} outerRadius={50} cornerRadius={10} />
+        <Arc innerRadius={30} outerRadius={50} cornerRadius={10} />
+      </Plot>
+      <Text>ready</Text>
+    </View>
+  );
+}
+
+mount(App);
+"##;
+
+/// `cornerRadius` (d3's `arc.cornerRadius`): an arc's corners are circles
+/// touching its edges and the rim or the hole, at most half the ring's
+/// thickness (round caps: the corners at the rim and at the hole are one
+/// circle) and, on a short arc, only as large as its angle leaves room
+/// for, the two corners meeting on its middle. A whole ring has none.
+#[test]
+fn base_plot_arc_corners_are_rounded_and_clamped() {
+    use std::f32::consts::{FRAC_PI_2, PI};
+    let (_engine, rx) = start(BASE_PLOT_ARC_CORNERS);
+    let mut all = until(&rx, |b| shows(b, "ready"));
+    all.extend(until(&rx, |_| false));
+    let drawings = plot_drawings(&all);
+    let arcs: Vec<Vec<DrawnArc>> = drawings.iter().map(|(_, d)| drawn_arcs(&d.ops)).collect();
+    let near = |a: f32, b: f32| (a - b).abs() < 1e-3;
+    let at = |arc: &DrawnArc, x: f32, y: f32| near(arc.0.0, x) && near(arc.0.1, y);
+    // The quarter from 12 o'clock: corners of 10 (half of 50 - 30, not
+    // 20), their centers on the ring's middle, 40 out.
+    let quarter = arcs
+        .iter()
+        .find(|a| a.len() == 6 && a[1].1 == Some(50.0) && !near(a[1].2.0, a[1].2.1))
+        .unwrap_or_else(|| panic!("a rounded quarter: {arcs:?}"));
+    let a = (10.0f32 / 40.0).asin();
+    assert!(
+        at(&quarter[0], 50.0 + 40.0 * a.sin(), 50.0 - 40.0 * a.cos()),
+        "{quarter:?}"
+    );
+    assert_eq!(quarter[0].1, Some(10.0));
+    assert!(near(quarter[0].2.0, -PI) && near(quarter[0].2.1, -FRAC_PI_2 + a));
+    // The rim between the corners, then the hole's edge back.
+    assert!(near(quarter[1].2.0, a - FRAC_PI_2) && near(quarter[1].2.1, -a));
+    assert_eq!((quarter[4].1, quarter[4].3), (Some(30.0), true));
+    assert!(near(quarter[4].2.0, -a) && near(quarter[4].2.1, a - FRAC_PI_2));
+    // Round caps: the corners at the rim and at the hole are one circle.
+    assert!(at(&quarter[3], quarter[2].0.0, quarter[2].0.1));
+    assert!(at(&quarter[5], quarter[0].0.0, quarter[0].0.1));
+    // A short arc (0.2): the corners only as large as its angle leaves
+    // room for, meeting on its middle, the rim between them none.
+    let half = 0.1f32.sin();
+    let short = arcs
+        .iter()
+        .find(|a| a.len() == 6 && a[1].1 == Some(50.0) && near(a[1].2.0, a[1].2.1))
+        .unwrap_or_else(|| panic!("a short rounded arc: {arcs:?}"));
+    assert!(
+        near(short[0].1.unwrap(), 50.0 * half / (1.0 + half)),
+        "{short:?}"
+    );
+    assert!(
+        near(short[3].1.unwrap(), 30.0 * half / (1.0 - half)),
+        "{short:?}"
+    );
+    // The whole ring: no corners, its two edges only.
+    assert!(
+        arcs.iter().any(|a| a.len() == 2 && a[0].1 == Some(50.0)),
+        "{arcs:?}"
+    );
+}
+
+const BASE_PLOT_ARC_TWEEN: &str = r##"import { mount, signal, Text, View } from "nsh";
+import { Arc, Pie, Plot } from "nsh/base/plot";
+
+function App() {
+  const late = signal(false);
+  setTimeout(() => late.set(true), 50);
+  return (
+    <View>
+      <Plot
+        testID="plot"
+        data={late() ? [{ v: 1 }, { v: 1 }] : [{ v: 1 }, { v: 3 }]}
+        y="v"
+        motion={{ update: { duration: 250 } }}
+        style={{ width: 100, height: 100 }}
+      >
+        <Arc endAngle={late() ? Math.PI : Math.PI / 2} innerRadius={30} outerRadius={50} cornerRadius={10} />
+        <Pie innerRadius={10} outerRadius={20} />
+      </Plot>
+      <Text>{late() ? "late" : "early"}</Text>
+    </View>
+  );
+}
+
+mount(App);
+"##;
+
+/// The end of the rim (the first arc of its radius `rim`) of each plot
+/// drawing that has one: a constant, or the slot the animator moves.
+fn rim_ends(batches: &[MountBatch], rim: f32) -> Vec<(u32, nsh_core::canvas::Num)> {
+    use nsh_core::canvas::{CanvasOp, Num, PathOp};
+    plot_drawings(batches)
+        .iter()
+        .filter_map(|(id, d)| {
+            d.ops.iter().find_map(|op| match op {
+                CanvasOp::Path(PathOp::Arc {
+                    x: Num::Const(50.0),
+                    radius: Num::Const(r),
+                    end,
+                    ..
+                }) if *r == rim => Some((*id, *end)),
+                _ => None,
+            })
+        })
+        .collect()
+}
+
+/// The value of slot `slot` of view `view`'s drawing at each of `times`
+/// (seconds; the animations start at the first), with every animation of
+/// `all`.
+fn slot_at(all: &[MountBatch], view: u32, slot: u16, times: &[f64]) -> Vec<f32> {
+    use nsh_core::animation::{AnimationValue, Animator};
+    let mut animator = Animator::default();
+    for item in all.iter().flat_map(|b| b.items.iter()) {
+        animator.apply(item);
+    }
+    times
+        .iter()
+        .map(|&t| {
+            animator.tick(t);
+            let mut out = f32::NAN;
+            animator.write(
+                |id| (id == view).then_some(id),
+                |_, _, args| {
+                    if let Some((_, AnimationValue::Number(n))) = args.iter().find(|a| a.0 == slot)
+                    {
+                        out = *n;
+                    }
+                },
+            );
+            out
+        })
+        .collect()
+}
+
+/// An arc's and a pie's angles changing (`motion.update`, d3's
+/// `arcTween`): the angles move, not the outline, from the old ones to the
+/// new over the update's timing, the arc's round corners with them; a
+/// pie's slices move to their new shares. With reduced motion the new
+/// angles show at once.
+#[test]
+fn base_plot_arc_and_pie_angles_move_with_the_update_motion() {
+    use std::f32::consts::FRAC_PI_2;
+
+    use nsh_core::{
+        animation::{AnimationOp, Driver},
+        canvas::Num,
+    };
+    let updates = |b: &MountBatch| {
+        b.items.iter().any(|i| {
+            matches!(
+                i,
+                MountItem::Animation(AnimationOp::Start {
+                    driver: Driver::Timing { duration_ms, .. },
+                    ..
+                }) if *duration_ms == 250.0
+            )
+        })
+    };
+    let near = |a: f32, b: f32| (a - b).abs() < 1e-3;
+    // The rounded arc's rim ends `a` before its end: from a quarter to a
+    // half from 12 o'clock (0 and `PI / 2` on the canvas, less `a`).
+    let a = (10.0f32 / 40.0).asin();
+
+    let (_engine, rx) = start(BASE_PLOT_ARC_TWEEN);
+    let mut all = until(&rx, |b| shows(b, "late"));
+    all.extend(until(&rx, |_| false));
+    assert!(all.iter().any(updates), "the angles move over the update");
+    let switched = all.iter().position(|b| shows(b, "late")).unwrap();
+    let arc = rim_ends(&all[switched..], 40.0 + 10.0);
+    let [(arc, Num::Slot(end))] = arc[..] else {
+        panic!("the arc's rim, its end animated: {arc:?}")
+    };
+    let ends = slot_at(&all, arc, end, &[1.0, 1.125, 1.3]);
+    assert!(near(ends[0], -a), "{ends:?}");
+    assert!(
+        ends[1] > -a + 0.1 && ends[1] < FRAC_PI_2 - a - 0.1,
+        "{ends:?}"
+    );
+    assert!(near(ends[2], FRAC_PI_2 - a), "{ends:?}");
+    // The pie's first slice: from a quarter (its rim ending at 3 o'clock,
+    // the canvas's 0) to a half (6 o'clock).
+    let slices = rim_ends(&all[switched..], 20.0);
+    let (first, Num::Slot(end)) = slices[0] else {
+        panic!("the first slice's rim, its end animated: {slices:?}")
+    };
+    let ends = slot_at(&all, first, end, &[1.0, 1.3]);
+    assert!(near(ends[0], 0.0) && near(ends[1], FRAC_PI_2), "{ends:?}");
+
+    // Reduced motion: the new angles at once.
+    let environment = Environment {
+        reduce_motion: true,
+        ..Environment::default()
+    };
+    let (_engine, rx) = start_in(BASE_PLOT_ARC_TWEEN, environment);
+    let mut all = until(&rx, |b| shows(b, "late"));
+    all.extend(until(&rx, |_| false));
+    assert!(!all.iter().any(updates));
+    let arc = rim_ends(&all, 50.0);
+    assert!(
+        matches!(arc[..], [(_, Num::Const(end))] if near(end, FRAC_PI_2 - a)),
+        "{arc:?}"
+    );
+    let slices = rim_ends(&all, 20.0);
+    assert!(
+        matches!(slices[0], (_, Num::Const(end)) if near(end, FRAC_PI_2)),
+        "{slices:?}"
+    );
+    // The second slice ends at 12 o'clock again.
+    assert!(
+        matches!(slices[1], (_, Num::Const(end)) if near(end, 3.0 * FRAC_PI_2)),
+        "{slices:?}"
+    );
+}
+
 const BASE_PLOT_BARS: &str = r##"import { mount, signal, Text, View } from "nsh";
 import { Bar, Plot } from "nsh/base/plot";
 
@@ -4583,7 +5720,7 @@ fn bar_rects(ops: &[nsh_core::canvas::CanvasOp]) -> Vec<[f32; 4]> {
 #[test]
 fn base_plot_bars_stand_in_bands_and_stack() {
     use nsh_core::{
-        Color, HoverEvent,
+        Color,
         canvas::{CanvasOp, Num, Paint, PathOp},
     };
     let (engine, rx) = start(BASE_PLOT_BARS);
@@ -4695,11 +5832,13 @@ fn base_plot_bars_stand_in_bands_and_stack() {
     let plot = test_view(&all, "bars");
     engine.control().dispatch_event(
         plot,
-        EventKind::HoverMove,
-        EventPayload::Hover(HoverEvent {
-            position: nsh_core::geometry::point(px(160.0), px(10.0)),
-            ..Default::default()
-        }),
+        EventKind::MouseMove,
+        EventPayload::Mouse(nsh_core::MouseEvent::new(
+            nsh_core::geometry::point(px(160.0), px(10.0)),
+            nsh_core::geometry::point(px(160.0), px(10.0)),
+            Default::default(),
+            None,
+        )),
     );
     let hovered = until(&rx, |b| shows(b, "hover 1"));
     assert!(plot_drawings(&hovered).is_empty());
@@ -4796,11 +5935,13 @@ fn base_plot_bars_grow_and_fade_natively() {
     let plot = test_view(&batches, "plot");
     engine.control().dispatch_event(
         plot,
-        EventKind::HoverMove,
-        EventPayload::Hover(nsh_core::HoverEvent {
-            position: nsh_core::geometry::point(px(150.0), px(10.0)),
-            ..Default::default()
-        }),
+        EventKind::MouseMove,
+        EventPayload::Mouse(nsh_core::MouseEvent::new(
+            nsh_core::geometry::point(px(150.0), px(10.0)),
+            nsh_core::geometry::point(px(150.0), px(10.0)),
+            Default::default(),
+            None,
+        )),
     );
     let entered = until(&rx, |b| shows(b, "hover 1"));
     assert!(plot_drawings(&entered).is_empty());

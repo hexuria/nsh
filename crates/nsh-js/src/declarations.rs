@@ -69,6 +69,9 @@ export interface StateStyleProps<S = ViewStyle> {
   /** While `accessibilityState.checked` is `"mixed"` (`indeterminate:`):
    * a checkbox that is neither checked nor unchecked. */
   indeterminateStyle?: StyleProp<S>;
+  /** While `accessibilityState.expanded` is `true` (`aria-expanded:`): a
+   * `Popover`'s or `Menu`'s trigger while its popup is open. */
+  expandedStyle?: StyleProp<S>;
 }
 
 /** iOS-only props of every element (`ios={{…}}`); elements add their own. */
@@ -108,6 +111,13 @@ export interface ImageAsset {
 /** `<Image>` */
 export interface ImageProps extends CommonProps<ImageStyle>, ImageHostProps {
   style?: StyleProp<ImageStyle>;
+}
+
+/** `<Shader>`: a view whose box a WGSL shader draws, under its children. */
+export interface ShaderProps extends CommonProps, ViewHostProps, ShaderHostProps {
+  /** The WGSL defining `fn shade(uv: vec2f) -> vec4f`. */
+  source: string;
+  style?: StyleProp<ViewStyle>;
 }
 
 /** `<Scroll>` */

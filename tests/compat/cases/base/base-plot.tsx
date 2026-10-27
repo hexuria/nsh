@@ -4,9 +4,10 @@
 // (`accessibilityLabel`, `accessibilityValue`), the row nearest the pointer
 // (`onHoverChange`) with its parts (`crossLineClass`, `dotClass`,
 // `tooltipContent`, `tooltipPlacement`, `tooltipOffset`) and `motion`, and
-// its marks `Grid` (`x`, `y`), `Area` (`y1`, `y0`, `curve`, a gradient
-// `background`, its own `hoverDot`) and `Line` (`y` as a field and as a
-// function, `data` / `x` of its own, `curve`, `dot`, its own `hoverDot`),
+// its marks `Grid` (`x`, `y`), `Area` (`y1`, `y0` as a value, a field and
+// a function, `curve`, a gradient `background`, its own `hoverDot`) and
+// `Line` (`y` as a field and as a function, `data` / `x` of its own,
+// `curve`, `dot`, its own `hoverDot`),
 // painted with the paint style keys; and `Bar` on a `band` scale (`value`,
 // `base`, `stack`, `label` as a field and as a function with its part,
 // `cornerRadii`, `stagger`, `inactiveOpacity`, a gradient `background`),
@@ -14,10 +15,12 @@
 // the plot's layout, its role, label and value, the tooltip's text, where
 // the layout puts the tooltip, the hover's dots, the bars' labels and the
 // cross line on a band, and what it reports. A `Pie` (`value`,
-// `startAngle`, `endAngle`, `innerRadius`, `outerRadius`) over an `Arc`
-// reports the slice under the pointer, none in its hole, outside its ring
-// or past its last angle; its hole closes with `motion.update`, the pointer
-// finding the new ring at once.
+// `startAngle`, `endAngle`, `innerRadius`, `outerRadius`, `cornerRadius`)
+// over an `Arc` reports the slice under the pointer, none in its hole,
+// outside its ring or past its last angle; its hole closes with
+// `motion.update`, the pointer finding the new ring at once. A gauge
+// `Arc` draws round corners (`cornerRadius`) and sweeps back to its new
+// end with `motion.update`.
 import { Text, View, signal } from "nsh";
 import { Arc, Area, Bar, Grid, Line, Pie, Plot } from "nsh/base/plot";
 
@@ -87,6 +90,11 @@ function App() {
       <Plot testID="spark" data={rows()} y="price" interactive={false} accessibilityLabel="Spark" onHoverChange={(index) => hovered.set(index)} style={{ width: 100, height: 20 }}>
         <Line />
       </Plot>
+      {/* A band: its bottom edge a value of each row (a field, a function). */}
+      <Plot testID="band" data={rows()} y="price" interactive={false} accessibilityLabel="Band" style={{ width: 100, height: 20 }}>
+        <Area y0="avg" curve="linear" />
+        <Area y1="avg" y0={(d: Row) => d.avg - 2} />
+      </Plot>
       {/* Bars in bands: one standing alone, a stack beside it. */}
       <Plot
         testID="bars"
@@ -124,7 +132,9 @@ function App() {
 }
 
 /** Shares of 1, 1 and 2 over the lower half of a ring from 20 to 40 (the
- * largest circle of a 100 by 100 plot is 50), from 3 o'clock to 9. */
+ * largest circle of a 100 by 100 plot is 50), from 3 o'clock to 9; a
+ * gauge with round corners over the upper right, from 42 to 48, a
+ * quarter turn, then a sixth. */
 function PieCase() {
   const slice = signal<number | null>(null);
   const hole = signal(true);
@@ -139,6 +149,7 @@ function PieCase() {
         style={{ width: 100, height: 100 }}
       >
         <Arc innerRadius={hole() ? "40%" : 0} outerRadius="80%" class="fill-[#eeeeee]" />
+        <Arc testID="gauge" endAngle={hole() ? Math.PI / 2 : Math.PI / 3} innerRadius={42} outerRadius={48} cornerRadius={3} />
         <Pie
           value="share"
           startAngle={Math.PI / 2}
@@ -146,6 +157,7 @@ function PieCase() {
           innerRadius={hole() ? "40%" : 0}
           outerRadius="80%"
           padAngle={0.02}
+          cornerRadius={2}
           sliceClass={(_, i) => (i === 0 ? "fill-[#3366ff]" : "fill-[#99aaff]")}
           sliceStyle={{ stroke: "#ffffff", strokeWidth: 2 }}
           hoverLift={4}

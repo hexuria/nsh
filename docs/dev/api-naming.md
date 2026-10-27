@@ -8,6 +8,17 @@ API", "Use precise domain words" and "Callback and event wording" in `gpui-kit/w
 (cited below as *guides*). The table at the end lists the renames decided so far; until they land, the code still has
 the old names.
 
+## Features as well as names
+
+GPUI Kit's components are long proven in its apps, so a component of `nsh-base` takes its features from there too,
+not only its names (decided by the user, 2026-10-27). Before a component is written or reviewed, list the options of
+its counterpart: `gpui-base`'s builder (`gpui-kit/crates/base/src`), `gpui-component`'s builder and state
+(`gpui-kit/crates/component/src/<name>.rs`, its `pub fn`s) and the props `gpui-shell` materializes for scripts
+(`gpui-kit/crates/shell/src/materialize/components/`). The component covers each one: as a prop, as a part
+(`<part>Class` / `<part>Style`, a slot), or as the app's own markup where NSH leaves the look to the app (a trigger's
+placeholder, icon or title prefix in the app's `trigger` slot). An option it does not cover gets a row in the table
+at the end with the reason.
+
 ## Where names come from
 
 Each part of the API takes its names from one source, so an app's code never mixes vocabularies:
@@ -69,9 +80,12 @@ go elsewhere under these rules rather than into them.
   boolean (a constant, a payload's field) is `is<Adjective>` / `has<Noun>`, as `gpui-kit`'s readers (`isAvailable`,
   `isViewable`, `isBuffering`); props never are (*guides*: builders `disabled(bool)`, readers `is_disabled()`).
 - **Begin and end**: a phase is `<act>Start` / `<act>End` (`gpui-kit`'s `on_start` / `on_end`: `onPanStart`,
-  `onLoadStart`, `onScrollDragStart`, `onMomentumEnd`), never `Begin`. A pointer over a view is `onHoverIn` /
-  `onHoverOut` (decided by the user, 2026-10-21), a file drag over it `onFileDragEnter` / `onFileDragLeave` (the DOM's
-  `dragenter`).
+  `onLoadStart`, `onScrollDragStart`, `onMomentumEnd`), never `Begin`. The mouse coming over a view and leaving it is
+  `onMouseEnter` / `onMouseLeave`, its moves over it `onMouseMove` (the DOM's `mouseenter` / `mouseleave` /
+  `mousemove`, GPUI's `MouseMoveEvent`; decided by the user, 2026-10-27, replacing React Native's `onHoverIn` /
+  `onHoverOut` of 2026-10-21), as a file drag over it is `onFileDragEnter` / `onFileDragLeave` (the DOM's
+  `dragenter`). The `hover` state keeps CSS's name (`:hover`, `hoverStyle`, `hover:`): states are CSS's, events the
+  DOM's.
 - **Geometry**: shapes are GPUI's, the types Rust already has (`nsh_core::geometry`, `geometry.md`), exported by
   `nsh` with the same fields: `Point { x, y }`, `Size { width, height }`, `Bounds { origin: Point, size: Size }`,
   `Edges { top, right, bottom, left }` (decided by the user, 2026-10-21). A position and an extent together are a
@@ -81,17 +95,30 @@ go elsewhere under these rules rather than into them.
 - **Points**: a position is a `Point` (`{ x, y }`, GPUI's `Point<Pixels>`, Rust `Point<Points>`), never separate
   `<prefix>X` / `<prefix>Y` fields: `position` in the view, `pagePosition` in the root view (the surface or its dialog),
   and the keys held as `modifiers` (`{ control, alt, shift, platform }`, GPUI's `Modifiers`: `platform` is Command on
-  Apple platforms, the Windows / Super key elsewhere), as GPUI's `MouseMoveEvent { position, modifiers }` (decided by
-  the user, 2026-10-21). The frozen responder events keep React Native's `locationX` / `pageX`.
+  Apple platforms, the Windows / Super key elsewhere), as GPUI's `MouseMoveEvent { position, modifiers, pressed_button }`
+  (decided by the user, 2026-10-21; the mouse events' `MouseEvent` adds `pressedButton`, 2026-10-27). The frozen
+  responder events keep React Native's `locationX` / `pageX`.
+- **Units**: one unit per quantity, everywhere, React Native's modules included. A length is points, an image's or a
+  video's own size pixels (`PixelSize`, never `Size`: `onLoad`, `Image.getSize`, the clipboard's and the picker's
+  images), a time milliseconds (`duration`, `delay`, `timeout`, `keyboardFrame().duration`), a velocity points per
+  second (`PanEvent`'s, `PanResponder`'s `vx` / `vy`, an animation's `velocity`), a share a fraction from 0 to 1
+  (`viewPosition`, `volume`, `ViewabilityConfig`'s thresholds; no `Percent` in names). Two exceptions keep the
+  convention everyone knows: media time is seconds, as HTML's `currentTime` (`Video`'s `seek`, `onProgress`,
+  `onLoad`), and a deceleration is the velocity kept per millisecond (`decelerationRate`, `Animated.decay`'s
+  `deceleration`: UIKit's `0.998` / `0.99`) (decided by the user, 2026-10-27).
 - **Intent over geometry**: an event says what the app should do when the act has a name (`onLoadMore`, as
   `gpui-component`'s `ListDelegate::load_more`), not where the user got to (`onEndReached`). Its counterpart at
   the start is the same act at the other end, `onLoadMoreAtStart` / `loadMoreAtStartThreshold` (React Native's
   `onStartReached`): the edge named as `Start` / `End` are, the act kept, and no `Newer` / `Older` that holds for a
   chat but not for every list.
-- **Payloads**: a value's change is `on<Value>Change(next, details?)`, the value first and anything else after it
-  (`onChange(text)`, `onOpenChange(open, reason)`); every other event passes one object, even with one field
-  (`onLinkPress({ url })`, `onSubmit({ text })`), so a later field is an addition. An event with nothing to report
-  passes nothing; it can gain an object later. Never several positional arguments outside the frozen modules.
+- **Payloads**: every event passes one object, even with one field and for a value's change too, its fields named
+  as the props they report (`onChange({ value })`, `onOpenChange({ open, reason })`, `onLinkPress({ url })`,
+  `onLayout({ bounds })`), so a later field is an addition (decided by the user, 2026-10-27, replacing the
+  value-first `on<Value>Change(next, details?)`). Never several positional arguments, a bare value, or a data type
+  of the API passed as the payload itself (`onImagePress({ image })`, not `onImagePress(image)`: an event's later
+  field must not land on `TextViewImage`). An event with nothing to report passes nothing; it can gain an object
+  later. Only the responder callbacks keep React Native's `(e, gestureState)`. Existing events are being brought to
+  this rule (item 3 of the API review).
 - **Listening**: a function that starts listening returns a function that stops it (`() => void`), and what is
   registered while a component renders goes away with the component (`keymap.bind`); never React Native's
   `{ remove() }`. An app reads a setting of the system through its accessor (`reduceMotion()`), which is also how it
@@ -133,15 +160,34 @@ go elsewhere under these rules rather than into them.
 every platform, as the user decided (2026-10-20) for `onSubmit` (a phone's return key is not Enter), `animation`
 (`transition` is a style key), `multiline` (one word) and a page's `onDismiss`. Each such row says "not followed" and why.
 
+The same holds for where behavior lives. `gpui-base`'s `Select` and `Combobox` are thin roots: the combobox role, a
+controlled `open`, Up / Down / Return opening it and moving the focus into the content, Escape dismissing it and
+giving the trigger the focus back. The list itself (the highlight, search, sections, typeahead) is
+`gpui-component`'s `SearchableList`, a styled layer NSH does not have (`gpui-shell`'s JS `Select`, without it, cannot
+be navigated by keyboard once open). So `nsh/base`'s `Select` owns that unstyled state machine
+(`crates/nsh-base/src/listbox.rs`, which `Combobox` will share) and keeps `gpui-component`'s names for its data
+(`SearchableListItem::title`, `SearchableGroup`'s sections) while its look stays the app's.
+
 ## Shapes that can grow
 
 Apps built once run on every later release (`compatibility.md`): types only widen and inputs only gain optional
-members, so a shape decides what can ever be added to it.
+members, so a shape decides what can ever be added to it. These rules are the targets the API is being brought to
+before the first recorded release (item 3 of the API review): where the code still differs (`AlertDialog.show`'s
+bare id, `Image.prefetch`'s `boolean`, the one `YNode` ref type), the rule wins and the code follows.
 
 - Options are one object (`scrollTo({ x, y, animated })`), never a third positional parameter.
 - A mode is a string union, which gains values; never a boolean that later needs a third state.
 - A value has one type: `version: string`, never `string | number`.
-- What a function returns is an object, never a tuple (beside `split`'s, Solid's) or a bare value that may need a second field.
+- What a function returns is an object, never a tuple (beside `split`'s, Solid's) or a bare value that may need a second field
+  (`AlertDialog.show` resolves `{ action }`, an animation `{ finished }`). A yes / no question returns a boolean
+  (`hasText()`, `canUndo()`).
+- A failure rejects (or throws) with the error, never resolves `false` or another sentinel (`Image.prefetch` and
+  `RichEditor.setDocJson` as `Image.getSize` and `fetch`; decided by the user, 2026-10-27).
+- An identifier the app matches on is the app's and required, never derived from what is shown
+  (`AlertDialogAction.id`: a label changes with the app's language; decided by the user, 2026-10-27).
+- Each element has a ref type of its own (`InputRef`, `ScrollRef`, `ListRef`, `WebViewRef`, `VideoRef` over a common
+  `ViewRef`), never one type carrying every element's methods (approved by the user, 2026-10-27): a method added
+  to one element must not appear on every ref, and splitting later would remove methods apps use.
 - Event payloads and listening follow the rules above (objects, `() => void`).
 
 ## Renames before the first compatible release
@@ -149,8 +195,8 @@ members, so a shape decides what can ever be added to it.
 Decided with the user (2026-10-21), before v0.1.2: these land without `@deprecated` aliases, as no release froze
 them yet (`compatibility.md`). The frozen RN-shaped modules keep their names. A name that already follows `gpui-kit` stays, even where another spelling would do
 (*guides*: "Preserve established public names when changing them would cause needless churn"): `pagingEnabled`,
-`javaScriptEnabled`, `screenReaderEnabled`, `headerBackVisible`, `isAvailable`, `selectable`, `disabled`,
-`onHoverIn` / `onHoverOut` and `onFileDrop({ uris })`; and
+`javaScriptEnabled`, `screenReaderEnabled`, `headerBackVisible`, `isAvailable`, `selectable`, `disabled` and
+`onFileDrop({ uris })`; and
 `StatusBar`'s `hidden`, as the user decided on 2026-10-20 after UIKit's `prefersStatusBarHidden`.
 
 | Now | New | Rule | Notes |
@@ -163,11 +209,16 @@ them yet (`compatibility.md`). The frozen RN-shaped modules keep their names. A 
 | `onMomentumScrollBegin`, `onMomentumScrollEnd` | `onMomentumStart`, `onMomentumEnd` | Begin and end | |
 | List `onEndReached`, `onEndReachedThreshold` | `onLoadMore`, `loadMoreThreshold` | Intent over geometry | `ListDelegate::load_more`, `load_more_threshold`; also in `ListItemsProps` |
 | List `onViewableItemsChanged` | `onViewableItemsChange` | Events | |
+| `ViewabilityConfig` `itemVisiblePercentThreshold`, `viewAreaCoveragePercentThreshold` (0 to 100) | `itemVisibleThreshold`, `viewAreaCoverageThreshold` (0 to 1) | Units | IntersectionObserver's `threshold` |
 | **Every element** | | | |
 | Input `caretHidden` | `caret` (default `true`) | States | Decided by the user: the part's name, as `scrollbar`; replaces the 2026-10-20 row keeping it |
-| `HoverEvent` (`onHoverMove`) `locationX` / `locationY`, `pageX` / `pageY`, `altKey` / `ctrlKey` / `metaKey` / `shiftKey` | `{ position: Point; pagePosition: Point; modifiers: Modifiers }` | Points | GPUI `MouseMoveEvent`; new types `Point`, `Modifiers` in `nsh` |
+| `HoverEvent` (`onHoverMove`) `locationX` / `locationY`, `pageX` / `pageY`, `altKey` / `ctrlKey` / `metaKey` / `shiftKey` | `{ position: Point; pagePosition: Point; modifiers: Modifiers }` | Points | GPUI `MouseMoveEvent`; new types `Point`, `Modifiers` in `nsh`. Now `MouseEvent`, below |
+| `onHoverIn: () => void` | `onMouseEnter: (e: MouseEvent) => void` | Begin and end | Decided by the user (2026-10-27): the DOM's `mouseenter` and GPUI's names, as `onFileDragEnter`; replaces the 2026-10-21 decision keeping React Native's name. Rust `on_mouse_enter` |
+| `onHoverOut: () => void` | `onMouseLeave: (e: MouseEvent) => void` | Begin and end | As above, the DOM's `mouseleave`; `e` is where the mouse was last. Rust `on_mouse_leave` |
+| `onHoverMove(e: HoverEvent)` (no button down) and `onMouseMove(e: Point)` (button down too) | one `onMouseMove(e: MouseEvent)` | Payloads | The DOM's `mousemove`, GPUI's `on_mouse_move`: every move over the view, with or without a button down (`e.pressedButton`), and a modifier key changing while the mouse rests there; one object, as every event. Rust `on_mouse_move` |
+| `HoverEvent` (type) | `MouseEvent` `{ position; pagePosition; modifiers; pressedButton: MouseButton \| null }`, `MouseButton` `"left" \| "right" \| "middle" \| "back" \| "forward"` | Points | GPUI's `MouseMoveEvent` and `MouseButton`; the payload of all three mouse events. `hoverStyle` and `hover:` keep CSS's name |
 | `ContextMenuEvent` (`onContextMenu`), the same fields | the same shape | Points | `Menu.popup(items, e.pagePosition)` |
-| `onLayout(e: LayoutEvent)` `{ x, y, width, height }` | `onLayout(bounds: Bounds)` | Geometry | `LayoutEvent` dropped |
+| `onLayout(e: LayoutEvent)` `{ x, y, width, height }` | `onLayout(bounds: Bounds)` | Geometry | `LayoutEvent` dropped; next `onLayout({ bounds })` (Payloads, 2026-10-27) |
 | `ref.measure()` → `{ x, y, width, height, pageX, pageY }` | `{ bounds: Bounds; pagePosition: Point }` | Geometry | |
 | `ScrollEvent` (`onScroll`) `{ x, y, contentWidth, contentHeight, width, height, zoomScale }` | `{ offset: Point; contentSize: Size; size: Size; zoomScale }` | Geometry | The other scroll events' `{ x, y }` is the offset's `Point` already |
 | `OverlayPosition` `{ placement, x, y, width, height, availableWidth, availableHeight }` | `{ placement; bounds: Bounds; available: Size }` | Geometry | |
@@ -175,7 +226,9 @@ them yet (`compatibility.md`). The frozen RN-shaped modules keep their names. A 
 | `Insets` (type) | `Edges` | Geometry | `safeArea()`, `safeAreaInsets()`; `hitSlop` / `contentInset` take `number \| Partial<Edges>` / `Partial<Edges>` |
 | `contentOffset`, `Overlay` `anchor`, `Menu.popup`'s `at` | typed `Partial<Point>` / `Point` | Geometry | Same fields |
 | `nsh/desktop` `WindowFrame` `{ x, y, width, height, animated, anchorTop }` | `{ origin?: Partial<Point>; size?: Partial<Size>; animated; anchorTop }` | Geometry | |
-| `windowSize()`, `ImageSize`, Image `onLoad`, `onContentSizeChange` | typed `Size` | Geometry | Same fields |
+| `windowSize()`, `ImageSize`, Image `onLoad`, `onContentSizeChange` | typed `Size` | Geometry | Same fields; pixel sizes are `PixelSize` (next row) |
+| `ImageSize`, Image and Video `onLoad`'s, `ClipboardImage`'s and `PickedImage`'s `Size` (pixels) | `PixelSize` | Units | Same fields; `Size` is points |
+| `PanResponder` `vx` / `vy` (points per millisecond), `keyboardFrame().duration` (seconds) | points per second, milliseconds | Units | |
 | `ImageAsset` / `ClipboardImage` `{ url, width, height }`, Video `onLoad` `{ duration, width, height }` | `{ url; size: Size }`, `{ duration; size: Size }` | Geometry | |
 | **Image** | | | |
 | `src: string \| ImageAsset \| { uri }` | `src: string \| ImageAsset` | Addresses | |
@@ -305,6 +358,7 @@ and `Input`'s React Native names follow the rules as well.
 | `selected` styles | `selectedStyle`, `selected:` classes | `ButtonStyles::selected` | |
 | `checked` styles (new) | `checkedStyle`, `checked:` classes | `CheckboxStyles::checked`, `SwitchStyles::checked`, `RadioStyles::checked` | From `accessibilityState.checked`; mixed is not checked |
 | `indeterminate` styles (new) | `indeterminateStyle`, `indeterminate:` classes | `CheckboxStyles::indeterminate`, `CheckboxIndicatorStyles::indeterminate`; CSS `:indeterminate`, Tailwind `indeterminate:` | From `accessibilityState.checked` mixed |
+| `expanded` styles (new) | `expandedStyle`, `aria-expanded:` classes; Rust `.expanded(..)` / `.expanded_style(..)` | Tailwind `aria-expanded:`; the DOM's `aria-expanded` | From `accessibilityState.expanded`, which `Popover` and `Menu` set on their trigger: the trigger of an open popup |
 | **Switch** (`nsh/base`) | | | |
 | `SwitchTrack`, `SwitchThumb` (components the app nests in `Switch`, each given `checked`) | `trackClass` / `trackStyle`, `thumbClass` / `thumbStyle` of `Switch` | `switch.rs` `SwitchTrack`, `SwitchThumb`; `Dialog::backdrop` / `Dialog::popup` → `backdropClass` | Parts, as Dialog's: `Switch` renders the track, the thumb inside it, then its children, and shows its `checked` and `disabled` to them (`Interactive::project_checked` / `project_disabled`), so the app passes the value once and only the switch is an accessibility element |
 | `SwitchTrackStyles` / `SwitchThumbStyles` `checked`, `disabled` | `checked:` / `disabled:` in `trackClass` / `thumbClass`; Rust `.checked(..)` / `.disabled_style(..)` in `track_style` / `thumb_style` | `SwitchStyles::checked` → `checkedStyle` | A part takes one class and one style; their state variants are its states |
@@ -322,11 +376,12 @@ and `Input`'s React Native names follow the rules as well.
 | `Radio::id`, `tab_index`, `tab_stop`, `track_focus` | (left out) | | Identity is the element's; the keyboard focus follows the view tree, as `Button`'s does |
 | `RadioGroup::axis(Axis)` | (left out) | `radio_group.rs` (`aria_orientation`); `gpui-shell`'s `axis` ("semantic only") | It sets only the orientation screen readers hear, which NSH's accessibility layer does not carry yet; the layout is the app's `class` (`flex-row`) |
 | `accessibility_label` on a `RadioGroup` (`gpui-shell`, any element) | (left out) | | A labelled container is one element on iOS, which would hide the radios inside it; added with a container that keeps its children elements |
+| No keys in `RadioGroup` (`radio_group.rs`; its page says "arrow keys among enabled choices"), every radio its own Tab stop | `RadioGroup` is one Tab stop (the checked radio, else the first enabled); Down / Right and Up / Left move to the next / previous enabled radio, around the ends, and check it (`onChange(true)`); Space checks the focused one | WAI-ARIA APG radio group; `roving.rs` | `gpui-base` has none in code; `nsh-base` owns the behavior since NSH has no styled layer. No props: the radios reach their group through context, a radio outside one stays a stop of its own. Both pairs of arrows move, whatever the layout, as the pattern has it, so `axis` stays left out |
 | **Tabs** (`nsh/base`) | | | |
 | `Tab::on_click(&ClickEvent, ..)` | `onPress()` | `tabs.rs` `Tab::on_click`; `Button`'s `onPress` | Press, not click (above), as `Button`'s; every press reports, the selected tab's included, as `Tab::on_click` does |
 | `Tab::set_position(position, size)` | (left out) | | As `Radio::set_position`: NSH's accessibility state has no position in a set yet |
 | `Tab::id`, `Tabs::new(id)` | (left out) | | Identity is the element's (`testID` for tests), as `Radio::id` |
-| A tab outside the keyboard focus until its list has roving focus (`Tab`'s doc comment) | each enabled tab is a focus stop, Space / Return press it | `Button`, `Radio` | The keyboard focus follows the view tree, so keyboard users reach every tab; arrow keys, Home / End and roving focus come with the tab list's keyboard model (`gpui-base`'s TODO) |
+| A tab outside the keyboard focus, with a TODO for "compound keyboard navigation with roving focus, arrow keys, Home/End, and Enter/Space activation" (`tabs.rs` `Tab`'s doc comment) | `Tabs` is one Tab stop (the selected tab, else the first enabled); Left / Up and Right / Down move to the previous / next enabled tab, around the ends, Home / End to the first / last, and the tab reached reports `onPress` (automatic activation); Space / Return press the focused tab | WAI-ARIA APG tabs; `roving.rs` | `gpui-base` has none; `nsh-base` owns the behavior since NSH has no styled layer. Automatic activation, as the pattern recommends where a section shows at once: the app's content is its own reactive view, nothing to load. No `orientation` (`gpui-base` has none, and the axis is the app's `class`), so both pairs of arrows move. A tab outside a `Tabs` stays a stop of its own |
 | `Tab`'s own layout (`flex`, `items_center`, `justify_center`, a line height of 1) | (none) | `Button` (no layout of its own) | The layout is the app's `class` and `style`, as `Button`'s; centering is `items-center justify-center` |
 | **Collapsible** (`nsh/base`) | | | |
 | `Collapsible::reveal(id, progress)` (`MotionReveal`: the content kept mounted, its measured height times `progress`, clipped) | (left out) | | NSH's layout has no height that is a fraction of the content's own; until the core has one, the app animates what it shows (opacity, a transform) |
@@ -353,6 +408,32 @@ and `Input`'s React Native names follow the rules as well.
 | Two thumbs at one value: the dragged one is held by the other (`set_start` / `set_end`) | a drag that starts on them moves the one that can go the pointer's way, and keeps it (it stops at the other) | `slider.rs:106-120`, `:375-379` | They never stick together |
 | `gpui-component`'s thumb ring (a spring on hover and press) | `hover:`, `active:` (while dragged), `focus:` on `thumbClass`; `group-*` from the track | `gpui-component` `slider.rs:14-82` | The look and its motion are the app's (`transition-*`, `motion-reduce:`); `gpui-base` has none |
 | `gpui-component` `Slider::reverse()` | (left out) | `gpui-component` `slider.rs:141` | A look of the styled layer: the app's `rangeClass` |
+| **NumberInput** (`nsh/base`) | | | |
+| `InputState` (an entity the app holds: its text, `.step(..)`, `.min(..)`, `.max(..)`) passed to `NumberInput::new(&state)` | `value: number \| null` (controlled) + `onChange(value)`, `defaultValue` (uncontrolled); `step`, `min`, `max` props | `number_input.rs:159`; `input/base/state.rs:12036`, `:12046`, `:12056`; Value state | The app owns the value, as every control's. The text is the field's: the user's text stays while it reads as the value the input holds (`1.`, `2.50`, `-`), and the field shows a value the app sets that it did not report; an edit the app does not take goes when the field is left. `null` is an empty field, so a controlled input is one the app gave a number (from then on its `null` empties the field) |
+| `InputEvent::Change` (the text) | `onChange(value: number \| null)` when the number the field reads as changes | `input/base/state.rs:132-137` | The app wants the number: `null` while the text reads as none (empty, `-`, `.`); `1.` after `1` reports nothing. While typing it may be outside `min` / `max` (1 on the way to 15 with `min` 10), as `gpui-base` allows (`state.rs:3923-3926`) |
+| `InputEvent::Focus`, `Blur`, `PressEnter` (of the app's `InputState`) | `onFocus()`, `onBlur()`, `onSubmit(value)` | `input/base/state.rs:132-137`; `Input`'s `onFocus` / `onBlur` / `onSubmit` | The field is the component's own `Input`, which the app does not hold, so its events are the component's; `onSubmit` carries the value held to the range, `Input`'s name for Enter |
+| `clamp_number_value` on blur (only with `min` / `max`; unparsable text kept) | the same on blur and on Enter, reported by `onChange` | `input/base/state.rs:3927-3954` | Enter commits a field as leaving it does (a phone's return key leaves it anyway) |
+| `step_value` (empty text counts as 0; the decimals of the text, the step and a bound; no move against the pressed way) | the same | `number_input.rs:345-386` | |
+| `NumberStep::Fixed(1.)` default, `NumberStep::ByValue` (`InputState::step_by`), `NumberInput::on_step` (replaces the stepping), `NumberInputEvent::Step` (emitted when the app steps) | `step` (default `1`, one that is not a positive number is `1`); the rest left out | `number_input.rs:31-53`, `:179-186`, `:57-59`; `state.rs:984`, `:11980` | A step the app computes is a JS call while a key is handled; the controlled `value` covers what an app decides (it sets the value it wants for a step it hears through `onChange`) |
+| Up → `Increment`, Down → `Decrement` in the `NumberInput` key context | Up / Down a step, Page Up / Page Down ten steps, while the field edits (`When::Always`), repeating while held | `number_input.rs:17-21`; WAI-ARIA APG spinbutton | Page Up / Page Down are the APG's larger step, which `gpui-base` has none of; `nsh-base` owns the keys since NSH has no styled layer. Home / End stay the field's: they move the caret in the text the user edits |
+| Step buttons: `focusable(false)`, enabled at the bounds, a press focuses the field | not Tab stops (`focusable={false}`), the focus stays in the field; disabled where a step does nothing (at `min` / `max`, `readonly`); a press focuses the field on the desktops only | `number_input.rs:258-282`, `:237-245` | A disabled button says the bound is reached (the `disabled:` state the app styles). Focusing the field on a touch screen would raise the keyboard for a tap on a button |
+| The buttons' labels (`gpui-component`'s `t!("Input.Increment")`) | hidden from screen readers (`accessibilityElementsHidden`) | `component/src/input/number_input.rs:152`, `:185` | NSH has no built-in strings, and the field's increment / decrement step it already (a native `<input type=number>`'s spin buttons are not elements either) |
+| `decrement_button(fn)` / `increment_button(fn)` (decorators of a `Button`) | parts `decrementButtonClass` / `decrementButtonStyle`, `incrementButtonClass` / `incrementButtonStyle`, slots `decrementButton` / `incrementButton` (their content) | `number_input.rs:188-198`; `Checkbox`'s `indicatorClass` + `indicator` | A part and the slot named after it, as `Checkbox`'s indicator |
+| `input(element)` (the app's `Input` of its `InputState`) in `NumberInputText` | the field, `nsh/base`'s `Input`, made by the component: `inputClass` / `inputStyle`, `placeholder` | `number_input.rs:116-157`, `:200-204`; `component/src/input/number_input.rs:52` | The component owns the text it checks |
+| `gpui-component`'s `prefix(element)` / `suffix(element)` (the field's `Input` prefix and suffix) | slots `prefix` / `suffix`, before and after the field | `component/src/input/number_input.rs:57-67`, `:181-182` | The same names; in the input around the field rather than inside the field, which is a native text field |
+| `controls_right()` (the buttons in a column on the right) | `controlsRight` (read when made), the column the part `controlsClass` / `controlsStyle` | `number_input.rs:206-209`, `:284-300` | The column `gpui-base` makes is a part, its layout the app's (a view's default column stacks the increment over the decrement) |
+| `MaskPattern::Number { separator: None }`, `normalize_number_input` | the same, and a decimal comma read as the point while the text has none | `input/base/mask_pattern.rs:172`, `:193-238`, `:419-445` | The decimal keys of many languages' phone keyboards type a comma; `gpui-base` rejects it |
+| `Role::SpinButton`, `aria_numeric_value` (when it parses) on the root | `role="spinbutton"`, its value (now, min, max, the text) and the `increment` / `decrement` actions on the field | `number_input.rs:315-319` | The field is the element screen readers edit; a container element would hide it on iOS |
+| **OtpInput** (`nsh/base`) | | | |
+| `OtpState::new(length)`, `default_value`, `set_value` / `value`, `masked` (a state entity the app makes and passes to `OtpInput::new`) | `length`, `defaultValue`, `value` (controlled), `masked` on `OtpInput` | `otp_input.rs:20` `OtpState`, `:30` `new`, `:53` `default_value`, `:58` `set_value`, `:83` `masked` | No state object in TSX: props, as `Switch`'s `checked`; the value convention (`value` + `onChange`, `defaultValue`). A `value` is shown as it is and never reported, as `set_value` is unfiltered and silent |
+| `OtpEvent::Change`, `Complete`, `Focus`, `Blur` (no data: the app reads `state.value()`) | `onChange(value)`, `onComplete({ value })`, `onFocus()`, `onBlur()` | `otp_input.rs:10-17`, `:134-137` | Payloads: a value change passes the value first, another event one object; the app has no state to read the code from |
+| `OtpState::focus` | the ref's `focus()` (`OtpInputApi`) | `otp_input.rs:91` | A method of the component's ref, as `Editor`'s |
+| `OtpInput::on_key_down`: digits appended up to `length` (full-width ones mapped), Backspace removes the last, the caret always at the end, other keys pass | one native text field, transparent over the cells, that the user types into; the same edits read from what it reports | `otp_input.rs:95-139` | `gpui-base` has no paste, no system autofill, no software keyboard and no accessibility role; `nsh-base` owns the behavior since NSH has no styled layer, and the platform's field brings them: paste, input methods, the number pad (`keyboardType="number-pad"`), iOS's and Android's code autofill (`autoComplete="one-time-code"`), one text field for screen readers (secure while `masked`). Text bringing `length` digits or more at once (a paste, an autofilled code) replaces the code, as Radix's `OneTimePasswordField` does with a paste |
+| The cells, drawn by the app (`gpui-component`'s `OtpInput`: a cell per digit, `groups(n)` (default 2), the focus ring on the cell at `min(len, length - 1)`, the caret in it while empty, an asterisk icon per filled cell while masked) | parts the input renders: `cellClass` / `cellStyle` (`focus:` on that cell while focused, through `Interactive::project_focused`), `groups` (default 1) with `groupClass` / `groupStyle`, `caretClass` / `caretStyle`; a filled cell shows its digit, `•` while masked | `component/src/input/otp_input.rs:43`, `:48`, `:81-156` | The cells must follow the field's code and focus, so the input renders them as `Switch` renders its track. One group by default: two is `gpui-component`'s look. The bullet is what the platforms' secure fields show |
+| `BlinkCursor` (shown at focus, 500 ms on and off, held 300 ms after an edit) | the caret part blinks the same; steady with reduced motion | `input/base/blink_cursor.rs:4-5`, `:39-122` | |
+| `OtpInput::disabled` | `disabled` | `otp_input.rs:181` | The field takes no focus; `disabled:` on the input and its parts |
+| A press on a cell focuses (`gpui-component`'s `on_mouse_down`) | the field lies over the cells: a press anywhere on the input focuses it | `component/src/input/otp_input.rs:129-132` | |
+| `OtpInput::focus_ring`, `Sizable` | (none) | `component/src/input/otp_input.rs:58-73` | `gpui-component`'s look: `focus:` classes on the cells, and their size, are the app's |
 | **Plot** (`nsh/base/plot`) | | | |
 | `trait Plot` (a struct of the app's that paints its scales and shapes) | `Plot`, a component: `data`, `x`, `y`, `xScale`, `yScale`; the marks its children | `plot/mod.rs:107` `Plot`, `element.rs:30` `PlotElement`; `gpui-component`'s `LineChart` (`chart/line_chart.rs`) | In TSX the chart is a tree, not a `paint` method: `Plot` owns what gpui-base's `paint` builds each frame (the scales from the bounds) and what `PlotElement` tracks (the pointer); the marks read it from context |
 | `data` per shape (`shape/line.rs:47`, `shape/area.rs:38`) | `data` of `Plot`, shared by its marks; `data` / `x` of a `Line` or `Area` for a series of its own | `shape/line.rs:47-65`, `shape/area.rs:38-62` | One set of rows and scales per chart is the common case and keeps the hover's row one index; a mark with rows of its own is placed on the same scales |
@@ -364,6 +445,7 @@ and `Input`'s React Native names follow the rules as well.
 | `Line::dot`, `dot_size`, `dot_fill`, `dot_stroke` | `dot` and the `dot` part: `dotClass` / `dotStyle` (its width / height, background and border) | `shape/line.rs:92-125` | A part is a view the app styles, as every part of `nsh/base`; a view takes view styles (`size-2 bg-* border-*`), not the paint of a drawn shape |
 | `Area::fill(impl Into<Background>)` taking a linear gradient (`linear_gradient(..)`, `gpui-component`'s `AreaChart::fill`, the story's `area_gradient`) | `fill` stays CSS's (a color); a gradient is the `background` part of `Area`: `backgroundClass` / `backgroundStyle` (`bg-linear-to-b from-… to-…`, `backgroundImage: "linear-gradient(…)"`), a box around the area's shape whose background shows inside the shape only; `fill` is `none` where none is set beside it | `shape/area.rs:13`, `:71`; `gpui-component` `chart/area_chart.rs:196`; `story/…/chart_story.rs:485` | In a browser `fill` takes a color or a paint server (`url(#…)`), never `linear-gradient()`, which is an image for a box's `background`; a gradient under a line is that background with `clip-path`, so it takes the app's `bg-*` classes and theme tokens as any view's does (drawn by the core in the area's canvas, `Painter::fill_background_from_view`). The box is the area's bounding box, as SVG's `objectBoundingBox`, so `to-b` runs from its highest point to its baseline. Not `fillClass`: a `fill-*` class there would read as the paint property |
 | `Area::y0` (none by default: an open shape) | `y0`, a value of the y scale; none: the bottom edge | `shape/area.rs:56` | An area closes to a baseline; `gpui-component`'s `AreaChart` always passes the bottom |
+| `Area::y0(f32)` (one value for every row) | `y0` also takes a key of the rows or the app's function `(d, index) => number` (`AreaY0`: `number \| RowAccessor`): a bottom value per row, the area a band | `shape/area.rs:56`; d3's `area().y0(accessor)` | A range (a day's low to its high, a forecast's fan) is an area between two series; d3's `y0` takes a constant or an accessor, as here. The bottom edge is traced back with the area's `curve` (d3's area traces its `y0` line in reverse with the same curve); a row without either value is skipped, as d3's `defined`; the hover dot stays on the top edge |
 | `Curve::StepAfter` (the last step ends short of the last point) | the step reaches every point | `plot/mod.rs:230`, `shape/area.rs` `path` | `d3.curveStepAfter`, the curve's reference |
 | `Plot::id` (opts in to hover) + `Plot::interactive` (default true) | `interactive` (default true) | `plot/mod.rs:140`, `:149` | Every element has its identity; `interactive={false}` is a sparkline's: no hover tracking or parts |
 | `tooltip_state(cursor)` → `TooltipState { index, cross_line, dots }` | `onHoverChange(index)`; the parts `crossLineClass` / `crossLineStyle`, `dotClass` / `dotStyle` (one per mark) | `plot/mod.rs:179`, `hover.rs:19` | The styled layer's tooltip overlay in gpui-base draws them; NSH has no styled layer, so they are parts the app styles, positioned natively |
@@ -371,7 +453,7 @@ and `Input`'s React Native names follow the rules as well.
 | `Plot::tooltip` | `tooltipContent` (a slot) | `plot/mod.rs:215` | Every view has a `tooltip` prop (the platform's tooltip text), so the slot takes the next name |
 | `Plot::tooltip(state, cursor, bounds)` placing the box (`gpui-component`'s `Tooltip::new(cursor, within)`: beside the cursor, flipped toward the middle near each edge; `Tooltip::gap`) | `tooltipPlacement: "top" \| "pointer"` (`TooltipPlacement`, default `"top"`: at the top, centered on the cross line) and `tooltipOffset` (points, default 0); `"top"` kept between the plot's left and right edges (its offset from the top the app's, a tag under the plot too), `"pointer"` inside the plot | `plot/mod.rs:205-224`; `gpui-component` `plot/tooltip.rs:290-294`, `:585-605`; `positioner.rs:145` `Positioner::offset` | `placement` and `offset` are the positioner's words (`Popover`, `Tooltip`); the values are where the tooltip goes, not a side (`Placement`'s `"top"` is the plot's top edge here, `"pointer"` the cursor's place). Placed natively: the layout puts it on its side of a point, the animator moves the point with the cross line's glide and clamps it from the plot's and the tooltip's sizes, so no JS runs as the pointer moves |
 | `PlotMotion { pointer, enter, exit, appear }` (`with_pointer`, ...), installed in the theme (`PlotTheme::with_motion`) | `motion: { pointer?: Spring, enter?: Timing, exit?: Timing, appear?: Timing, update?: Timing }` on `Plot`, the timings of `nsh/animated` | `plot/mod.rs:45-105`, `theme.rs:95-117` | The same four, none by default (gpui-base's zero durations); reduced motion completes them at once. A prop rather than a theme value: `nsh-base`'s theme holds design tokens and no motion, `ToastStack` takes its motion as a prop the same way, and a chart and a sparkline on one page can differ (a theme default can come later, the prop overriding it). Not `createMotion`: that plays presets and keyframes on one view's opacity and transform; a plot moves its clip and its hover's parts, so it takes timings |
-| (none: `gpui-base` redraws a new shape at once) | `motion.update?: Timing`: a pie's and an arc's radii move to the app's new ones | d3's update transitions, between `enter` and `exit` | Switching a donut and a pie, or resizing a ring, should not jump; replaying `appear` for it draws the chart again from nothing. The plot's size changing moves nothing, only the app's radii |
+| (none: `gpui-base` redraws a new shape at once) | `motion.update?: Timing`: a pie's and an arc's radii and angles move to the app's new ones | d3's update transitions, between `enter` and `exit` | Switching a donut and a pie, resizing a ring, or a gauge's new value should not jump; replaying `appear` for it draws the chart again from nothing. The plot's size changing moves nothing, only the app's radii and angles |
 | `PlotHover` (`progress`, `glide`, `is_entering`) | the parts fade by `enter` / `exit` and glide on `pointer`, taking the first row at once | `hover.rs:46` | Run on the platform's animator, no JS per frame |
 | `Plot::appear_generation` (`None`: no appear), `PlotAppear::progress` | `appearGeneration`; the marks clip to the appear's progress from the leading edge | `plot/mod.rs:167`, `appear.rs`; `gpui-component`'s `reveal_mask` (`line_chart.rs:465`) | Lines and areas clip; bars grow (below) |
 | `PlotAppearScope` | (later) | `appear.rs` | A plot made again by a list for a row that comes back draws in again; its `appearGeneration` can be the row's key |
@@ -382,11 +464,13 @@ and `Input`'s React Native names follow the rules as well.
 | `Arc::inner_radius` / `outer_radius` (pixels; the outer 0 by default, `gpui-component`'s 40% of the height) | `innerRadius`, `outerRadius`: points or a percentage of the largest circle the plot holds (half its smaller side; `DefiniteLength`, ``number \| `${number}%` ``); `outerRadius` `"100%"` by default | `shape/arc.rs:57-77`; `gpui-component` `chart/pie_chart.rs:270` | The plot's size is the layout's, which the app does not hold, so a donut's hole is a share (d3's, Recharts' and ECharts' percentages of the largest radius); the default fills the plot, where `gpui-component` keeps 40% to leave room for its leader-line labels |
 | `Arc::path` keeps no pad on a slice of half a turn or more (`da >= PI`: `0.0001`) | the pad applies to every slice but a whole turn | `shape/arc.rs:94-100`; d3's `arc.padAngle` | `gpui-base` keeps a full circle's ends apart this way, which also drops the gaps beside any slice of half the pie or more; the canvas's `arc` draws a whole turn itself |
 | `Arc::path` pads by angle at the rim and by `min(pad * r1 / r0, 80%)` at the hole, and a pie's slices end at the center, so its gaps are wedges | each gap keeps its width at the rim at every radius, its edges parallel; a slice ends where its edges meet, or rounds the center at half the gap when wider than a half turn | `shape/arc.rs:107-187`; d3's `arc.padRadius` | Gaps of one width read as cuts between slices, the way chart libraries draw them; a wedge closing at the center draws the slices' points together there |
+| (none: `gpui-base`'s `Arc` has sharp corners) | `cornerRadius` on `Pie` and `Arc`: `Points`, a number in TS, 0 by default | d3's `arc.cornerRadius` (`arc.js`, `cornerTangents`) | d3's name and its clamps: at most half the ring's thickness (round caps for a gauge) and, on a slice narrower than two corners, the two meeting on its middle; the corners touch the pad's parallel edges, so gaps keep their width. A length in points, as d3's is pixels |
 | `Arc::contains` reads the cursor's angle in `0..TAU` | from the pie's own first angle | `shape/arc.rs:206-208` | A pie that starts before 12 o'clock (a gauge from 9 o'clock) or turns the other way finds its slices |
 | `PieChart::color(Fn(&T) -> Hsla)` (the theme's `chart_2` without) | the `slice` part: `sliceClass` (`string \| (d: T, index: number) => string`, `SliceClass`) and `sliceStyle`; each slice paints with `fill` (`currentColor` where none is set) and `stroke` (none) | `gpui-component` `chart/pie_chart.rs:206`, `:291` | A slice is a canvas whose view takes the app's classes, so its fill and stroke are CSS's paint properties with theme tokens and `dark:`, as every mark's; a function of the row as `color` is, called once per row in the next JS turn as a `RowAccessor` is. Not `fillClass`: a slice's stroke draws the gaps in the surface's color |
 | `HOVER_LIFT` (6: the hovered slice's outer radius grows), `HOVER_DIM` (0.35: the others' opacity falls by that share), lifted on the theme's `spring_control` | `hoverLift` (points), `hoverDim` (a fraction), 0 by default; the lift on `motion.pointer`, both faded with the hover (`enter`, `exit`) | `gpui-component` `chart/pie_chart.rs:27`, `:30`, `:300-306`, `:496-521` | The constants are `gpui-component`'s look, so they are the app's; the spring is the plot's pointer spring, its only one |
 | A pie's `TooltipState::cross_line` at the cursor, no dots; its tooltip follows the cursor (`Tooltip::new(cursor, ..)`) | over a pie, the cross line and the tooltip follow the pointer (`tooltipPlacement="pointer"` puts the tooltip beside it); no hover dots | `gpui-component` `chart/pie_chart.rs:489-493`, `:541-547` | The same; the point the tooltip is placed by is the pointer's, moved with it, not a row's |
 | `PieChart`'s appear: the ring sweeps from its first slice, each angle `start + (angle - start) * progress` | the same, with the plot's `appearGeneration` and `motion.appear`; the angles are animated values on the platform's animator while it runs | `gpui-component` `chart/pie_chart.rs:318-334` | |
+| (none: `gpui-base` and `gpui-component` draw new angles at once) | a pie's slices and an arc move from their old angles to the new ones with `motion.update`, a new slice opening from where the one before it ends | d3's `arcTween` (`d3.interpolate` of `startAngle` / `endAngle` in a transition's `attrTween`) | The angles move, not the path: a ring sweeps round its center to its new value, where an interpolated outline would cut across it. One update at a time, as the radii's: a change while one runs moves on from the shape it was moving to |
 | `PieChart::label` / `label_line_color` / `label_gap` (leader lines and text around the ring), `Arc::centroid` | (later) | `gpui-component` `chart/pie_chart.rs:214-240`, `:353-453`; `shape/arc.rs:81` | Labels are the app's elements laid over the plot (a donut's center label); leader lines come with a way to read the slices' centroids |
 | `RadialLine` | (later) | `shape/radial_line.rs:27` | A radar chart, with a radial scale |
 | `Bar` (`data`, `cross`, `band_width`, `base`, `value` as closures returning pixels) | `Bar`, a mark: `value` (a key or the app's function, the plot's `y` without) and `base` (a value, 0 by default), placed by the plot's `band` scale and its value scale; its rows are the plot's | `shape/bar.rs:50`, `:104-134` | As `Line` and `Area`: the plot owns the scales and their range, so a bar names values. A band scale's domain is the plot's rows in order, so a bar has no rows of its own. `base` keeps `gpui-base`'s name (not `Area`'s `y0`): a bar can lie across, its value on x. The default 0 is `gpui-component`'s `BarChart` (bars from the zero line; `chart/bar_chart.rs:550-553`, `:792`), and it counts in the domain |
@@ -401,6 +485,19 @@ and `Input`'s React Native names follow the rules as well.
 | `gpui-component`'s `HOVER_DIM` (bars away from the hovered one fade by distance, `chart/bar_chart.rs:26`, `:974`) and its highlight band (`CrossLine::band`) | `inactiveOpacity` on `Bar` (none by default); the plot's cross line as wide as the band on a band scale | `chart/bar_chart.rs:968-985`, `:1143-1156` | No look of NSH's own: how far the other bars fade is the app's. The opacity follows the hover's band as it glides and fades, computed by the animator, so no bar is drawn again. A cross line as wide as the band lets the app's `w-full` tint it and `w-px` keep a line |
 | Bars' hover (`tooltip_state` with no dots, `chart/bar_chart.rs:1102`) | a `Bar` shows no hover dot; a band y scale finds the row along y, its cross line across the plot | `chart/bar_chart.rs:1064-1103` | As `gpui-component`'s bar chart |
 | `PlotAxis` | (later) | `axis.rs` | With its own pull request |
+| **Select** (`nsh/base`) | | | |
+| `Select` (a root around the app's trigger and popup: `open`, `on_open_change`, `on_confirm`, `on_dismiss`, `accessibility_value`) | `Select` with a `trigger` slot and `items: SelectItem[]` data | `gpui-base` `select.rs`; `gpui-component` `Select` (a `SearchableVec` of items); `nsh/mobile`'s `TabBar` `items` | The list is virtualized (thousands of items make only the rows in view), so its rows are data the select renders, not children; `renderItem` / `renderGroup` draw them (as `DataTable`'s `renderCell`). The confirmed and dismissed acts are `onChange` and `onCancel`; the trigger's accessibility value is the chosen item's title, which the select knows. Above: the state machine is `nsh-base`'s |
+| `SearchableListItem::title`, `value` | `SelectItem { value, title, disabled?, group? }` | `gpui-component` `SearchableListItem`, `SelectItem::value` | `title` is what the row shows, search and typeahead match and the trigger's value for screen readers; `disabled` as a menu item's |
+| `SearchableGroup { title, items }` | `SelectItem.group` (adjacent items of one group are a section) | `gpui-component` `SearchableGroup` | Flattened as data, so the items stay one array; `SelectGroup { title }` is what `renderGroup` gets |
+| `Select::value`, `on_change` | `value: string \| null`, `defaultValue`, `onChange(value: string \| null)` | "Value state" above | Left out, the select keeps its own value; `null` is nothing chosen, controlled (`SelectValue::Controlled(None)` in Rust: the props tell `undefined` from `null`). `onChange` reports a change only: choosing the chosen item closes the list without it (`gpui-component` confirms the same value again; `on_change` observes changes, *guides*) |
+| `Select::open`, `on_open_change` | `open`, `defaultOpen`, `onOpenChange(open, reason)`, `onOpen`, `onClose`, `onCancel` | `Menu`'s (popups, below) | The keys that open it from the trigger (Down, Up, Return, Space) are presses of the trigger: reason `"triggerPress"`; a choice is `"select"` |
+| `SearchableList::searchable`, its search input's placeholder | `searchable`, `searchPlaceholder`; `searchClass` / `searchStyle` | `gpui-component` `Select::searchable`, `search_placeholder` | |
+| `Select::cleanable` (a clear button in place of the chevron while a value is chosen; `clean` sets none and emits `Confirm(None)`; `tab_stop(false)`) | `cleanable`; the part `clearButtonClass` / `clearButtonStyle`, the slot `clearButton`, `clearButtonAccessibilityLabel`; `onChange(null)` | `gpui-component` `select.rs:542`, `:472-476`, `:611-619`; `input/clear_button.rs` | The button is a sibling after the trigger, which is the app's element: inside it, a press would also open the list. Its label is the app's (`gpui-component`'s is `t!("Input.Clear")`; NSH has no built-in strings), as `handleAccessibilityLabel` is `ResizablePanel`'s |
+| `Select::placeholder`, `icon`, `title_prefix`, `appearance` | the app's `trigger` | `gpui-component` `select.rs:706-733`, `:771` | What the trigger shows is the app's element: it draws the placeholder, the chevron or icon and the title with any prefix |
+| `Select::menu_width`, `menu_max_h` | `popupClass` / `popupStyle` (`w-*`, `max-h-*`) | `gpui-component` `select.rs:694-704` | Sizes are styles of the popup part; it is at least as wide as the trigger |
+| `Select::scroll_bounce` | the list's scroll view bounces as the platform's do | `gpui-component` `select.rs:747-752` | `gpui-component`'s default is the platforms' (on with iOS, Android and macOS); NSH's scroll views have it already |
+| the highlighted row (`ListItem::selected` in `gpui-component`'s list; `aria_active_descendant()` in `gpui-base`) | `focus:` on the row (`itemClass`), `highlighted` in `SelectItemState` | Radix / shadcn `SelectItem` (`focus:bg-accent`: the highlighted item has the focus) | Not followed: the row's `selected` is its accessibility state, the chosen value's, as ARIA's option has it; the highlight is where the keyboard's focus would be with an active descendant, which NSH lacks, so the row shows `focus:` (`Interactive::project_focused`) while the real focus stays on the trigger or the search field, and a screen reader's focus moves to the highlighted row (while a search field edits, its title is announced instead) |
+| `SelectContent` and its viewport | `popupClass` / `popupStyle`, `listClass` / `listStyle`, `itemClass` / `itemStyle`, `groupClass` / `groupStyle`, `backdropClass` / `backdropStyle` | `Dialog::popup` / `backdrop` → `popupClass` | Parts named as `Menu`'s, plus the list (the scroll view of the rows), each row and each section's header; `empty` is the slot shown while no item matches (`Command::empty`) |
 | **Overlays and popups** (new) | | | |
 | `<Overlay>` (`nsh`) | | none (GPUI's `deferred` / `anchored`, the web's top layer) | A primitive: what shows above the root view, not a component with a look |
 | `anchor`, `placement`, `align`, `offset`, `margin` | | `positioner.rs` `Positioner::placement` / `align` / `offset` / `margin`, `Placement`, `Align` | `placement`'s values are `Placement`'s (`"top"`, `"bottom"`, `"left"`, `"right"`), `align`'s `Align`'s (`"start"`, `"center"`, `"end"`) |

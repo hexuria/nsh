@@ -1,9 +1,9 @@
 import { cleanup, computed, type JSX, signal, Text, View } from "nsh";
-import { Checkbox, Collapsible, Progress, Radio, RadioGroup, Slider, Switch, Tab, Tabs } from "nsh/base";
+import { Checkbox, Collapsible, NumberInput, OtpInput, Progress, Radio, RadioGroup, Select, type SelectGroup, type SelectItemState, Slider, Switch, Tab, Tabs } from "nsh/base";
 import { reduceMotion } from "nsh";
 import { platform } from "nsh";
 import { Icon } from "../icons";
-import { Badge, Button, Caption, Card, colors, DemoPage, finish, focusRing, hovered, mono, sliderFill, sliderLook, sliderValueClass, sliderValueStyle, switchLook, toneColor } from "../ui";
+import { alpha, Badge, Button, Caption, Card, colors, DemoPage, finish, focusRing, hovered, mono, radius, sliderFill, sliderLook, sliderValueClass, sliderValueStyle, switchLook, tints, toneColor } from "../ui";
 
 // `nsh/base`'s controls own presses, keys, the disabled state and what
 // screen readers say; every value is the app's, and so is the look: the
@@ -17,8 +17,8 @@ import { Badge, Button, Caption, Card, colors, DemoPage, finish, focusRing, hove
  */
 const size =
   platform.idiom === "desktop"
-    ? { row: 40, padding: 6, gap: 10, label: 14, detail: 12, control: 16, corner: 5, check: 12, dash: 8, dot: 6, tabs: 30, line: 32, switch: "small" as const }
-    : { row: 56, padding: 8, gap: 12, label: 15, detail: 13, control: 22, corner: 7, check: 16, dash: 10, dot: 8, tabs: 40, line: 44, switch: "regular" as const };
+    ? { row: 40, padding: 6, gap: 10, label: 14, detail: 12, control: 16, corner: 5, check: 12, dot: 6, tabs: 30, line: 32, clear: 16, switch: "small" as const }
+    : { row: 56, padding: 8, gap: 12, label: 15, detail: 13, control: 22, corner: 7, check: 16, dot: 8, tabs: 40, line: 44, clear: 20, switch: "regular" as const };
 const pointer = platform.idiom === "desktop";
 
 /** A control's row: the control and its label, the whole row pressable. */
@@ -62,11 +62,12 @@ function Divider(props: { show: boolean }) {
 const pressed = { opacity: 0.7 };
 const dimmed = { opacity: 0.4 };
 
-/** The fill of a box or ring that is on, and of one that is off. */
+/** The fill of a box or ring that is on (the main button's citrus finish:
+ * its darker olive edge and lit top), and of one that is off. */
 const fill = (on: boolean) =>
   on
-    ? { backgroundColor: colors.accentFill, borderColor: colors.accentFill, boxShadow: finish.chip.boxShadow }
-    : { backgroundColor: colors.field, borderColor: colors.fieldBorder, boxShadow: finish.field.boxShadow };
+    ? { ...finish.light }
+    : { backgroundColor: colors.field, backgroundImage: "none", borderColor: colors.fieldBorder, boxShadow: finish.field.boxShadow };
 
 type Mark = "check" | "dash" | null;
 
@@ -81,15 +82,16 @@ const box = (mark: Mark) => ({
   ...fill(mark !== null),
 });
 
-/** What a checkbox's box shows. */
+/** What a checkbox's box shows: a check or a dash, drawn with the same bold pen (about 2 pt at the desktop size). */
+const markWeight = 3.2;
 function BoxMark(props: { mark: Mark }) {
   return (
     <>
       <If when={props.mark === "check"}>
-        <Icon name="check" size={size.check} tint={colors.onAccent} />
+        <Icon name="check" size={size.check} tint={colors.onAccent} weight={markWeight} />
       </If>
       <If when={props.mark === "dash"}>
-        <View style={{ width: size.dash, height: 2, borderRadius: 1, backgroundColor: colors.onAccent }} />
+        <Icon name="minus" size={size.check} tint={colors.onAccent} weight={markWeight} />
       </If>
     </>
   );
@@ -170,12 +172,56 @@ const USAGE: [string, string][] = [
 
 const count = (n: number) => n.toLocaleString("en-US");
 
+const SORTS = [
+  { value: "newest", title: "Newest first" },
+  { value: "oldest", title: "Oldest first" },
+  { value: "name", title: "Name" },
+  { value: "size", title: "Size" },
+  { value: "kind", title: "Kind" },
+];
+
+const FONTS = [
+  { value: "helvetica", title: "Helvetica", group: "Sans serif" },
+  { value: "inter", title: "Inter", group: "Sans serif" },
+  { value: "roboto", title: "Roboto", group: "Sans serif" },
+  { value: "source-sans", title: "Source Sans", group: "Sans serif" },
+  { value: "georgia", title: "Georgia", group: "Serif" },
+  { value: "merriweather", title: "Merriweather", group: "Serif" },
+  { value: "playfair", title: "Playfair Display", group: "Serif", disabled: true },
+  { value: "times", title: "Times New Roman", group: "Serif" },
+  { value: "fira-code", title: "Fira Code", group: "Monospace" },
+  { value: "jetbrains-mono", title: "JetBrains Mono", group: "Monospace" },
+  { value: "menlo", title: "Menlo", group: "Monospace" },
+  { value: "sf-mono", title: "SF Mono", group: "Monospace" },
+];
+
+const LANGUAGES = [
+  { value: "en", title: "English" },
+  { value: "de", title: "Deutsch" },
+];
+
+const titleOf = (items: { value: string; title: string }[], value: string | null) => items.find((i) => i.value === value)?.title ?? "None";
+
+/** The controls, one demo each in the sidebar. */
+export type Control =
+  | "Switch"
+  | "Checkbox"
+  | "Radio"
+  | "Tabs"
+  | "Select"
+  | "Collapsible"
+  | "Progress"
+  | "Slider"
+  | "NumberInput"
+  | "OtpInput";
+
 /**
- * Controls: `nsh/base`'s `Switch`, `Checkbox`, `Radio` and `RadioGroup`,
- * `Tab` and `Tabs`, `Collapsible` in the settings, filters, pickers, section
- * switchers and disclosures apps use them for.
+ * One of `nsh/base`'s controls (`Switch`, `Checkbox`, `Radio` and
+ * `RadioGroup`, `Tab` and `Tabs`, `Select`, `Collapsible`, `Progress`, `Slider`) in
+ * the settings, filters, pickers, section switchers, choices and disclosures apps use
+ * it for, above the last event it reported.
  */
-export function Controls() {
+export function Controls(props: { show: Control }) {
   const last = signal("—");
 
   function Settings() {
@@ -381,6 +427,170 @@ export function Controls() {
     );
   }
 
+  function Choices() {
+    const sort = signal<string | null>("newest");
+    const font = signal<string | null>("inter");
+    const sortOpen = signal(false);
+    const fontOpen = signal(false);
+    /** The list: a popup at the trigger with a pointer, as the menus'; a sheet at the bottom on a touch screen. */
+    const surface = () =>
+      pointer
+        ? { backgroundColor: colors.raised, borderRadius: radius.inset, borderWidth: 1, borderColor: colors.border, padding: 6, ...finish.raised }
+        : { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 10, paddingTop: 10, paddingBottom: 34, maxHeight: "70%" as const };
+    const backdrop = { backgroundColor: "rgba(0,0,0,0.45)" };
+    /** The clear button's inset from the trigger's end: centered where the chevron's lane is. */
+    const clearInset = 10 + size.check / 4 - size.clear / 2;
+    /** The trigger: the chosen title and a chevron that turns while the list is open, its border lit then. */
+    function Picker(props: { title: string; open: boolean; disabled?: boolean; placeholder?: boolean; clearable?: boolean }) {
+      return (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+            height: size.line,
+            paddingLeft: 10,
+            // Room for the clear button, which goes over the trigger's end in place of the chevron.
+            paddingRight: props.clearable ? clearInset + size.clear + 8 : 10,
+            borderRadius: radius.control,
+            borderWidth: 1,
+            borderColor: props.open ? colors.faint : colors.border,
+            backgroundColor: colors.raised,
+            ...finish.raised,
+            // Dimmed while the select is: the app knows, as it passes `disabled`.
+            opacity: props.disabled ? dimmed.opacity : 1,
+          }}
+          hoverStyle={props.disabled ? undefined : { borderColor: colors.faint }}
+          activeStyle={pressed}
+          focusStyle={focusRing()}
+          disabledStyle={dimmed}
+        >
+          <Text style={{ numberOfLines: 1, fontSize: size.label, color: props.placeholder ? colors.faint : colors.text }}>{props.title}</Text>
+          {/* The chevron's icon box, taking only the room of its stroke (half the box) in the row, so it turns
+              about its own center; it points down, and up while open. */}
+          <View
+            class="transition-transform duration-150 motion-reduce:transition-none"
+            style={{ display: props.clearable ? "none" : "flex", marginHorizontal: -size.check / 4, transform: [{ rotate: props.open ? "-90deg" : "90deg" }] }}
+          >
+            <Icon name="chevron" size={size.check} tint={colors.muted} />
+          </View>
+        </View>
+      );
+    }
+    /** A row of the list: lit while highlighted (the keys or the pointer), bolder with a check while chosen. */
+    function Option(props: { item: SelectItemState; note?: string }) {
+      return (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+            height: pointer ? 32 : 46,
+            paddingHorizontal: 8,
+            borderRadius: 7,
+            borderWidth: 1,
+            borderColor: props.item.highlighted ? alpha(colors.accent, 0.3) : "transparent",
+            backgroundColor: props.item.highlighted ? tints.accent : "transparent",
+            opacity: props.item.disabled ? 0.35 : 1,
+          }}
+        >
+          <Text style={{ numberOfLines: 1, flex: 1, fontSize: 14, fontWeight: props.item.selected ? "600" : "400", color: colors.text }}>
+            {props.item.title}
+          </Text>
+          <If when={props.note}>
+            <Text style={{ fontSize: 12, color: colors.faint }}>{props.note}</Text>
+          </If>
+          <View style={{ width: 16, alignItems: "center" }}>
+            <If when={props.item.selected}>
+              <Icon name="check" size={14} tint={colors.accent} />
+            </If>
+          </View>
+        </View>
+      );
+    }
+    function Header(props: { group: SelectGroup }) {
+      return (
+        <Text style={{ fontSize: 11, fontWeight: "600", letterSpacing: 0.6, color: colors.faint, paddingHorizontal: 9, paddingTop: 8, paddingBottom: 4 }}>
+          {props.group.title.toUpperCase()}
+        </Text>
+      );
+    }
+    const opened = (set: (open: boolean) => void) => (open: boolean) => set(open);
+    return (
+      <Card icon="controls" title="Select" subtitle="A choice from a list: the app owns the value">
+        <View>
+          <View style={row(true)}>
+            <Label label="Sort by" detail={pointer ? "Press a letter to jump to an order" : "Five orders in a sheet"} />
+            <Select
+              items={SORTS}
+              value={sort()}
+              onChange={(next) => {
+                sort.set(next);
+                last.set(`Sort by: ${titleOf(SORTS, next)}`);
+              }}
+              onOpenChange={opened((open) => sortOpen.set(open))}
+              accessibilityLabel="Sort by"
+              offset={4}
+              margin={8}
+              align="end"
+              // Wider than the trigger with a pointer: the titles whole.
+              popupStyle={pointer ? { ...surface(), width: 200 } : surface()}
+              backdropStyle={backdrop}
+              itemClass="active:opacity-70"
+              trigger={<Picker title={titleOf(SORTS, sort())} open={sortOpen()} />}
+              renderItem={(item) => <Option item={item} />}
+            />
+          </View>
+          <View style={row(false)}>
+            <Label label="Font" detail="Search, sections, one not installed" />
+            <Select
+              items={FONTS}
+              value={font()}
+              onChange={(next) => {
+                font.set(next);
+                last.set(next === null ? "Font: cleared" : `Font: ${titleOf(FONTS, next)}`);
+              }}
+              onOpenChange={opened((open) => fontOpen.set(open))}
+              accessibilityLabel="Font"
+              searchable
+              searchPlaceholder="Search fonts"
+              searchClass={`${pointer ? "text-sm" : "text-base"} text-foreground placeholder:text-faint`}
+              searchStyle={{
+                height: pointer ? 32 : 40,
+                paddingHorizontal: 9,
+                marginBottom: 6,
+                borderRadius: radius.control,
+                borderWidth: 1,
+                borderColor: colors.fieldBorder,
+                backgroundColor: colors.field,
+                ...finish.field,
+              }}
+              empty={<Text style={{ paddingVertical: 20, textAlign: "center", fontSize: 14, color: colors.muted }}>No font matches</Text>}
+              offset={4}
+              margin={8}
+              align="end"
+              popupStyle={pointer ? { ...surface(), width: 260 } : surface()}
+              backdropStyle={backdrop}
+              itemClass="active:opacity-70"
+              cleanable
+              clearButtonAccessibilityLabel="Clear the font"
+              clearButtonClass="items-center justify-center rounded-full enabled:hover:bg-accent active:bg-track"
+              clearButtonStyle={{ position: "absolute", top: (size.line - size.clear) / 2, right: clearInset, width: size.clear, height: size.clear }}
+              clearButton={<Icon name="close" size={size.clear - 6} tint={colors.muted} />}
+              trigger={<Picker title={font() === null ? "Default" : titleOf(FONTS, font())} open={fontOpen()} placeholder={font() === null} clearable={font() !== null} />}
+              renderItem={(item) => <Option item={item} note={item.disabled ? "Not installed" : undefined} />}
+              renderGroup={(group) => <Header group={group} />}
+            />
+          </View>
+          <View style={row(false)}>
+            <Label label="Language" detail="Set by your organization" />
+            <Select items={LANGUAGES} value="en" disabled accessibilityLabel="Language" trigger={<Picker title="English" open={false} disabled />} />
+          </View>
+        </View>
+      </Card>
+    );
+  }
+
   function Disclosure() {
     const storage = signal(false);
     const advanced = signal(false);
@@ -499,7 +709,8 @@ export function Controls() {
           indeterminate={props.indeterminate}
           // The label row first: the children follow the track.
           style={{ ...row(!!props.first), flexDirection: "column-reverse", alignItems: "stretch", gap: size.padding }}
-          trackStyle={{ height: 6, borderRadius: 3, overflow: "hidden", backgroundColor: colors.raised }}
+          // The slider's rail and fill, so a level and a transfer read alike.
+          trackStyle={{ height: 6, borderRadius: 3, overflow: "hidden", backgroundColor: colors.track, boxShadow: `inset 0 0 0 1px ${finish.track.borderColor}, ${finish.track.boxShadow}` }}
           indicatorClass={
             !props.indeterminate
               ? undefined
@@ -507,7 +718,7 @@ export function Controls() {
                 ? "w-1/3 translate-x-full"
                 : `w-1/3 transition-transform duration-700 ease-in-out ${end() ? "translate-x-[200%]" : "translate-x-0"}`
           }
-          indicatorStyle={{ height: 6, borderRadius: 3, backgroundColor: toneColor("accent") }}
+          indicatorStyle={{ height: 6, borderRadius: 3, ...sliderFill(0, 1) }}
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: size.gap }}>
             <Label label={props.label} detail={props.detail} />
@@ -630,6 +841,160 @@ export function Controls() {
     );
   }
 
+  function Quantities() {
+    const seats = signal<number | null>(2);
+    const price = signal<number | null>(24.5);
+    const locked = signal(false);
+    // One recessed well per input: a stronger border under the pointer and
+    // the keyboard's focus ring while its field edits (`focus-within:`);
+    // the buttons light up under the pointer and while pressed (still with
+    // reduced motion) and fade where a step does nothing (at the minimum
+    // or maximum) or while the input is locked, without their hover.
+    const frame = [
+      pointer ? "h-8 rounded-md" : "h-11 rounded-lg",
+      "flex-row items-stretch overflow-hidden border border-input bg-field",
+      "enabled:hover:border-faint focus-within:outline-2 focus-within:outline-info",
+    ].join(" ");
+    const press = "items-center justify-center transition-colors duration-100 motion-reduce:transition-none enabled:hover:bg-accent active:bg-track disabled:opacity-35";
+    const field = () => ({
+      flex: 1,
+      minWidth: 0,
+      paddingHorizontal: 8,
+      fontSize: size.label,
+      color: colors.text,
+      placeholderColor: colors.faint,
+      fontVariant: ["tabular-nums" as const],
+    });
+    /** A step button's glyph: the gallery's icon, in the muted text color. */
+    function Step(props: { name: "plus" | "minus" | "chevron-up" | "chevron-down"; size: number }) {
+      return <Icon name={props.name} size={props.size} tint={colors.muted} />;
+    }
+    /** A quantity: its label and the input at the trailing edge. */
+    function Amount(props: { label: string; detail: string; first?: boolean; children: JSX.Element }) {
+      return (
+        <View style={row(!!props.first)}>
+          <Label label={props.label} detail={props.detail} />
+          <View style={{ width: pointer ? 132 : 152 }}>{props.children}</View>
+        </View>
+      );
+    }
+    const show = (v: number | null) => (v === null ? "none" : `${v}`);
+    return (
+      <Card icon="controls" title="Number input" subtitle="Typed or stepped: the app owns the value">
+        <View>
+          <Amount first label="Seats" detail="1 to 8 per booking">
+            <NumberInput
+              value={seats()}
+              min={1}
+              max={8}
+              disabled={locked()}
+              accessibilityLabel="Seats"
+              onChange={(next) => {
+                seats.set(next);
+                last.set(`Seats: ${show(next)}`);
+              }}
+              class={`${frame} disabled:opacity-50`}
+              inputStyle={{ ...field(), textAlign: "center" }}
+              decrementButtonClass={`${pointer ? "w-8" : "w-11"} ${press} border-r border-line`}
+              incrementButtonClass={`${pointer ? "w-8" : "w-11"} ${press} border-l border-line`}
+              decrementButton={<Step name="minus" size={pointer ? 14 : 16} />}
+              incrementButton={<Step name="plus" size={pointer ? 14 : 16} />}
+            />
+          </Amount>
+          <Amount label="Price" detail="Steps of 0.5">
+            <NumberInput
+              value={price()}
+              min={0}
+              step={0.5}
+              placeholder="Free"
+              accessibilityLabel="Price"
+              controlsRight
+              onChange={(next) => {
+                price.set(next);
+                last.set(`Price: ${show(next)}`);
+              }}
+              class={frame}
+              inputStyle={{ ...field(), paddingLeft: 4 }}
+              controlsClass={`${pointer ? "w-6" : "w-9"} border-l border-line`}
+              incrementButtonClass={`flex-1 ${press} border-b border-line`}
+              decrementButtonClass={`flex-1 ${press}`}
+              incrementButton={<Step name="chevron-up" size={pointer ? 12 : 14} />}
+              decrementButton={<Step name="chevron-down" size={pointer ? 12 : 14} />}
+              prefix={
+                <View style={{ height: "100%", justifyContent: "center", paddingLeft: 10 }}>
+                  <Text style={{ fontSize: size.label, color: colors.muted, transform: [{ translateY: -1 }] }}>$</Text>
+                </View>
+              }
+            />
+          </Amount>
+        </View>
+        <View style={{ flexDirection: "row", gap: size.gap, marginTop: size.padding, alignSelf: pointer ? "flex-start" : "stretch" }}>
+          <Button
+            label={locked() ? "Unlock seats" : "Lock seats"}
+            variant="secondary"
+            size={size.switch}
+            flex={pointer ? undefined : 1}
+            onPress={() => {
+              locked.set(!locked());
+              last.set(locked() ? "Seats: locked" : "Seats: unlocked");
+            }}
+          />
+        </View>
+      </Card>
+    );
+  }
+
+  function Verify() {
+    const CODE = "246810";
+    const code = signal("");
+    const verdict = signal("");
+    // The cell that takes the next digit shows the focus ring while the
+    // code has the focus; the caret blinks there (steady with reduced
+    // motion: the input's own).
+    const cell = pointer ? "w-9 h-11 text-lg" : "w-11 h-13 text-xl";
+    return (
+      <Card icon="controls" title="One-time code" subtitle="Six digits: type or paste them">
+        <View style={{ alignItems: "center", gap: size.gap, paddingVertical: size.padding }}>
+          <OtpInput
+            length={6}
+            groups={2}
+            value={code()}
+            onChange={(next) => {
+              code.set(next);
+              verdict.set("");
+              last.set(`Code: ${next || "empty"}`);
+            }}
+            onComplete={({ value }) => {
+              verdict.set(value === CODE ? "Verified" : "That code is not right");
+              last.set(`Code complete: ${value}`);
+            }}
+            accessibilityLabel="Verification code, 6 digits"
+            class="flex-row items-center gap-3"
+            groupClass="flex-row gap-1.5"
+            cellClass={`${cell} items-center justify-center rounded-lg font-semibold text-foreground transition-colors motion-reduce:transition-none focus:outline-2 focus:outline-info focus:-outline-offset-2`}
+            cellStyle={{ ...finish.inset, backgroundColor: colors.inset, borderWidth: 1, borderColor: colors.line }}
+            caretClass="w-0.5 h-6 rounded-full"
+            caretStyle={{ backgroundColor: colors.text }}
+          />
+          <Text style={{ fontSize: size.detail, color: verdict() === "Verified" ? toneColor("up") : verdict() ? toneColor("down") : colors.muted }}>
+            {verdict() || `The code is ${CODE}`}
+          </Text>
+          <Button
+            label="Clear"
+            variant="secondary"
+            size={size.switch}
+            disabled={code() === ""}
+            onPress={() => {
+              code.set("");
+              verdict.set("");
+              last.set("Code: cleared");
+            }}
+          />
+        </View>
+      </Card>
+    );
+  }
+
   function Last() {
     return (
       <Card icon="system" title="Last event">
@@ -638,5 +1003,17 @@ export function Controls() {
     );
   }
 
-  return <DemoPage cards={[Settings, Filter, Plans, Sections, Disclosure, Transfers, Levels, Last]} />;
+  const cards = { Switch: Settings, Checkbox: Filter, Radio: Plans, Tabs: Sections, Select: Choices, Collapsible: Disclosure, Progress: Transfers, Slider: Levels, NumberInput: Quantities, OtpInput: Verify };
+  return <DemoPage cards={[cards[props.show], Last]} />;
 }
+
+export const SwitchDemo = () => <Controls show="Switch" />;
+export const CheckboxDemo = () => <Controls show="Checkbox" />;
+export const RadioDemo = () => <Controls show="Radio" />;
+export const TabsDemo = () => <Controls show="Tabs" />;
+export const SelectDemo = () => <Controls show="Select" />;
+export const CollapsibleDemo = () => <Controls show="Collapsible" />;
+export const ProgressDemo = () => <Controls show="Progress" />;
+export const SliderDemo = () => <Controls show="Slider" />;
+export const NumberInputDemo = () => <Controls show="NumberInput" />;
+export const OtpInputDemo = () => <Controls show="OtpInput" />;

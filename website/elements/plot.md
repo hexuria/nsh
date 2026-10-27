@@ -126,12 +126,12 @@ name is read with no JS at all.
 |---|---|---|---|---|
 | `Line` | `y` | `string \| (d, index) => number` | the plot's `y` | What it draws: one point per row with a value, the rows without one skipped. |
 | `Line`, `Area` | `data`, `x` | `T[]`, `string \| (d, index) => number` | the plot's rows | Rows of a series of its own (other x values), placed on the plot's scales by its own `x` (a row's index without). |
-| `Line`, `Area` | `curve` | `"natural" \| "linear" \| "stepAfter"` | `"natural"` | How it connects its points: a smooth curve, straight segments, or steps that hold each value until the next row. |
+| `Line`, `Area` | `curve` | `"natural" \| "linear" \| "stepAfter"` | `"natural"` | How it connects its points: a smooth curve, straight segments, or steps that hold each value until the next row. An area's bottom edge follows the same curve. |
 | `Line` | `dot`, `dotClass`, `dotStyle` | `boolean`, `string`, `StyleProp<ViewStyle>` | `false` | A dot on every point: a view centered on it, its size, background and border the app's. |
 | `Line`, `Area` | `hoverDotClass`, `hoverDotStyle` | `string`, `StyleProp<ViewStyle>` | the plot's `dotClass`, `dotStyle` | Its hover dot, on its point at the row under the pointer: each series' dot in its own color. Each replaces the plot's for this mark (a mark's color over the plot's size and ring); `hidden` shows none. |
-| `Area` | `backgroundClass`, `backgroundStyle` | `string`, `StyleProp<ViewStyle>` | none | Its background: a box around its shape (from its first point to its last, from its highest point to its baseline) whose background (`bg-*`, `bg-linear-to-b from-… to-…`, `backgroundImage`) shows only inside the shape, under its `fill`. With one, `fill` is `none` where none is set. |
+| `Area` | `backgroundClass`, `backgroundStyle` | `string`, `StyleProp<ViewStyle>` | none | Its background: a box around its shape (from its first point to its last, from its highest point to its baseline, or to its bottom edge's lowest point on a band) whose background (`bg-*`, `bg-linear-to-b from-… to-…`, `backgroundImage`) shows only inside the shape, under its `fill`. With one, `fill` is `none` where none is set. |
 | `Area` | `y1` | `string \| (d, index) => number` | the plot's `y` | What makes its top edge. |
-| `Area` | `y0` | `number` | the bottom edge | The value of its baseline on the y scale. |
+| `Area` | `y0` | `number \| string \| (d, index) => number` | the bottom edge | Its bottom edge: a number is a baseline on the y scale; a field or a function gives each row its own bottom value, which makes the area a band (a day's low to its high, a forecast's range). A row without a value at either edge is skipped. |
 | `Grid` | `x` | `number[]` | none | Where its vertical lines go, as values of the x scale (row indices on a `point` scale). |
 | `Grid` | `y` | `number[]` | none | Where its horizontal lines go, as values of the y scale. |
 
@@ -144,9 +144,20 @@ over those of the plot, as CSS inherits them:
 | `Area` | `fill` (over its `background` part); its top edge `stroke`, `strokeWidth`, `strokeDasharray` | `fill` `currentColor` (`none` beside a background); no stroke |
 | `Grid` | `stroke`, `strokeWidth`, `strokeDasharray` | `currentColor`, 1 wide, solid; each line on whole device pixels, so a thin one stays sharp |
 
-The values a `Line` or an `Area` draws, an area's `y0` too, make the y scale's domain when the plot has none; a grid's
-do not. A mark draws again only when what it draws changes (its rows, values, curve, the plot's size or scales, its
-paint); the pointer moves the hover's parts and never draws a mark again.
+The values a `Line` or an `Area` draws, an area's `y0` too (its baseline, or each row's bottom value), make the y
+scale's domain when the plot has none; a grid's do not. A mark draws again only when what it draws changes (its rows,
+values, curve, the plot's size or scales, its paint); the pointer moves the hover's parts and never draws a mark again.
+
+A band is an `Area` whose `y0` reads the rows: its top edge runs through `y1`, its bottom edge back through `y0`, both
+with the area's `curve`, and the appear draws both in from the leading edge. Its hover dot sits on the top edge; a
+`Line` over it marks the middle value:
+
+```tsx
+<Plot data={days} y="close">
+  <Area y1="high" y0="low" class="fill-chart-1/15" hoverDotClass="hidden" />
+  <Line class="stroke-chart-1 stroke-2" />
+</Plot>
+```
 
 `fill` is CSS's, as in a browser: a color. A gradient under a line is an area's background, the way a page shows a
 gradient in a shape (a box's `background-image` under `clip-path`): `backgroundClass="bg-linear-to-b from-chart-1/20
@@ -311,6 +322,7 @@ fn seats(seats: Vec<f64>) -> impl IntoElement {
 | `Pie`, `Arc` | `startAngle`, `endAngle` | `.start_angle(..)`, `.end_angle(..)` | `number` (radians) | `0`, `2 * Math.PI` | Where the first slice starts and the last one ends (an arc's ends): radians from 12 o'clock, clockwise. An `endAngle` below `startAngle` lays a pie's slices out the other way. |
 | `Pie` | `padAngle` | `.pad_angle(..)` | `number` (radians) | `0` | The angle between neighbouring slices at the rim. Each gap keeps that width (about `padAngle * outerRadius` points) at every radius, its edges parallel, so it is as wide at the center or the hole as at the rim; a slice too narrow to reach the center ends where its edges meet. A pie of one slice has none. |
 | `Pie`, `Arc` | `innerRadius`, `outerRadius` | `.inner_radius(..)`, `.outer_radius(..)` | ``number \| `${number}%` `` | `0`, `"100%"` | The radii of the hole and of the rim: points, or a percentage of the largest circle the plot holds (half its smaller side). |
+| `Pie`, `Arc` | `cornerRadius` | `.corner_radius(..)` | `number` | `0` | The radius of each slice's corners (an arc's), in points, as d3's `arc.cornerRadius`: each corner a circle touching the edge and the rim or the hole, the gaps' parallel edges included. It is at most half the ring's thickness, which gives an arc round caps, and on a slice too narrow for two whole corners they meet on its middle. A whole ring keeps its round edges only. |
 | `Pie` | `sliceClass` | `.slice_class(..)` | `string \| (d: T, index: number) => string` | none | The classes of each slice (`fill-*`, `stroke-*`): the same on every slice, or a function of the slice's row and its index, called once per row when the rows or the function change. |
 | `Pie` | `sliceStyle` | `.slice_style(..)` | `StyleProp<ViewStyle>` | none | The style of every slice, over its classes (`fill`, `stroke`, `strokeWidth`). |
 | `Pie` | `hoverLift` | `.hover_lift(..)` | `number` | `0` | How far the slice under the pointer grows past the others, in points: on the plot's `pointer` spring, faded in and out with the hover. |
@@ -335,7 +347,7 @@ Motion is the app's, and none by default: everything shows at once. `motion` tak
 | Key | Type | What moves |
 |---|---|---|
 | `appear` | timing | The marks draw in, with an `appearGeneration`: lines and areas from the leading edge, bars growing out of their base (one after another with a bar's `stagger`); a pie's and an arc's ring sweeps in clockwise from its start. |
-| `update` | timing | Marks move to the new shape when the app changes it: a pie's and an arc's radii, so a donut's hole opens and closes. |
+| `update` | timing | Marks move to the new shape when the app changes it: a pie's and an arc's radii, so a donut's hole opens and closes, and their angles, so a gauge or a slice sweeps round to its new value (d3's `arcTween`: the angles move, not the outline; a new slice opens from where the one before it ends). |
 | `enter` | timing | The hover's parts fade in when the pointer comes over the plot. |
 | `exit` | timing | They fade out after it leaves. |
 | `pointer` | spring | They glide from one row to the next while the pointer moves over the plot; a pie's slice lifts on it. |

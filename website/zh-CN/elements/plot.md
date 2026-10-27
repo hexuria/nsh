@@ -109,12 +109,12 @@ mount(App);
 |---|---|---|---|---|
 | `Line` | `y` | `string \| (d, index) => number` | plot 的 `y` | 要绘制的内容：每个有值的行对应一个点，没有值的行跳过。 |
 | `Line`、`Area` | `data`、`x` | `T[]`、`string \| (d, index) => number` | plot 的数据行 | 自己的一组数据行（x 值不同的系列），用自己的 `x` 放在 plot 的比例尺上（没有时用行的序号）。 |
-| `Line`、`Area` | `curve` | `"natural" \| "linear" \| "stepAfter"` | `"natural"` | 点与点之间如何连接：平滑曲线、直线段，或保持每个值直到下一行的阶梯。 |
+| `Line`、`Area` | `curve` | `"natural" \| "linear" \| "stepAfter"` | `"natural"` | 点与点之间如何连接：平滑曲线、直线段，或保持每个值直到下一行的阶梯。area 的底边使用同一条曲线。 |
 | `Line` | `dot`、`dotClass`、`dotStyle` | `boolean`、`string`、`StyleProp<ViewStyle>` | `false` | 在每个点上显示圆点：以点为中心的视图，尺寸、背景和边框由应用决定。 |
 | `Line`、`Area` | `hoverDotClass`、`hoverDotStyle` | `string`、`StyleProp<ViewStyle>` | plot 的 `dotClass`、`dotStyle` | 它的悬停圆点，位于它在指针下那一行的点上：每个系列的圆点用自己的颜色。两者分别替换 plot 上对应的值，只作用于这个图形（图形的颜色配合 plot 的尺寸和描边）；`hidden` 表示不显示。 |
-| `Area` | `backgroundClass`、`backgroundStyle` | `string`、`StyleProp<ViewStyle>` | 无 | 它的背景：包围其形状的盒子（从第一个点到最后一个点，从最高点到基线），盒子的背景（`bg-*`、`bg-linear-to-b from-… to-…`、`backgroundImage`）只在形状内显示，位于 `fill` 之下。设置背景后，`fill` 没有设置时为 `none`。 |
+| `Area` | `backgroundClass`、`backgroundStyle` | `string`、`StyleProp<ViewStyle>` | 无 | 它的背景：包围其形状的盒子（从第一个点到最后一个点，从最高点到基线，带则到底边的最低点），盒子的背景（`bg-*`、`bg-linear-to-b from-… to-…`、`backgroundImage`）只在形状内显示，位于 `fill` 之下。设置背景后，`fill` 没有设置时为 `none`。 |
 | `Area` | `y1` | `string \| (d, index) => number` | plot 的 `y` | 顶边使用的取值。 |
-| `Area` | `y0` | `number` | 底边 | 基线在 y 比例尺上的值。 |
+| `Area` | `y0` | `number \| string \| (d, index) => number` | 底边 | 它的底边：数字是 y 比例尺上的一条基线；字段名或函数为每一行给出自己的底值，area 由此成为一条带（一天的最低价到最高价、预测的区间）。任一边没有值的行会跳过。 |
 | `Grid` | `x` | `number[]` | 无 | 竖线的位置，取 x 比例尺上的值（`point` 比例尺上是行的序号）。 |
 | `Grid` | `y` | `number[]` | 无 | 横线的位置，取 y 比例尺上的值。 |
 
@@ -126,7 +126,16 @@ mount(App);
 | `Area` | `fill`（位于 `background` 部件之上）；顶边使用 `stroke`、`strokeWidth`、`strokeDasharray` | `fill` 为 `currentColor`（有背景时为 `none`）；没有描边 |
 | `Grid` | `stroke`、`strokeWidth`、`strokeDasharray` | `currentColor`，宽 1，实线；每条线都落在整数设备像素上，细线也保持清晰 |
 
-plot 没有设置定义域时，`Line` 和 `Area` 绘制的数值（包括 area 的 `y0`）构成 y 比例尺的定义域；grid 的数值不计入。图形只在要画的内容变化时重绘（数据行、取值、曲线、plot 的尺寸或比例尺、绘制属性）；指针只移动悬停部件，从不让图形重绘。
+plot 没有设置定义域时，`Line` 和 `Area` 绘制的数值（包括 area 的 `y0`：基线，或每一行的底值）构成 y 比例尺的定义域；grid 的数值不计入。图形只在要画的内容变化时重绘（数据行、取值、曲线、plot 的尺寸或比例尺、绘制属性）；指针只移动悬停部件，从不让图形重绘。
+
+带是 `y0` 读取数据行的 `Area`：顶边经过 `y1`，底边再经过 `y0` 回到起点，两条边都使用 area 的 `curve`，出现动画从起始边缘同时画出两条边。它的悬停圆点位于顶边；叠加一条 `Line` 标出中间的值：
+
+```tsx
+<Plot data={days} y="close">
+  <Area y1="high" y0="low" class="fill-chart-1/15" hoverDotClass="hidden" />
+  <Line class="stroke-chart-1 stroke-2" />
+</Plot>
+```
 
 `fill` 与浏览器中一样是 CSS 的 `fill`：一个颜色。折线下方的渐变是 area 的背景，就像网页在形状里显示渐变那样（盒子的 `background-image` 加上 `clip-path`）：`backgroundClass="bg-linear-to-b from-chart-1/20 to-transparent"` 从 area 的最高点渐隐到基线，与任何视图的背景一样使用主题令牌和当前外观的颜色。
 
@@ -276,6 +285,7 @@ fn seats(seats: Vec<f64>) -> impl IntoElement {
 | `Pie`、`Arc` | `startAngle`、`endAngle` | `.start_angle(..)`、`.end_angle(..)` | `number`（弧度） | `0`、`2 * Math.PI` | 第一个扇区开始和最后一个扇区结束的位置（arc 的两端）：从 12 点钟方向顺时针的弧度。`endAngle` 小于 `startAngle` 时，饼图的扇区反向排列。 |
 | `Pie` | `padAngle` | `.pad_angle(..)` | `number`（弧度） | `0` | 相邻扇区在外缘处的间隔角度。每条间隙在各个半径上都保持这个宽度（约 `padAngle * outerRadius` 点），两边平行，所以在圆心或空洞处与外缘处一样宽；太窄而到不了圆心的扇区在两边相交处收尾。只有一个扇区的饼图没有间隙。 |
 | `Pie`、`Arc` | `innerRadius`、`outerRadius` | `.inner_radius(..)`、`.outer_radius(..)` | ``number \| `${number}%` `` | `0`、`"100%"` | 空洞和外缘的半径：点数，或 plot 能容纳的最大圆（其较短边的一半）的百分比。 |
+| `Pie`、`Arc` | `cornerRadius` | `.corner_radius(..)` | `number` | `0` | 每个扇区（arc）圆角的半径，单位为点，同 d3 的 `arc.cornerRadius`：每个圆角都是一个与边和外缘或空洞边缘相切的圆，间隙的平行边也一样。它最大为圆环厚度的一半，此时 arc 两端是圆头；扇区太窄、放不下两个完整圆角时，两个圆角在扇区中线相接。完整的圆环只保留它的圆形边缘。 |
 | `Pie` | `sliceClass` | `.slice_class(..)` | `string \| (d: T, index: number) => string` | 无 | 每个扇区的类（`fill-*`、`stroke-*`）：所有扇区相同，或扇区所在行及其序号的函数；数据行或函数变化时，每行调用一次。 |
 | `Pie` | `sliceStyle` | `.slice_style(..)` | `StyleProp<ViewStyle>` | 无 | 所有扇区的样式，优先于它们的类（`fill`、`stroke`、`strokeWidth`）。 |
 | `Pie` | `hoverLift` | `.hover_lift(..)` | `number` | `0` | 指针下的扇区比其他扇区大出的距离，单位为点：按 plot 的 `pointer` 弹簧变化，随悬停淡入淡出。 |
@@ -292,7 +302,7 @@ fn seats(seats: Vec<f64>) -> impl IntoElement {
 | 键 | 类型 | 作用 |
 |---|---|---|
 | `appear` | timing | 有 `appearGeneration` 时图形逐渐绘出：折线和区域从起始边缘绘出，柱子从 `base` 长出（柱子设置 `stagger` 时依次长出）；饼图和 arc 的圆环从起点顺时针扫出。 |
-| `update` | timing | 应用改变图形时，图形过渡到新形状：饼图和 arc 的半径，比如 donut 的空洞张开和合拢。 |
+| `update` | timing | 应用改变图形时，图形过渡到新形状：饼图和 arc 的半径，比如 donut 的空洞张开和合拢；以及它们的角度，比如仪表或扇区扫到新的数值（同 d3 的 `arcTween`：过渡的是角度而不是轮廓；新出现的扇区从前一个扇区的结束处展开）。 |
 | `enter` | timing | 指针移到 plot 上时，悬停部件淡入。 |
 | `exit` | timing | 指针离开后，悬停部件淡出。 |
 | `pointer` | spring | 指针在 plot 上移动时，悬停部件从一行滑到下一行；饼图的扇区也按它抬起。 |
