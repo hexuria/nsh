@@ -143,6 +143,17 @@ pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) -> Result<(), String
         },
     };
     let hwnd = surface.hwnd();
+    // Refused before the window changes: what it cannot become.
+    // SAFETY: a query of a window of this thread.
+    if unsafe { windows::Win32::UI::WindowsAndMessaging::IsZoomed(hwnd) }.as_bool() {
+        return Err("the window is maximized: restore it before resizing".into());
+    }
+    let (min_w, min_h) = (crate::window::MIN_WIDTH, crate::window::MIN_HEIGHT);
+    if w < min_w || h < min_h {
+        return Err(format!(
+            "{w}x{h} is below the window's {min_w}x{min_h} minimum"
+        ));
+    }
     let dpi = crate::window::dpi(hwnd);
     let s = dpi as f32 / 96.0;
     let (want_w, want_h) = ((w * s).round() as i32, (h * s).round() as i32);
@@ -257,6 +268,8 @@ fn capture(surface: &Rc<Surface>) -> Result<(Vec<u8>, u32, u32), String> {
         let result = match bitmap {
             Ok(bitmap) => {
                 let old = SelectObject(dc, bitmap.into());
+                // Paint what is invalid first: the capture copies the last paint.
+                let _ = windows::Win32::Graphics::Gdi::UpdateWindow(hwnd);
                 let printed = PrintWindow(hwnd, dc, PRINT_WINDOW_FLAGS(FLAGS)).as_bool();
                 let mut rgba =
                     std::slice::from_raw_parts(bits as *const u8, (w * h * 4) as usize).to_vec();
