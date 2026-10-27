@@ -560,7 +560,7 @@ pub enum SceneQuery {
     Activity,
     /// The app's portable semantic scene, including offscreen nodes.
     SemanticTree,
-    /// Keyboard shortcuts from the app's keymap and visible menu.
+    /// Keyboard shortcuts from the app's keymap and installed menu.
     Keybindings,
     /// The app's errors since the last time, taken.
     TakeErrors,
