@@ -8,6 +8,8 @@ final class Native {
 
     private Native() {}
 
+    static native boolean startAgent(long handle, String address, String token, String screenshotDirectory);
+
     // Event kinds, in `nsh_core::EventKind` order.
     static final int PRESS = 0;
     static final int LONG_PRESS = 1;

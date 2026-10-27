@@ -41,11 +41,27 @@ const META_CTRL_ON: i32 = 0x1000;
 pub(crate) struct AndroidNative {
     host: Weak<Host>,
     density: f32,
+    #[cfg(feature = "dev-agent")]
+    agent_attached: bool,
 }
 
 impl AndroidNative {
     pub(crate) fn new(host: Weak<Host>, density: f32) -> Self {
-        AndroidNative { host, density }
+        AndroidNative {
+            host,
+            density,
+            #[cfg(feature = "dev-agent")]
+            agent_attached: false,
+        }
+    }
+
+    #[cfg(feature = "dev-agent")]
+    pub(crate) fn new_for_agent(host: Weak<Host>, density: f32) -> Self {
+        AndroidNative {
+            host,
+            density,
+            agent_attached: true,
+        }
     }
 
     /// `f` with the JNI env, `TestAgent`'s class and the `NshView`.
@@ -56,6 +72,10 @@ impl AndroidNative {
         let Some(host) = self.host.upgrade() else {
             return R::default();
         };
+        #[cfg(feature = "dev-agent")]
+        if self.agent_attached && !host.agent_alive.load(std::sync::atomic::Ordering::Acquire) {
+            return R::default();
+        }
         let java = crate::java::java();
         with_env(|env| f(env, java.test_agent.as_obj().into(), host.view.as_obj()))
     }
@@ -157,6 +177,43 @@ impl AndroidNative {
 }
 
 impl Native for AndroidNative {
+    fn available(&self) -> bool {
+        self.host.upgrade().is_some_and(|host| {
+            #[cfg(feature = "dev-agent")]
+            {
+                !self.agent_attached || host.agent_alive.load(std::sync::atomic::Ordering::Acquire)
+            }
+            #[cfg(not(feature = "dev-agent"))]
+            {
+                let _ = host;
+                true
+            }
+        })
+    }
+
+    fn hit_at(&self, at: Point<Points>) -> Result<Option<NodeId>, String> {
+        let hit: Option<i32> = self.call(|env, class, view| {
+            env.call_static_method(
+                class,
+                "hitAt",
+                "(Lcom/longbridge/nsh/NshView;FF)I",
+                &[
+                    JValue::Object(view),
+                    JValue::Float(self.px(at.x.0)),
+                    JValue::Float(self.px(at.y.0)),
+                ],
+            )?
+            .i()
+            .map(Some)
+        });
+        let hit = hit.ok_or_else(|| "Android hit testing failed".to_string())?;
+        Ok(match hit {
+            -1 => None,
+            i32::MIN => Some(NodeId::MAX),
+            id => Some(id as NodeId),
+        })
+    }
+
     fn bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
         let b = self.floats("bounds", "(Lcom/longbridge/nsh/NshView;I)[F", Some(id))?;
         let d = self.density;
@@ -201,6 +258,32 @@ impl Native for AndroidNative {
             .floats("viewport", "(Lcom/longbridge/nsh/NshView;)[F", None)
             .unwrap_or_else(|| vec![0.0, 0.0]);
         Size::new(Points(v[0] / self.density), Points(v[1] / self.density))
+    }
+
+    fn mouse(&self) -> bool {
+        true
+    }
+
+    fn hover(&self, at: Point<Points>) -> Result<(), String> {
+        if !self.available() {
+            return Err("the app is gone".into());
+        }
+        let delivered: bool = self.call(|env, class, view| {
+            env.call_static_method(
+                class,
+                "hover",
+                "(Lcom/longbridge/nsh/NshView;FF)Z",
+                &[
+                    JValue::Object(view),
+                    JValue::Float(self.px(at.x.0)),
+                    JValue::Float(self.px(at.y.0)),
+                ],
+            )?
+            .z()
+        });
+        delivered
+            .then_some(())
+            .ok_or_else(|| "Android hover dispatch failed".into())
     }
 
     fn press(&self, at: Point<Points>) {
@@ -313,6 +396,44 @@ impl Native for AndroidNative {
         Ok(())
     }
 
+    fn validate_keys(&self, keys: &str) -> Result<(), String> {
+        use nsh_core::keymap::Keystroke;
+        let stroke =
+            Keystroke::parse(keys, nsh_core::platform::Os::Android).map_err(|e| e.to_string())?;
+        stroke
+            .key
+            .android_keycode()
+            .map(|_| ())
+            .ok_or_else(|| format!("an Android keyboard has no key {keys:?}"))
+    }
+
+    fn focus_node(&self, id: NodeId) -> Result<(), String> {
+        let focused = self.call(|env, class, view| {
+            env.call_static_method(
+                class,
+                "focusNode",
+                "(Lcom/longbridge/nsh/NshView;I)Z",
+                &[JValue::Object(view), JValue::Int(id as i32)],
+            )?
+            .z()
+        });
+        focused
+            .then_some(())
+            .ok_or_else(|| "native focus is only supported for an editable input".to_string())
+    }
+
+    fn app_focused(&self) -> bool {
+        self.call(|env, class, view| {
+            env.call_static_method(
+                class,
+                "appFocused",
+                "(Lcom/longbridge/nsh/NshView;)Z",
+                &[JValue::Object(view)],
+            )?
+            .z()
+        })
+    }
+
     fn input_text(&self, id: NodeId) -> Option<String> {
         self.call(|env, class, view| {
             let s = env
@@ -408,8 +529,51 @@ impl Native for AndroidNative {
         png.ok_or_else(|| "the window drew no picture".into())
     }
 
-    fn resize(&self, _: Points, _: Points) -> Result<(), String> {
-        Err("a device's screen keeps its size".into())
+    fn resize(&self, width: Points, height: Points) -> Result<(), String> {
+        #[cfg(feature = "dev-agent")]
+        {
+            if !self.agent_attached {
+                return Err("viewport resizing is only supported by the development agent".into());
+            }
+            if !width.0.is_finite() || !height.0.is_finite() || width.0 <= 0.0 || height.0 <= 0.0 {
+                return Err("viewport dimensions must be finite and positive".into());
+            }
+            let (width_px, height_px) = (
+                self.px(width.0).round() as i32,
+                self.px(height.0).round() as i32,
+            );
+            let resized = self.call(|env, class, view| {
+                env.call_static_method(
+                    class,
+                    "resizeViewport",
+                    "(Lcom/longbridge/nsh/NshView;II)Z",
+                    &[
+                        JValue::Object(view),
+                        JValue::Int(width_px),
+                        JValue::Int(height_px),
+                    ],
+                )?
+                .z()
+            });
+            if !resized {
+                return Err("requested viewport does not fit the Android window".into());
+            }
+            for _ in 0..50 {
+                let actual = self.viewport();
+                if (actual.width.0 * self.density - width_px as f32).abs() < 1.0
+                    && (actual.height.0 * self.density - height_px as f32).abs() < 1.0
+                {
+                    return Ok(());
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            Err("Android did not lay out the requested viewport".into())
+        }
+        #[cfg(not(feature = "dev-agent"))]
+        {
+            let _ = (width, height);
+            Err("a device's screen keeps its size".into())
+        }
     }
 
     fn set_dark(&self, _: bool) -> Result<(), String> {

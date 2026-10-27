@@ -34,6 +34,16 @@ public final class DevActivity extends Activity {
         } else {
             view = new NshView(this, trace);
         }
+        boolean agent = getIntent().getBooleanExtra("GPUI_AGENT", false)
+                || "1".equals(getIntent().getStringExtra("GPUI_AGENT"));
+        if (agent && (getApplicationInfo().flags
+                & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            String address = getIntent().getStringExtra("GPUI_AGENT_ADDR");
+            String token = getIntent().getStringExtra("GPUI_AGENT_TOKEN");
+            if (!view.startAgent(address != null ? address : "127.0.0.1:17421", token)) {
+                android.util.Log.w("nsh", "GPUI-agent attachment failed");
+            }
+        }
         // An app on its own, not a module embedded in another app: no limits.
         view.useStandaloneLimits();
         setContentView(view);
