@@ -11,7 +11,7 @@ use std::{
 use axum::{
     Router,
     extract::{
-        State,
+        ConnectInfo, State,
         ws::{Message, WebSocket, WebSocketUpgrade},
     },
     http::{StatusCode, header},
@@ -143,6 +143,8 @@ struct Shared {
     on_event: Box<dyn Fn(ClientEvent) + Send + Sync>,
     /// A test session ([`DevServer::test_session`]).
     test: AtomicBool,
+    /// The key of the GPUI agent's page ([`DevServer::agent_session`]).
+    agent_key: Mutex<Option<String>>,
     /// The connected hosts that take test steps, oldest first: their
     /// connection's id and what sends it a message.
     testers: Mutex<Vec<(u64, tokio::sync::mpsc::UnboundedSender<ServerMessage>)>>,
@@ -212,6 +214,7 @@ impl DevServer {
             clients: AtomicUsize::new(0),
             on_event: Box::new(on_event),
             test: AtomicBool::new(false),
+            agent_key: Mutex::new(None),
             testers: Mutex::default(),
             steps: Mutex::default(),
             next_step: AtomicU64::new(1),
@@ -230,6 +233,7 @@ impl DevServer {
             .fallback(web_file)
             .with_state(shared.clone());
         runtime.spawn(async move {
+            let app = app.into_make_service_with_connect_info::<SocketAddr>();
             if let Err(err) = axum::serve(listener, app).await {
                 log::error!("dev server stopped: {err}");
             }
@@ -295,6 +299,17 @@ impl DevServer {
     /// need ([`DevServer::step`]).
     pub fn test_session(&self) {
         self.shared.test.store(true, Ordering::Relaxed);
+    }
+
+    /// Makes the host that shows the GPUI agent's page take test steps
+    /// (`nsh run --target web` with `GPUI_AGENT=1`): of the hosts
+    /// connecting from now on, the one from this machine whose hello carries
+    /// `key` keeps the model of its app as an observer (its own storage,
+    /// network and clock: it gets no [`ServerMessage::TestSetup`]) and is
+    /// the one [`DevServer::step`] asks. Other hosts, a browser on the
+    /// network among them, stay ordinary hosts.
+    pub fn agent_session(&self, key: String) {
+        *self.shared.agent_key.lock().expect("agent lock") = Some(key);
     }
 
     /// The storage a test session's app starts with, in place of its own
@@ -540,11 +555,15 @@ pub(crate) fn content_type(path: &std::path::Path) -> &'static str {
     }
 }
 
-async fn upgrade(ws: WebSocketUpgrade, State(shared): State<Arc<Shared>>) -> Response {
+async fn upgrade(
+    ws: WebSocketUpgrade,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    State(shared): State<Arc<Shared>>,
+) -> Response {
     // Bundles are ~100 KB of bytecode; allow generous frames.
     ws.max_message_size(64 << 20)
         .on_upgrade(move |socket| async move {
-            if let Err(err) = serve_client(socket, shared).await {
+            if let Err(err) = serve_client(socket, peer, shared).await {
                 log::debug!("dev client disconnected: {err}");
             }
         })
@@ -552,7 +571,11 @@ async fn upgrade(ws: WebSocketUpgrade, State(shared): State<Arc<Shared>>) -> Res
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-async fn serve_client(mut socket: WebSocket, shared: Arc<Shared>) -> Result<(), BoxError> {
+async fn serve_client(
+    mut socket: WebSocket,
+    peer: SocketAddr,
+    shared: Arc<Shared>,
+) -> Result<(), BoxError> {
     let hello = tokio::time::timeout(Duration::from_secs(5), socket.recv())
         .await
         .map_err(|_| "no hello")?
@@ -567,6 +590,7 @@ async fn serve_client(mut socket: WebSocket, shared: Arc<Shared>) -> Result<(), 
         platform,
         ui_sets,
         tests,
+        agent,
     } = serde_json::from_str(&text)?
     else {
         return Err("expected hello".into());
@@ -587,12 +611,15 @@ async fn serve_client(mut socket: WebSocket, shared: Arc<Shared>) -> Result<(), 
         );
         BundleFormat::Source
     };
+    let agent = agent.is_some_and(|key| agent_key_matches(&shared, &key, peer));
+    let test = shared.test.load(Ordering::Relaxed);
     send(
         &mut socket,
         &ServerMessage::Hello {
             protocol: PROTOCOL_VERSION,
             session: shared.session,
-            test: shared.test.load(Ordering::Relaxed),
+            test: test || agent,
+            agent,
         },
     )
     .await?;
@@ -618,8 +645,8 @@ async fn serve_client(mut socket: WebSocket, shared: Arc<Shared>) -> Result<(), 
     let _connection = Connection::new(&shared, &device, build);
     // A host taking a test session's steps: steps reach it through `steps`.
     let (step_tx, mut steps) = tokio::sync::mpsc::unbounded_channel();
-    let testing = tests && shared.test.load(Ordering::Relaxed);
-    let _tester = testing.then(|| Tester::new(&shared, step_tx.clone()));
+    let testing = tests && test;
+    let _tester = (testing || (tests && agent)).then(|| Tester::new(&shared, step_tx.clone()));
     if testing {
         // Before the first bundle: what the app starts with.
         let storage = shared.test_storage.lock().expect("storage lock").clone();
@@ -777,6 +804,23 @@ impl Drop for Connection<'_> {
             device: self.device.to_owned(),
         });
     }
+}
+
+/// Whether `key`, from a hello sent from `peer`, is the GPUI agent's page's
+/// ([`DevServer::agent_session`]): the key, from this machine.
+fn agent_key_matches(shared: &Shared, key: &str, peer: SocketAddr) -> bool {
+    let expected = shared.agent_key.lock().expect("agent lock");
+    let Some(expected) = expected.as_deref() else {
+        return false;
+    };
+    // Compared in full whatever differs, so timing tells nothing of it.
+    let same = expected.len() == key.len()
+        && expected
+            .bytes()
+            .zip(key.bytes())
+            .fold(0u8, |diff, (a, b)| diff | (a ^ b))
+            == 0;
+    same && peer.ip().is_loopback()
 }
 
 /// A host taking test steps, while it is connected: its steps fail when
