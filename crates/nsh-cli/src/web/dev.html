@@ -46,6 +46,12 @@
   // The page's host (`nsh.json` `web.host`): its `createHost(player)` runs
   // once the player exists, before the first bundle, as on a packaged page.
   const HOST = {{host}};
+  // The key of the page a GPUI agent drives (`nsh run --target web` with
+  // `GPUI_AGENT=1`, which hands it over before the page's scripts run): the
+  // server asks this page its agent's questions. Kept here, out of the
+  // page's reach, for every connection of the page's life.
+  const AGENT = globalThis.__nshAgentKey ?? null;
+  delete globalThis.__nshAgentKey;
   const status = document.getElementById("status");
   const problem = document.getElementById("problem");
   const decoder = new TextDecoder();
@@ -192,7 +198,7 @@
         return;
       }
       // No bytecode version: this host runs JS source.
-      send({ type: "hello", protocol: PROTOCOL, bytecode_version: "", device: device(), platform: "web", ui_sets: UI_SETS, tests: player.takesTests });
+      send({ type: "hello", protocol: PROTOCOL, bytecode_version: "", device: device(), platform: "web", ui_sets: UI_SETS, tests: player.takesTests, ...(AGENT ? { agent: AGENT } : {}) });
     };
     socket.onmessage = (event) => {
       if (typeof event.data !== "string") {
@@ -225,7 +231,8 @@
         session = message.session ?? 0;
         // A test session (`nsh test --target web`): the model of the app
         // starts before its first bundle.
-        if (message.test) player.testStart();
+        if (message.agent) player.agentStart();
+        else if (message.test) player.testStart();
         showStatus("");
         // A test session's Rust app starts when the server says so,
         // after what the test sets it up with.
