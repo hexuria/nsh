@@ -151,6 +151,32 @@ pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) {
         },
     };
     let hwnd = surface.hwnd();
+<<<<<<< /tmp/ours_f
+||||||| /tmp/base_f
+    // Refused before the window changes: what it cannot become.
+    // SAFETY: a query of a window of this thread.
+    if unsafe { windows::Win32::UI::WindowsAndMessaging::IsZoomed(hwnd) }.as_bool() {
+        return Err("the window is maximized: restore it before resizing".into());
+    }
+    let (min_w, min_h) = (crate::window::MIN_WIDTH, crate::window::MIN_HEIGHT);
+    if w < min_w || h < min_h {
+        return Err(format!(
+            "{w}x{h} is below the window's {min_w}x{min_h} minimum"
+        ));
+    }
+=======
+    // Refused before the window changes: what it cannot become.
+    // SAFETY: a query of a window of this thread.
+    if unsafe { windows::Win32::UI::WindowsAndMessaging::IsZoomed(hwnd) }.as_bool() {
+        return Err("the window is maximized: restore it before resizing".into());
+    }
+    let (min_w, min_h) = (crate::window::MIN_WIDTH, crate::window::MIN_HEIGHT);
+    if w < min_w || h < min_h {
+        return Err(format!(
+            "{w}x{h} is below the window's minimum of about {min_w}x{min_h}"
+        ));
+    }
+>>>>>>> /tmp/theirs_f
     let dpi = crate::window::dpi(hwnd);
     let s = dpi as f32 / 96.0;
     let (want_w, want_h) = ((w * s).round() as i32, (h * s).round() as i32);
