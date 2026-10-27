@@ -29,7 +29,10 @@
 //! its children, and a plain layout box passes its children up. `visible`
 //! says a node shows or would once scrolled to, and `in_viewport` that it
 //! shows now. A target is a node of exactly this tree, by id, else by
-//! name; the revision is a hash of the tree.
+//! name; the revision is a hash of the tree. A masked input's value is a
+//! bullet per character, with a `masked` state: its text reaches no
+//! snapshot (full or compact), revision, fingerprint, reply or error.
+//! `type` and `set_value` still type into it.
 //!
 //! **Actionability.** An action acts once its target is actionable: shown
 //! (an area, not hidden, left of it by every clipping ancestor and the
@@ -520,9 +523,10 @@ fn collect(surface: &Surface, view: &NshView, window: &NSWindow, nodes: &mut Vec
 /// ([`measure`]): finding a target needs none.
 fn place(view: &NshView, window: &NSWindow) -> Place {
     let spec = spec_of(view);
-    let (test_id, text_input) = {
+    let (test_id, text_input, masked) = {
         let s = view.state();
-        (s.props.test_id.clone(), s.input.is_some())
+        let masked = s.input.as_ref().and_then(|input| input.masked_len());
+        (s.props.test_id.clone(), s.input.is_some(), masked)
     };
     if spec.hidden {
         return Place::Hidden;
@@ -546,6 +550,9 @@ fn place(view: &NshView, window: &NSWindow) -> Place {
         Value::Checked(v) => Some(v != 0),
         _ => None,
     };
+    if let Some(chars) = masked {
+        mask(&mut node, chars);
+    }
     if spec.selected {
         node.states.push("selected".into());
     }
@@ -612,6 +619,15 @@ fn role_name(role: Ax) -> &'static str {
         Ax::Timer => "timer",
         Ax::Option => "option",
     }
+}
+
+/// Hides a masked input's text: its value becomes a bullet per character
+/// (`chars`), as a secure field shows it, whatever the app set as its
+/// accessibility value, and a `masked` state says so. Every reply reads
+/// nodes [`place`] made, so none can carry the text.
+fn mask(node: &mut UiNode, chars: usize) {
+    node.value = Some("\u{2022}".repeat(chars));
+    node.states.push("masked".into());
 }
 
 fn value_text(value: &Value) -> Option<String> {
@@ -1655,6 +1671,25 @@ fn assert_spec(surface: &Rc<Surface>, spec: &AssertSpec) -> Result<DispatchResul
     let Some(Found { view, node, .. }) = found else {
         return Err(format!("assert failed: '{}' not found", spec.target));
     };
+    assert_node(spec, &node)?;
+    if let Some(want) = spec.in_viewport {
+        let has = visibility(surface, &view, &window).in_viewport();
+        if has != want {
+            return Err(format!(
+                "assert failed: '{}' in_viewport mismatch",
+                spec.target
+            ));
+        }
+    }
+    Ok(DispatchResult::empty())
+}
+
+/// `assert`'s checks of what `node` says. A masked input's value is its
+/// bullets ([`mask`]), so asserting its text fails, and the failure names
+/// neither the value nor the text asked for: an assert is no way to
+/// guess a password.
+fn assert_node(spec: &AssertSpec, node: &UiNode) -> Result<(), String> {
+    let masked = node.states.iter().any(|state| state == "masked");
     for (field, want, got) in [
         ("name", spec.name.as_deref(), Some(node.name.as_str())),
         ("role", spec.role.as_deref(), Some(node.role.as_str())),
@@ -1663,6 +1698,13 @@ fn assert_spec(surface: &Rc<Surface>, spec: &AssertSpec) -> Result<DispatchResul
         if let Some(want) = want
             && got != Some(want)
         {
+            if masked && field == "value" {
+                return Err(format!(
+                    "assert failed: '{}' value differs (a masked input's value is a bullet \
+                     per character)",
+                    spec.target
+                ));
+            }
             return Err(format!(
                 "assert failed: '{}' {field} = {:?}, expected {want:?}",
                 spec.target,
@@ -1680,16 +1722,7 @@ fn assert_spec(surface: &Rc<Surface>, spec: &AssertSpec) -> Result<DispatchResul
     {
         return Err(format!("assert failed: '{}' visible mismatch", spec.target));
     }
-    if let Some(want) = spec.in_viewport {
-        let has = visibility(surface, &view, &window).in_viewport();
-        if has != want {
-            return Err(format!(
-                "assert failed: '{}' in_viewport mismatch",
-                spec.target
-            ));
-        }
-    }
-    Ok(DispatchResult::empty())
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1838,6 +1871,73 @@ mod tests {
         };
         assert_eq!(revision(&tree("Save")), revision(&tree("Save")));
         assert_ne!(revision(&tree("Save")), revision(&tree("Saved")));
+    }
+
+    #[test]
+    fn a_masked_input_never_shows_its_text() {
+        let secret = "hunter2é";
+        let input = |text: &str| {
+            let mut node = UiNode::new("password", "textfield", "Password");
+            node.bounds = TreeBounds {
+                x: 0.0,
+                y: 0.0,
+                w: 100.0,
+                h: 20.0,
+            };
+            // An app may mirror the text into the accessibility value.
+            node.value = Some(text.into());
+            node
+        };
+        let mut node = input(secret);
+        mask(&mut node, secret.chars().count());
+        assert_eq!(node.value.as_deref(), Some("••••••••"));
+        assert!(node.states.iter().any(|state| state == "masked"));
+
+        let tree = |node: UiNode| UiTree {
+            app: "app".into(),
+            platform: PlatformKind::Desktop,
+            ready: true,
+            nodes: vec![node],
+            rev: None,
+        };
+        let mut full = tree(node.clone());
+        full.rev = Some(revision(&full));
+        let json = serde_json::to_string(&full).unwrap();
+        assert!(!json.contains(secret), "{json}");
+        let mut short = tree(node.clone());
+        short.nodes = compact(short.nodes, (400.0, 800.0));
+        let lines = gpui_agent::compact_lines(&short);
+        assert!(lines.contains("password textfield") && !lines.contains(secret));
+        // Revisions and fingerprints depend on the length, not the text.
+        let mut other = input("password");
+        mask(&mut other, "password".len());
+        assert_eq!(
+            revision(&tree(other.clone())),
+            revision(&tree(node.clone()))
+        );
+        assert_eq!(other.fingerprint(None), node.fingerprint(None));
+
+        // Asserting the text fails without naming it or the value.
+        let spec = |value: &str| AssertSpec {
+            target: "password".into(),
+            value: Some(value.into()),
+            ..Default::default()
+        };
+        let err = assert_node(&spec(secret), &node).unwrap_err();
+        assert!(err.starts_with("assert failed: 'password' value"), "{err}");
+        assert!(!err.contains(secret) && !err.contains('•'), "{err}");
+        assert!(assert_node(&spec("••••••••"), &node).is_ok());
+        // An input that is not masked still reports what differs.
+        let err = assert_node(&spec("other"), &input(secret)).unwrap_err();
+        assert!(err.contains(secret), "{err}");
+
+        // `type` and `set_value` reply with nothing of what they typed.
+        let settle = Settle::new(SETTLE, Reply::Action);
+        for settled in [true, false] {
+            let reply = response("1", Ok(settle.result(settled, None)));
+            let reply = serde_json::to_string(&reply).unwrap();
+            assert!(!reply.contains(secret), "{reply}");
+        }
     }
 
     #[test]
