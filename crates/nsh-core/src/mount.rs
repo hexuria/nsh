@@ -1143,7 +1143,7 @@ impl NavShader {
 }
 
 /// All mount items produced by one commit.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct MountBatch {
     /// Items, to be applied in order within one UI frame.
     pub items: Vec<MountItem>,
