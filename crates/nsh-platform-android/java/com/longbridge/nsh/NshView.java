@@ -571,6 +571,13 @@ public class NshView extends FrameLayout {
         return Native.connectDevServer(handle, url);
     }
 
+    boolean startAgent(String address, String token) {
+        synchronized (hostLock) {
+            return handle != 0 && Native.startAgent(
+                    handle, address, token, getContext().getCacheDir().getAbsolutePath());
+        }
+    }
+
     /**
      * Stops the app and calls {@link NshComponent#destroy} on each of its
      * native components. The view can no longer be used.

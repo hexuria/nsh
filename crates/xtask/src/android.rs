@@ -263,7 +263,7 @@ fn cargo_lib(
         cmd.arg("--release");
     }
     if dev {
-        cmd.args(["--features", "dev"]);
+        cmd.args(["--features", "dev-agent"]);
     }
     term::cargo(&mut cmd, &format!("libnsh.so for {abi}"))?;
     let profile = if release { "release" } else { "debug" };
