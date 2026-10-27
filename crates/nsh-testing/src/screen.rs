@@ -12,6 +12,8 @@ use std::{
     sync::Arc,
 };
 
+#[cfg(feature = "agent")]
+use nsh_core::desktop::MenuRole;
 use nsh_core::{
     AccessibilityRole, AccessibilityState, Bounds, Command, Dialog, EventKind, EventMask,
     GestureValues, InputConfig, MountBatch, MountItem, NodeId, PanActivation, Point, PointerEvents,
@@ -183,6 +185,16 @@ struct View {
     close_on_escape: bool,
     /// Its `role`.
     role: AccessibilityRole,
+    /// The accessibility name.
+    accessibility_hint: Option<Arc<str>>,
+    /// Its accessibility value, if it has one.
+    accessibility_value: Option<nsh_core::AccessibilityValue>,
+    /// Its complete accessibility state.
+    accessibility_state: nsh_core::AccessibilityState,
+    /// Its children are grouped under this accessibility element.
+    accessible: Option<bool>,
+    /// It and its descendants are hidden from accessibility.
+    accessibility_hidden: bool,
     /// It takes no presses (`disabled`, its accessibility state).
     disabled: bool,
     /// `focusable`: `Some(true)` makes it a stop of Tab, `Some(false)` keeps
@@ -226,6 +238,54 @@ struct View {
     pointer_events: PointerEvents,
     /// A node of a canvas's drawing, not a view of its own.
     canvas_node: bool,
+}
+
+#[cfg(feature = "agent")]
+fn semantic_role(role: AccessibilityRole, kind: Option<ViewKind>, pressable: bool) -> &'static str {
+    match role {
+        AccessibilityRole::None => match kind {
+            Some(ViewKind::Text) => "text",
+            Some(ViewKind::Input) => "textbox",
+            Some(ViewKind::Scroll) => "scroll",
+            _ if pressable => "button",
+            _ => "generic",
+        },
+        AccessibilityRole::Button => "button",
+        AccessibilityRole::Link => "link",
+        AccessibilityRole::Search => "search",
+        AccessibilityRole::Image => "image",
+        AccessibilityRole::ImageButton => "imagebutton",
+        AccessibilityRole::KeyboardKey => "keyboardkey",
+        AccessibilityRole::Text => "text",
+        AccessibilityRole::Adjustable => "adjustable",
+        AccessibilityRole::Header => "header",
+        AccessibilityRole::Summary => "summary",
+        AccessibilityRole::Alert => "alert",
+        AccessibilityRole::Checkbox => "checkbox",
+        AccessibilityRole::Combobox => "combobox",
+        AccessibilityRole::Menu => "menu",
+        AccessibilityRole::Menubar => "menubar",
+        AccessibilityRole::Menuitem => "menuitem",
+        AccessibilityRole::Progressbar => "progressbar",
+        AccessibilityRole::Radio => "radio",
+        AccessibilityRole::Radiogroup => "radiogroup",
+        AccessibilityRole::Scrollbar => "scrollbar",
+        AccessibilityRole::Spinbutton => "spinbutton",
+        AccessibilityRole::Switch => "switch",
+        AccessibilityRole::Tab => "tab",
+        AccessibilityRole::Tablist => "tablist",
+        AccessibilityRole::Timer => "timer",
+        AccessibilityRole::Toolbar => "toolbar",
+        AccessibilityRole::List => "list",
+        AccessibilityRole::Grid => "grid",
+        AccessibilityRole::Table => "table",
+        AccessibilityRole::Row => "row",
+        AccessibilityRole::Cell => "cell",
+        AccessibilityRole::ColumnHeader => "columnheader",
+        AccessibilityRole::RowGroup => "rowgroup",
+        AccessibilityRole::Listbox => "listbox",
+        AccessibilityRole::Option => "option",
+    }
 }
 
 /// A span of a text view's text that takes presses ([`nsh_core::TextLink`]).
@@ -386,6 +446,11 @@ impl Screen {
                 view.label = props.accessibility.label.clone();
                 view.role = props.accessibility.role;
                 view.disabled = props.accessibility.state.disabled;
+                view.accessibility_hint = props.accessibility.hint.clone();
+                view.accessibility_value = props.accessibility.value.clone();
+                view.accessibility_state = props.accessibility.state;
+                view.accessible = props.accessibility.accessible;
+                view.accessibility_hidden = props.accessibility.hidden;
                 view.focusable = props.focusable;
                 view.selected = props.accessibility.state.selected;
                 view.accessibility_state = props.accessibility.state;
@@ -847,6 +912,98 @@ impl Screen {
             );
         }
         out
+    }
+
+    #[cfg(feature = "agent")]
+    pub(crate) fn semantic_nodes(&self) -> Vec<crate::agent::SemanticNode> {
+        let mut nodes = Vec::new();
+        let mut stack = vec![(ROOT, None, false, false)];
+        while let Some((id, parent, inherited_hidden, inherited_disabled)) = stack.pop() {
+            if self.closed.contains(&id) {
+                continue;
+            }
+            let root = View::default();
+            let Some(view) = self
+                .nodes
+                .get(&id)
+                .or_else(|| (id == ROOT).then_some(&root))
+            else {
+                continue;
+            };
+            let hidden = inherited_hidden || view.hidden || view.accessibility_hidden;
+            let disabled = inherited_disabled || view.disabled;
+            if hidden {
+                continue;
+            }
+            let children: Vec<NodeId> = if self.kind(id) == Some(ViewKind::Stack) {
+                self.screens(id).last().copied().into_iter().collect()
+            } else {
+                self.children.get(&id).cloned().unwrap_or_default()
+            };
+            let role = semantic_role(view.role, view.kind, view.events.contains(EventKind::Press));
+            let input_value = view.input.as_ref().map(|input| input.text.clone());
+            let value = input_value.or_else(|| {
+                view.accessibility_value.as_ref().and_then(|value| {
+                    value
+                        .text
+                        .as_deref()
+                        .map(str::to_owned)
+                        .or_else(|| value.now.map(|number| number.to_string()))
+                })
+            });
+            let state = view.accessibility_state;
+            let mut states = Vec::new();
+            if view.disabled {
+                states.push("disabled".to_owned());
+            }
+            if view.selected {
+                states.push("selected".to_owned());
+            }
+            if let Some(checked) = state.checked {
+                states.push(
+                    match checked {
+                        nsh_core::Checked::False => "unchecked",
+                        nsh_core::Checked::True => "checked",
+                        nsh_core::Checked::Mixed => "mixed",
+                    }
+                    .to_owned(),
+                );
+            }
+            if state.busy {
+                states.push("busy".to_owned());
+            }
+            if let Some(expanded) = state.expanded {
+                states.push(if expanded { "expanded" } else { "collapsed" }.to_owned());
+            }
+            nodes.push(crate::agent::SemanticNode {
+                id,
+                parent,
+                test_id: view.test_id.as_deref().map(str::to_owned),
+                role: role.to_owned(),
+                label: view
+                    .label
+                    .as_deref()
+                    .map(str::to_owned)
+                    .or_else(|| view.text.clone()),
+                hint: view.accessibility_hint.as_deref().map(str::to_owned),
+                value,
+                enabled: !disabled,
+                selected: view.selected,
+                grouped: view.accessible == Some(true),
+                clipping: view.clips || view.scroll.is_some(),
+                input: view.kind == Some(ViewKind::Input),
+                scroll: view.kind == Some(ViewKind::Scroll) || view.scroll.is_some(),
+                pressable: view.events.contains(EventKind::Press),
+                states,
+            });
+            stack.extend(
+                children
+                    .into_iter()
+                    .rev()
+                    .map(|child| (child, Some(id), hidden, disabled)),
+            );
+        }
+        nodes
     }
 
     /// The window is `size` (what lies outside it is not on screen).
@@ -1660,6 +1817,27 @@ impl Screen {
         self.keymap.as_deref()
     }
 
+    #[cfg(all(not(target_arch = "wasm32"), feature = "agent"))]
+    pub(crate) fn semantic_keybindings(&self) -> Vec<crate::agent::SemanticKeybinding> {
+        use crate::agent::SemanticKeybinding;
+        let mut bindings = Vec::new();
+        if let Some(keymap) = self.keymap() {
+            bindings.extend(keymap.bindings().iter().map(|binding| {
+                let chord = binding.keystroke.to_string();
+                SemanticKeybinding {
+                    id: format!("keymap.{}.{}", binding.id, chord.replace('+', "-")),
+                    chord,
+                    ..SemanticKeybinding::default()
+                }
+            }));
+        }
+        if let Some(menu) = self.menu() {
+            let mut path = Vec::new();
+            menu_keybindings(menu, &mut path, &mut bindings);
+        }
+        bindings
+    }
+
     /// Whether a JS responder keeps native drags from starting.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn js_block(&self) -> bool {
@@ -1814,6 +1992,65 @@ impl Screen {
     }
 }
 
+#[cfg(all(not(target_arch = "wasm32"), feature = "agent"))]
+fn menu_keybindings(
+    items: &[nsh_core::desktop::MenuItem],
+    path: &mut Vec<String>,
+    out: &mut Vec<crate::agent::SemanticKeybinding>,
+) {
+    use nsh_core::desktop::MenuItem;
+
+    for item in items {
+        match item {
+            MenuItem::Submenu {
+                label,
+                enabled: true,
+                items,
+            } => {
+                path.push(label.clone());
+                menu_keybindings(items, path, out);
+                path.pop();
+            }
+            MenuItem::Action(action) if action.enabled => {
+                let Some(shortcut) = action.shortcut else {
+                    continue;
+                };
+                let mut keys: Vec<String> = Vec::new();
+                if shortcut.ctrl {
+                    keys.push("ctrl".to_owned());
+                }
+                if shortcut.alt {
+                    keys.push("alt".to_owned());
+                }
+                if shortcut.shift {
+                    keys.push("shift".to_owned());
+                }
+                if shortcut.meta {
+                    keys.push("cmd".to_owned());
+                }
+                keys.push(shortcut.key.label().to_lowercase());
+                let chord = keys.join("+");
+                let mut menu_path = path.clone();
+                menu_path.push(action.label.clone());
+                let id = format!("menu.{}#{}", menu_path.join("/"), action.id);
+                let label = if action.label.is_empty() {
+                    action.role.map_or("", MenuRole::label)
+                } else {
+                    &action.label
+                };
+                out.push(crate::agent::SemanticKeybinding {
+                    id,
+                    chord,
+                    label: Some(label.to_owned()),
+                    menu_path: Some(menu_path),
+                    menu_action_id: Some(action.id),
+                });
+            }
+            MenuItem::Separator | MenuItem::Submenu { .. } | MenuItem::Action(_) => {}
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1891,6 +2128,39 @@ mod tests {
         screen.nodes.get_mut(&2).unwrap().clips = false;
         screen.nodes.get_mut(&2).unwrap().pointer_events = PointerEvents::BoxOnly;
         assert_eq!(screen.pressable(&selector), Pick::None);
+    }
+
+    #[cfg(feature = "agent")]
+    #[test]
+    fn semantic_keybindings_retain_menu_paths_and_action_ids() {
+        use nsh_core::{
+            desktop::{MenuAction, MenuItem, Shortcut},
+            keymap::When,
+        };
+
+        let items = [MenuItem::Submenu {
+            label: "File".into(),
+            enabled: true,
+            items: vec![MenuItem::Action(MenuAction {
+                id: 19,
+                label: "Save".into(),
+                shortcut: Some(Shortcut::parse("ctrl+s", false).unwrap()),
+                enabled: true,
+                checked: None,
+                role: None,
+                when: When::Auto,
+            })],
+        }];
+        let mut bindings = Vec::new();
+        menu_keybindings(&items, &mut Vec::new(), &mut bindings);
+        assert_eq!(bindings.len(), 1);
+        assert_eq!(bindings[0].id, "menu.File/Save#19");
+        assert_eq!(bindings[0].chord, "ctrl+s");
+        assert_eq!(
+            bindings[0].menu_path.as_deref(),
+            Some(&["File".to_owned(), "Save".to_owned()][..])
+        );
+        assert_eq!(bindings[0].menu_action_id, Some(19));
     }
 
     fn batch(items: Vec<MountItem>) -> MountBatch {
@@ -2121,5 +2391,67 @@ mod tests {
         screen.apply(&batch(vec![linked(Vec::new())]));
         assert_eq!(pick(&screen, "Privacy"), Pick::None);
         assert_eq!(screen.span(102), None);
+    }
+
+    #[cfg(feature = "agent")]
+    #[test]
+    fn semantic_tree_keeps_offscreen_nodes_and_omits_hidden_subtrees() {
+        let mut screen = Screen::default();
+        let mut group = View {
+            disabled: true,
+            accessible: Some(true),
+            ..View::default()
+        };
+        group.test_id = Some("group".into());
+        let child = View {
+            test_id: Some("offscreen".into()),
+            ..View::default()
+        };
+        let hidden = View {
+            accessibility_hidden: true,
+            ..View::default()
+        };
+        screen.nodes.insert(10, group);
+        screen.nodes.insert(11, child);
+        screen.nodes.insert(12, hidden);
+        screen.nodes.insert(13, View::default());
+        screen.children.insert(ROOT, vec![10, 12]);
+        screen.children.insert(10, vec![11]);
+        screen.children.insert(12, vec![13]);
+
+        let nodes = screen.semantic_nodes();
+        assert_eq!(
+            nodes.iter().map(|node| node.id).collect::<Vec<_>>(),
+            [ROOT, 10, 11]
+        );
+        assert!(nodes[1].grouped);
+        assert!(!nodes[1].enabled);
+        assert!(!nodes[2].enabled);
+        assert_eq!(nodes[2].parent, Some(10));
+    }
+
+    #[cfg(feature = "agent")]
+    #[test]
+    fn semantic_roles_are_inferred_from_view_kind_and_events() {
+        assert_eq!(
+            semantic_role(AccessibilityRole::None, Some(ViewKind::Text), false),
+            "text"
+        );
+        assert_eq!(
+            semantic_role(AccessibilityRole::None, Some(ViewKind::Input), false),
+            "textbox"
+        );
+        assert_eq!(
+            semantic_role(AccessibilityRole::None, Some(ViewKind::Scroll), false),
+            "scroll"
+        );
+        assert_eq!(
+            semantic_role(AccessibilityRole::None, Some(ViewKind::View), true),
+            "button"
+        );
+        assert_eq!(
+            semantic_role(AccessibilityRole::Button, Some(ViewKind::Text), false),
+            "button"
+        );
     }
 }
