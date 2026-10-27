@@ -1382,6 +1382,16 @@ define_class!(
 );
 
 impl InputState {
+    /// How many characters a masked input (`secure`) holds; `None` when it
+    /// shows its text. All the gpui-agent host tells of a masked input.
+    #[cfg(feature = "gpui-agent")]
+    pub(crate) fn masked_len(&self) -> Option<usize> {
+        self.config
+            .borrow()
+            .secure
+            .then(|| self.editor.borrow().text().chars().count())
+    }
+
     fn update_placeholder(&self) {
         let editor = self.editor.borrow();
         let shown = matches!(&*editor, Editor::Area { .. })
