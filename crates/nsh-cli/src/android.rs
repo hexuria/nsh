@@ -6,7 +6,7 @@ use std::{
     env, fs,
     io::{Read as _, Write as _},
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
 };
 
 use anyhow::{Context as _, bail};
@@ -521,8 +521,83 @@ pub(crate) fn adb(sdk: &Sdk, serial: &str, args: &[&str]) -> anyhow::Result<Stri
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
+/// [`adb`] with `input` on adb's standard input, so it is in no process's
+/// arguments; it is redacted from the error.
+pub(crate) fn adb_with_input(
+    sdk: &Sdk,
+    serial: &str,
+    args: &[&str],
+    input: &str,
+) -> anyhow::Result<String> {
+    let mut child = Command::new(sdk.adb())
+        .args(["-s", serial])
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("run adb")?;
+    // Closed once written: the device's command reads to its end.
+    child
+        .stdin
+        .take()
+        .context("adb's standard input")?
+        .write_all(input.as_bytes())
+        .context("write to adb")?;
+    let output = child.wait_with_output().context("run adb")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = if input.is_empty() {
+            stderr.into_owned()
+        } else {
+            stderr.replace(input, "<redacted>")
+        };
+        bail!("adb {} failed: {}", args.join(" "), stderr.trim());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// `words` as one command of the device's shell, each quoted: `adb shell`
+/// joins its arguments with spaces and the device's shell parses them.
+pub(crate) fn shell_command(words: &[&str]) -> String {
+    words
+        .iter()
+        .map(|word| {
+            let plain = !word.is_empty()
+                && word.chars().all(|c| {
+                    c.is_ascii_alphanumeric()
+                        || matches!(c, '_' | '-' | '.' | '/' | ':' | ',' | '=' | '@' | '%' | '+')
+                });
+            if plain {
+                (*word).to_owned()
+            } else {
+                format!("'{}'", word.replace('\'', "'\\''"))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn shell_commands_quote_what_the_shell_would_read() {
+        assert_eq!(
+            super::shell_command(&[
+                "am",
+                "start",
+                "--es",
+                "url",
+                "http://127.0.0.1:8080/?a=1&b=2"
+            ]),
+            "am start --es url 'http://127.0.0.1:8080/?a=1&b=2'"
+        );
+        assert_eq!(
+            super::shell_command(&["[::1]:17421", "it's", "", "$(id)"]),
+            r"'[::1]:17421' 'it'\''s' '' '$(id)'"
+        );
+    }
+
     #[test]
     fn a_rust_app_runs_its_root() {
         let apk = |rust| super::Apk {
