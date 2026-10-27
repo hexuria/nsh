@@ -219,9 +219,6 @@ impl Native for WebNative {
     }
 
     fn text_bounds(&self, text: NodeId, start: u32, end: u32) -> Option<Bounds<Points>> {
-        if !self.agent {
-            return None;
-        }
         let [x, y, width, height] = self
             .query::<Option<[f32; 4]>>(SceneQuery::TextBounds {
                 id: text,
