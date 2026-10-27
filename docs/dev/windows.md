@@ -35,7 +35,7 @@ The Windows binaries are built for the machine itself, so the CLI finds them in 
 `nsh-dev` and xtask).
 
 Features: `js` (default; JS apps; without it the crate only runs Rust apps and links no QuickJS) and `dev` (the dev
-server client, log forwarding, the error overlay: `dev.rs`). The host turns on `dev`, the runner only `js`.
+server client, log forwarding, the error overlay: `dev.rs`). The host turns on `dev-agent` (which implies `dev`), the runner only `js`.
 
 ### GPUI-agent development attachment
 
@@ -46,8 +46,11 @@ argument, logged, or written to an artifact.
 
 The attached native surface uses the same Win32 input, rendering, hit testing, focus, menu, resize and screenshot
 paths as the host. It returns errors rather than fabricating results when the surface is gone, an operation times out,
-or a requested native action cannot be proved. A dispatch timeout makes the attached connection unavailable until the
-host is restarted; there are no retries.
+or a requested native action cannot be proved. A call the main thread does not answer within 10 s fails on its own and later calls
+go on; the attachment becomes unavailable only when its window is gone. The worker attaches once per host process, to
+its first window; a failed bind is logged as one. While the window is minimized, or the engine has yet to lay the app
+out at a new window size, steps wait for that layout and then fail with `the viewport is not laid out yet` if it does
+not come. Strict actions try one reveal scroll before refusing a target as offscreen.
 
 ## Architecture
 
