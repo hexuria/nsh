@@ -126,6 +126,13 @@ pub(crate) struct Surface {
     /// The GPU device shader views render with, opened when the first
     /// shader is mounted (`None` inside: there is none).
     shader_renderer: std::cell::OnceCell<Option<Rc<nsh_engine::shader::Renderer>>>,
+    /// The GPUI-agent model; independent of an `nsh test` model.
+    #[cfg(feature = "dev-agent")]
+    agent_model: Arc<nsh_testing::agent::Model>,
+    #[cfg(feature = "dev-agent")]
+    agent_alive: Arc<AtomicBool>,
+    #[cfg(feature = "dev-agent")]
+    agent_worker: RefCell<Option<nsh_gpui_agent::WorkerHandle>>,
     /// Where `asset:/` image URIs resolve ([`crate::image::set_asset_base`]).
     pub(crate) asset_base: RefCell<Option<crate::image::AssetBase>>,
     /// The disk cache of downloaded images ([`crate::image::set_disk_cache`]).
@@ -186,6 +193,12 @@ impl Surface {
             #[cfg(feature = "dev")]
             test_model: RefCell::default(),
             shader_renderer: std::cell::OnceCell::new(),
+            #[cfg(feature = "dev-agent")]
+            agent_model: Arc::default(),
+            #[cfg(feature = "dev-agent")]
+            agent_alive: Arc::new(AtomicBool::new(true)),
+            #[cfg(feature = "dev-agent")]
+            agent_worker: RefCell::default(),
             asset_base: RefCell::new(None),
             image_cache: RefCell::new(None),
             access: RefCell::new(Arc::default()),
@@ -196,6 +209,8 @@ impl Surface {
             fps: RefCell::new(None),
         });
         SURFACES.with(|s| s.borrow_mut().insert(key, Rc::downgrade(&surface)));
+        #[cfg(feature = "dev-agent")]
+        surface.start_agent();
         let weak = Rc::downgrade(&surface);
         root.on_resize(move |width, height| {
             if let Some(surface) = weak.upgrade() {
@@ -259,6 +274,32 @@ impl Surface {
         *self.test_model.borrow_mut() = model;
     }
 
+    #[cfg(feature = "dev-agent")]
+    fn start_agent(&self) {
+        let agent = Arc::new(nsh_testing::agent::Agent::requiring_native_hit_test(
+            self.agent_model.clone(),
+            Box::new(crate::agent::LinuxNative::attached(
+                self.key,
+                self.agent_alive.clone(),
+            )),
+        ));
+        let host = match nsh_gpui_agent::NshAgentHost::new(
+            "Native Shell",
+            nsh_gpui_agent::PlatformKind::Desktop,
+            agent,
+        ) {
+            Ok(host) => host,
+            Err(_) => {
+                log::error!("cannot construct the GPUI-agent development host");
+                return;
+            }
+        };
+        match nsh_gpui_agent::start_from_env(host) {
+            Ok(worker) => *self.agent_worker.borrow_mut() = worker,
+            Err(_) => log::error!("invalid GPUI_AGENT development configuration"),
+        }
+    }
+
     /// Starts `config`'s app, replacing what ran.
     pub(crate) fn start(self: &Rc<Self>, mut config: EngineConfig) {
         self.stop();
@@ -312,6 +353,8 @@ impl Surface {
 
     /// Stops the app and removes its views.
     pub(crate) fn stop(&self) {
+        #[cfg(feature = "dev-agent")]
+        self.agent_model.reset();
         // Dropping the engine joins its thread.
         self.control.borrow_mut().take();
         self.engine.borrow_mut().take();
@@ -413,11 +456,21 @@ impl Surface {
                     if let Some(model) = &*self.test_model.borrow() {
                         model.error(message.clone());
                     }
+                    #[cfg(feature = "dev-agent")]
+                    self.agent_model.error(message.clone());
                     if let Some(f) = &*self.on_error.borrow() {
                         f(&message);
                     }
                 }
-                Message::Frame => self.js_frame.set(true),
+                Message::Frame => {
+                    self.js_frame.set(true);
+                    #[cfg(feature = "dev")]
+                    if let Some(model) = &*self.test_model.borrow() {
+                        model.frame();
+                    }
+                    #[cfg(feature = "dev-agent")]
+                    self.agent_model.frame();
+                }
                 Message::HotUpdateFailed => {
                     if let Some(f) = &*self.on_hot_update_failed.borrow() {
                         f();
@@ -447,6 +500,8 @@ impl Surface {
         if let Some(model) = &*self.test_model.borrow() {
             model.apply(batch);
         }
+        #[cfg(feature = "dev-agent")]
+        self.agent_model.apply(batch);
     }
 
     /// Writes the animated values to the views and reports finished
@@ -506,6 +561,8 @@ impl Surface {
 
 impl Drop for Surface {
     fn drop(&mut self) {
+        #[cfg(feature = "dev-agent")]
+        self.agent_alive.store(false, Ordering::Release);
         let key = self.key;
         let _ = SURFACES.try_with(|s| s.borrow_mut().remove(&key));
     }
