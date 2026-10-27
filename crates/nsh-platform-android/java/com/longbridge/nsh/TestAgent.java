@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit;
  * window's views, so they take the path real ones take (scroll views, text
  * fields, gesture detectors). The agent calls from a thread of its own;
  * each call does its work on the main thread and returns when it is done.
- * Coordinates are pixels from the window's top left.
+ * Coordinates are pixels from the NshView's top left.
  */
 final class TestAgent {
     private TestAgent() {}
@@ -39,30 +39,102 @@ final class TestAgent {
 
     /** `call` on the main thread, waited for (10 s at most); null on failure. */
     private static <T> T onMain(Callable<T> call) {
+        return onMain(call, null);
+    }
+
+    private static <T> T onMain(Callable<T> call, T fallback) {
         FutureTask<T> task = new FutureTask<>(call);
         MAIN.post(task);
         try {
             return task.get(10, TimeUnit.SECONDS);
         } catch (Exception e) {
             android.util.Log.w("nsh", "test agent: " + e);
-            return null;
+            return fallback;
         }
     }
 
-    /** The view of node `id`'s bounds in the window: x, y, width, height; null when it does not show. */
+    /** The view of node `id`'s bounds in NshView coordinates; null when it does not show. */
     static float[] bounds(NshView host, int id) {
         return onMain(() -> {
             View v = host.mounter().views.get(id);
             if (v == null || !v.isShown()) return null;
-            int[] at = new int[2];
-            v.getLocationInWindow(at);
-            return new float[] {at[0], at[1], v.getWidth(), v.getHeight()};
+            int[] at = screenLocation(v), origin = screenLocation(host);
+            return new float[] {at[0] - origin[0], at[1] - origin[1],
+                    v.getWidth(), v.getHeight()};
         });
+    }
+
+    static int hitAt(NshView host, float x, float y) {
+        return onMain(() -> {
+            View root = target(host);
+            float[] point = targetPoint(host, x, y);
+            View hit = deepest(root, point[0], point[1]);
+            for (View view = hit; view != null; view = view.getParent() instanceof View
+                    ? (View) view.getParent() : null) {
+                for (int i = 0; i < host.mounter().views.size(); i++) {
+                    if (host.mounter().views.valueAt(i) == view) {
+                        return host.mounter().views.keyAt(i);
+                    }
+                }
+            }
+            return hit == null ? -1 : Integer.MIN_VALUE;
+        }, Integer.MIN_VALUE);
+    }
+
+    private static View deepest(View view, float x, float y) {
+        if (!view.isShown()) {
+            return null;
+        }
+        boolean inside = x >= 0 && y >= 0 && x < view.getWidth() && y < view.getHeight();
+        boolean clipped = view instanceof ViewGroup && (((ViewGroup) view).getClipChildren()
+                || view instanceof Box && ((Box) view).clip
+                || view instanceof android.widget.ScrollView
+                || view instanceof android.widget.HorizontalScrollView);
+        boolean overflow = view instanceof Box && !((Box) view).clip
+                && ((Box) view).overflow != null && ((Box) view).overflow.contains(x, y);
+        if (!inside && (clipped || !overflow)) return null;
+        if (view instanceof Box && ((Box) view).pointerEvents == 1) return null;
+        if (view instanceof ViewGroup
+                && (!(view instanceof Box) || ((Box) view).pointerEvents != 3)) {
+            ViewGroup group = (ViewGroup) view;
+            java.util.ArrayList<View> children = new java.util.ArrayList<>();
+            for (int i = 0; i < group.getChildCount(); i++) children.add(group.getChildAt(i));
+            children.sort((a, b) -> {
+                int z = Float.compare(a.getZ(), b.getZ());
+                return z != 0 ? z : Integer.compare(group.indexOfChild(a), group.indexOfChild(b));
+            });
+            for (int i = children.size() - 1; i >= 0; i--) {
+                View child = children.get(i);
+                float[] point = {x + group.getScrollX() - child.getLeft(),
+                        y + group.getScrollY() - child.getTop()};
+                android.graphics.Matrix inverse = new android.graphics.Matrix();
+                if (!child.getMatrix().invert(inverse)) continue;
+                inverse.mapPoints(point);
+                View hit = deepest(child, point[0], point[1]);
+                if (hit != null) return hit;
+            }
+        }
+        if (!inside) return null;
+        if (view instanceof Box && ((Box) view).pointerEvents == 2) return null;
+        return view;
+    }
+
+    private static int[] screenLocation(View view) {
+        int[] at = new int[2];
+        view.getLocationOnScreen(at);
+        return at;
+    }
+
+    /** Converts NshView-local coordinates to the active target window. */
+    private static float[] targetPoint(NshView host, float x, float y) {
+        int[] origin = screenLocation(host);
+        int[] target = screenLocation(target(host));
+        return new float[] {x + origin[0] - target[0], y + origin[1] - target[1]};
     }
 
     /**
      * Where the characters {@code start}..{@code end} (UTF-16 units) of
-     * text view {@code id} are on their first line, in the window: x, y,
+     * text view {@code id} are on their first line, in NshView coordinates: x, y,
      * width, height; null when it does not show.
      */
     static float[] textBounds(NshView host, int id, int start, int end) {
@@ -76,35 +148,83 @@ final class TestAgent {
             // for an empty range, or one past the text).
             float[] boxes = TextLayouts.rangeRects(layout, start, end, 1f);
             if (boxes.length < 4) return null;
-            int[] at = new int[2];
-            v.getLocationInWindow(at);
+            int[] at = screenLocation(v), origin = screenLocation(host);
             return new float[] {
-                at[0] + text.contentX() + boxes[0],
-                at[1] + text.contentY() + boxes[1],
+                at[0] - origin[0] + text.contentX() + boxes[0],
+                at[1] - origin[1] + text.contentY() + boxes[1],
                 boxes[2],
                 boxes[3],
             };
         });
     }
 
-    /** The window's content size: width, height. */
+    /** The NshView's content size: width, height. */
     static float[] viewport(NshView host) {
+        return onMain(() -> new float[] {host.getWidth(), host.getHeight()});
+    }
+
+    static boolean focusNode(NshView host, int id) {
+        return onMain(() -> {
+            View view = host.mounter().views.get(id);
+            if (!(view instanceof InputBox)) return false;
+            InputBox input = (InputBox) view;
+            host.getRootView().clearFocus();
+            input.edit.setFocusableInTouchMode(true);
+            return input.edit.requestFocus();
+        }, false);
+    }
+
+    static boolean appFocused(NshView host) {
+        return onMain(host::hasWindowFocus, false);
+    }
+
+    static boolean resizeViewport(NshView host, int width, int height) {
         return onMain(() -> {
             View root = host.getRootView();
-            return new float[] {root.getWidth(), root.getHeight()};
-        });
+            if (width <= 0 || height <= 0 || width > root.getWidth() || height > root.getHeight()) {
+                return false;
+            }
+            android.view.ViewGroup.LayoutParams params = host.getLayoutParams();
+            if (params == null) return false;
+            params.width = width;
+            params.height = height;
+            host.setLayoutParams(params);
+            host.requestLayout();
+            root.requestLayout();
+            return true;
+        }, false);
+    }
+
+    static boolean hover(NshView host, float x, float y) {
+        return onMain(() -> {
+            View root = target(host);
+            float[] point = targetPoint(host, x, y);
+            long now = SystemClock.uptimeMillis();
+            MotionEvent event = MotionEvent.obtain(now, now, MotionEvent.ACTION_HOVER_ENTER,
+                    point[0], point[1], 0);
+            event.setSource(android.view.InputDevice.SOURCE_MOUSE);
+            root.dispatchGenericMotionEvent(event);
+            event.recycle();
+            event = MotionEvent.obtain(now, now, MotionEvent.ACTION_HOVER_MOVE,
+                    point[0], point[1], 0);
+            event.setSource(android.view.InputDevice.SOURCE_MOUSE);
+            root.dispatchGenericMotionEvent(event);
+            event.recycle();
+            return true;
+        }, false);
     }
 
     /** The time the finger went down, for the events of one gesture. */
     private static long downTime;
 
-    /** One finger's `action` (`MotionEvent.ACTION_*`) at `x`, `y` in the window. */
+    /** One finger's `action` (`MotionEvent.ACTION_*`) at `x`, `y` in NshView coordinates. */
     static void touch(NshView host, int action, float x, float y) {
         onMain(() -> {
             long now = SystemClock.uptimeMillis();
             if (action == MotionEvent.ACTION_DOWN) downTime = now;
             View root = target(host);
-            MotionEvent e = MotionEvent.obtain(downTime, now, action, x, y, 0);
+            float[] point = targetPoint(host, x, y);
+            MotionEvent e = MotionEvent.obtain(downTime, now, action, point[0], point[1], 0);
             e.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
             root.dispatchTouchEvent(e);
             e.recycle();
@@ -129,7 +249,9 @@ final class TestAgent {
                     int action = at == 0 ? MotionEvent.ACTION_DOWN
                             : at == last ? MotionEvent.ACTION_UP : MotionEvent.ACTION_MOVE;
                     long now = SystemClock.uptimeMillis();
-                    MotionEvent e = MotionEvent.obtain(start, now, action, xs[at], ys[at], 0);
+                    float[] point = targetPoint(host, xs[at], ys[at]);
+                    MotionEvent e = MotionEvent.obtain(start, now, action,
+                            point[0], point[1], 0);
                     e.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
                     target(host).dispatchTouchEvent(e);
                     e.recycle();
