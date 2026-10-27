@@ -3283,6 +3283,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "nsh-gpui-agent"
+version = "0.3.0"
+dependencies = [
+ "gpui-agent",
+ "nsh-core",
+ "nsh-dev",
+ "nsh-testing",
+ "serde_json",
+]
+
+[[package]]
 name = "nsh-ios-app"
 version = "0.3.0"
 dependencies = [
