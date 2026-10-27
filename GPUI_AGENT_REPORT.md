@@ -319,7 +319,7 @@ RUSTFLAGS='-A clippy::missing_const_for_thread_local' cargo xtask clippy-android
 
 The Android clippy allowance is limited to the existing `nsh-core` `missing_const_for_thread_local` warnings in `element/engine_context.rs:67`, `element/renderer.rs:72`, and `time.rs:54`; no unrelated core lint changes were made. Live two-reload acceptance was not repeated: its evidence remains pre-merge. The existing galleries, VNC, emulator, and scrcpy processes were left running.
 
-The outstanding `Default` convention question remains unresolved by design: do not invent `Default` implementations for `NshAgentHost` or `WorkerHandle`, since valid construction requires real resources. This still needs an owner decision or an explicit convention exception.
+The repository owner approved a narrow exception to the `Default` convention for `NshAgentHost` and `WorkerHandle`. Both retain their validated construction paths because valid instances require real runtime resources; no inert `Default` implementations are added. This approval resolves the convention finding and is not approval to merge.
 
 ## Button-label press owner correction
 
