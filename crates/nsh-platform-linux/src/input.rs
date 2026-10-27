@@ -834,6 +834,8 @@ fn pick(root: &NshView, x: f32, y: f32) -> Option<Hit> {
     pick_in(root, graphene::Point::new(x, y))
 }
 
+/// The node whose view takes a press at (`x`, `y`) of the root (`agent.rs`).
+#[cfg(feature = "dev")]
 pub(crate) fn pick_node(root: &NshView, x: f32, y: f32) -> Option<nsh_core::NodeId> {
     pick(root, x, y).map(|hit| hit.view.state().id)
 }
