@@ -123,7 +123,8 @@ impl AgentHost for NshAgentHost {
             ready: self.agent.native_available()
                 && self.agent.has_rendered_batch().unwrap_or(false)
                 && self.agent.semantic_nodes().is_ok()
-                && self.agent.native_available(),
+                && self.agent.native_available()
+                && self.agent.native_laid_out().is_ok(),
             deliveries: vec![gpui_agent::DeliveryMode::Semantic],
             auth: if self.token_required {
                 HelloAuth::Required
@@ -137,6 +138,7 @@ impl AgentHost for NshAgentHost {
     }
 
     fn snapshot(&self) -> UiTree {
+        let _ = self.agent.take_native_failure();
         if !self.agent.native_available()
             || !matches!(self.agent.has_rendered_batch(), Ok(true))
             || self.agent.native_laid_out().is_err()
@@ -167,7 +169,11 @@ impl AgentHost for NshAgentHost {
             })
             .map(|node| ui_node(node, &index, self.agent.as_ref()))
             .collect();
-        if !self.agent.native_available() {
+        // A resize or a failed call while the nodes were read.
+        if !self.agent.native_available()
+            || self.agent.native_laid_out().is_err()
+            || self.agent.take_native_failure().is_some()
+        {
             return UiTree {
                 app: self.app.clone(),
                 platform: self.platform,
@@ -187,7 +193,11 @@ impl AgentHost for NshAgentHost {
 
     fn dispatch(&mut self, op: &Op) -> Result<DispatchResult, String> {
         self.require_available()?;
+        let _ = self.agent.take_native_failure();
         let result = self.dispatch_available(op);
+        if let Some(failure) = self.agent.take_native_failure() {
+            return Err(failure);
+        }
         if self.agent.native_available() {
             result
         } else {
@@ -601,12 +611,19 @@ pub fn validate_worker_config(addr: SocketAddr, token: &str) -> Result<(), Strin
 pub struct WorkerHandle {
     addr: SocketAddr,
     shutdown: Arc<AtomicBool>,
+    running: Arc<AtomicBool>,
 }
 
 impl WorkerHandle {
     /// The address selected by the operating system.
     pub fn local_addr(&self) -> SocketAddr {
         self.addr
+    }
+
+    /// Whether it still serves: not once its accept loop ended or a
+    /// shutdown was requested (a client's `shutdown` request sets that too).
+    pub fn is_running(&self) -> bool {
+        self.running.load(Ordering::Acquire) && !self.shutdown.load(Ordering::Acquire)
     }
 }
 
@@ -628,14 +645,20 @@ pub fn spawn_worker(
     let server = AgentServer::bind(addr, Some(token)).map_err(|error| error.to_string())?;
     let local_addr = server.local_addr().map_err(|error| error.to_string())?;
     let shutdown = server.shutdown_handle();
+    let running = Arc::new(AtomicBool::new(true));
+    let serving = running.clone();
     let thread = std::thread::Builder::new()
         .name("nsh-gpui-agent".into())
-        .spawn(move || server.serve_host(Arc::new(Mutex::new(host))))
+        .spawn(move || {
+            server.serve_host(Arc::new(Mutex::new(host)));
+            serving.store(false, Ordering::Release);
+        })
         .map_err(|error| error.to_string())?;
     drop(thread);
     Ok(WorkerHandle {
         addr: local_addr,
         shutdown,
+        running,
     })
 }
 
@@ -789,7 +812,6 @@ mod tests {
         }
     }
 
-    /// Available, and node 3's native input text.
     /// Available, the text of a masked input, not laid out.
     struct SnapshotNative(bool, Option<String>, bool);
 
@@ -990,6 +1012,15 @@ mod tests {
         let snapshot = host.snapshot();
         assert!(!snapshot.ready);
         assert!(snapshot.nodes.is_empty());
+    }
+
+    #[test]
+    fn hello_is_not_ready_while_the_viewport_is_not_laid_out() {
+        let host = snapshot_host_with_native(
+            SnapshotScene(Ok(sample_nodes()), 1, Default::default()),
+            SnapshotNative(true, None, true),
+        );
+        assert!(!host.hello().ready);
     }
 
     #[test]
