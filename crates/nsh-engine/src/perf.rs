@@ -236,7 +236,7 @@ fn jank_line(
         let _ = write!(line, " {kind} {:.1}ms", ms_f(*d));
     }
     if !mounted.is_empty() {
-        mounted.sort_by(|a, b| b.1.cmp(&a.1));
+        mounted.sort_by_key(|&(_, n)| std::cmp::Reverse(n));
         let list: Vec<String> = mounted
             .iter()
             .take(6)
