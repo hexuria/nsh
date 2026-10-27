@@ -861,7 +861,7 @@ extern "system" fn Java_com_longbridge_nsh_Native_imageCacheLookup<'local>(
                 .iter()
                 .flat_map(|(name, value)| [*name, value.as_str()])
                 .collect();
-            string_array(&mut env, &strings).unwrap_or(JObject::null())
+            string_array(&mut env, &strings).unwrap_or_else(|| JObject::null())
         }
         Lookup::Miss => JObject::null(),
     }
@@ -920,9 +920,7 @@ extern "system" fn Java_com_longbridge_nsh_Native_imageCacheComplete<'local>(
             }
         }
         let pairs = strings
-            .as_chunks::<2>()
-            .0
-            .iter()
+            .chunks_exact(2)
             .map(|pair| (pair[0].as_str(), pair[1].as_str()));
         let body = if body.is_null() {
             Vec::new()
