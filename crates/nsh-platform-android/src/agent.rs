@@ -269,10 +269,6 @@ impl Native for AndroidNative {
         Size::new(Points(v[0] / self.density), Points(v[1] / self.density))
     }
 
-    fn mouse(&self) -> bool {
-        true
-    }
-
     fn hover(&self, at: Point<Points>) -> Result<(), String> {
         if !self.available() {
             return Err("the app is gone".into());
