@@ -465,6 +465,11 @@ pub struct SemanticNode {
     /// is a hit inside this node.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hidden_descendants: Vec<NodeId>,
+    /// Those of [`SemanticNode::hidden_descendants`] a press goes to a
+    /// hidden view of their own: each with that view (itself, or the
+    /// innermost hidden view around it that takes presses).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hidden_press_owners: Vec<(NodeId, NodeId)>,
 }
 
 /// A keyboard shortcut the host can fire through its native input path.
@@ -2360,9 +2365,25 @@ impl Agent {
             visible.center()
         };
         let parents = mounted_parents(&nodes);
+        // A press on a hidden view that takes presses itself goes to it,
+        // not to the target.
+        let hidden_press_owners: std::collections::HashMap<NodeId, NodeId> = nodes
+            .iter()
+            .flat_map(|node| node.hidden_press_owners.iter().copied())
+            .collect();
         let deadline = Instant::now() + Duration::from_millis(100);
         loop {
             match self.native.hit_at(at) {
+                Ok(Some(hit))
+                    if press_owner.is_some()
+                        && let Some(&receiver) = hidden_press_owners.get(&hit) =>
+                {
+                    return Err(format!(
+                        "`{selector}`: a press at ({}, {}) goes to node {receiver}, an \
+                         accessibility-hidden view that takes presses itself",
+                        at.x.0, at.y.0
+                    ));
+                }
                 Ok(Some(hit))
                     if is_descendant_or_same(hit, native_owner, &parents)
                         || press_owner.is_some_and(|owner| {
@@ -3112,6 +3133,79 @@ mod tests {
                 assert!(result.unwrap_err().contains("occluded_by: 4"));
                 assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 0);
             }
+        }
+    }
+
+    /// A press on a button whose point lands on an accessibility-hidden
+    /// child (or a view inside it) that takes presses itself is refused:
+    /// the child would get it.
+    #[test]
+    fn a_press_refuses_a_hidden_child_that_takes_presses_itself() {
+        use nsh_core::{EventMask, MountItem, ViewKind, ViewProps, geometry::Size};
+
+        let bounds = [(
+            2,
+            Bounds::new(point(px(20.0), px(0.0)), size(px(60.0), px(100.0))),
+        )];
+        for hit in [3, 5] {
+            let model = gate_scene(ViewKind::View, false, false);
+            let mut hidden = ViewProps::default();
+            hidden.accessibility.hidden = true;
+            let mut events = EventMask::default();
+            events.set(EventKind::Press, true);
+            model.apply(&MountBatch {
+                items: vec![
+                    // A hidden child of the button with its own press
+                    // handler, and a view inside it.
+                    MountItem::Create {
+                        id: 3,
+                        kind: ViewKind::View,
+                    },
+                    MountItem::ViewProps {
+                        id: 3,
+                        props: Box::new(hidden),
+                    },
+                    MountItem::Events { id: 3, events },
+                    MountItem::Insert {
+                        parent: 2,
+                        child: 3,
+                        before: None,
+                    },
+                    MountItem::Create {
+                        id: 5,
+                        kind: ViewKind::View,
+                    },
+                    MountItem::Insert {
+                        parent: 3,
+                        child: 5,
+                        before: None,
+                    },
+                ],
+            });
+            let target = model
+                .semantic_tree()
+                .unwrap()
+                .into_iter()
+                .find(|node| node.id == 2)
+                .unwrap();
+            assert_eq!(target.hidden_descendants, [3, 5]);
+            assert_eq!(target.hidden_press_owners, [(3, 3), (5, 3)]);
+            let presses = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let agent = gate_agent(
+                model,
+                Ok(Some(hit)),
+                &bounds,
+                Size::new(px(100.0), px(100.0)),
+                Arc::new(Mutex::new(Vec::new())),
+                presses.clone(),
+                Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            );
+            let error = agent.press_node(2).unwrap_err();
+            assert!(
+                error.contains("goes to node 3") && error.contains("accessibility-hidden"),
+                "{error}"
+            );
+            assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 0);
         }
     }
 
