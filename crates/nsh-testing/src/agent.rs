@@ -1585,6 +1585,7 @@ impl Agent {
             selected,
             &selector,
             Some(owner),
+            false,
         )?;
         self.native.press(at);
         self.settled()
@@ -1754,26 +1755,37 @@ impl Agent {
         self.settled()
     }
 
-    /// Drags from a point within a checked node to an on-screen native point.
-    pub fn drag_from_to(
+    /// Drags checked node `id` by `delta`: from `from` (in the window's
+    /// content, an error when outside the node's visible area), or from
+    /// the middle of its visible area when `None`.
+    pub fn drag_node_by(
         &self,
         id: NodeId,
-        from: Point<Points>,
-        to: Point<Points>,
+        from: Option<Point<Points>>,
+        delta: Point<Points>,
     ) -> Result<(), String> {
         let selector = format!("node {id}");
         let _ = self.node_point(id)?;
         self.settled()?;
-        let node = self
-            .scene
-            .semantic_tree()?
-            .into_iter()
-            .find(|node| node.id == id)
-            .ok_or_else(|| format!("`{selector}` is offscreen (node unavailable)"))?;
-        let geometry = self
-            .target_geometry(&node)
-            .ok_or_else(|| format!("`{selector}` is offscreen (no native bounds)"))?;
-        let origin = self.actionable_point(id, geometry.owner, from, &selector)?;
+        let origin = match from {
+            Some(from) => {
+                let node = self
+                    .scene
+                    .semantic_tree()?
+                    .into_iter()
+                    .find(|node| node.id == id)
+                    .ok_or_else(|| format!("`{selector}` is offscreen (node unavailable)"))?;
+                let geometry = self
+                    .target_geometry(&node)
+                    .ok_or_else(|| format!("`{selector}` is offscreen (no native bounds)"))?;
+                self.explicit_actionable_point(id, geometry.owner, from, &selector)?
+            }
+            None => self.node_point_without_reveal(id, &selector)?,
+        };
+        let to = Point::new(
+            Points(origin.x.0 + delta.x.0),
+            Points(origin.y.0 + delta.y.0),
+        );
         let viewport = self.native.viewport();
         if to.x.0 < 0.0 || to.y.0 < 0.0 || to.x.0 >= viewport.width.0 || to.y.0 >= viewport.height.0
         {
@@ -1840,7 +1852,7 @@ impl Agent {
         {
             return Err(format!("offscreen: coordinate is outside node {id}"));
         }
-        self.actionable_point(id, id, at, &format!("node {id}"))
+        self.explicit_actionable_point(id, id, at, &format!("node {id}"))
     }
 
     fn node_point_without_reveal(
@@ -2163,7 +2175,19 @@ impl Agent {
         fallback: Point<Points>,
         selector: &str,
     ) -> Result<Point<Points>, String> {
-        self.actionable_point_with_press_owner(id, native_owner, fallback, selector, None)
+        self.actionable_point_with_press_owner(id, native_owner, fallback, selector, None, false)
+    }
+
+    /// [`Agent::actionable_point`] for a point the caller chose: outside
+    /// the target's visible area it is an error, not moved to its middle.
+    fn explicit_actionable_point(
+        &self,
+        id: NodeId,
+        native_owner: NodeId,
+        at: Point<Points>,
+        selector: &str,
+    ) -> Result<Point<Points>, String> {
+        self.actionable_point_with_press_owner(id, native_owner, at, selector, None, true)
     }
 
     fn actionable_point_with_press_owner(
@@ -2173,6 +2197,7 @@ impl Agent {
         fallback: Point<Points>,
         selector: &str,
         press_owner: Option<NodeId>,
+        explicit: bool,
     ) -> Result<Point<Points>, String> {
         if !self.require_hit_test {
             return Ok(fallback);
@@ -2235,6 +2260,11 @@ impl Agent {
         }
         let at = if visible.contains(&fallback) {
             fallback
+        } else if explicit {
+            return Err(format!(
+                "`{selector}` is offscreen at ({}, {}): the point is outside its visible area",
+                fallback.x.0, fallback.y.0
+            ));
         } else {
             visible.center()
         };
@@ -3214,6 +3244,44 @@ mod tests {
             agent.actionable_point(2, 2, selected, "target"),
             Ok(selected)
         );
+    }
+
+    #[test]
+    fn strict_explicit_point_outside_the_visible_target_is_an_error() {
+        use nsh_core::{ViewKind, geometry::Size};
+
+        // The clip hides the target's left part (x 20..40).
+        let clip_bounds = Bounds::new(point(px(40.0), px(0.0)), size(px(60.0), px(100.0)));
+        let target_bounds = Bounds::new(point(px(20.0), px(0.0)), size(px(60.0), px(100.0)));
+        let agent = gate_agent(
+            gate_scene(ViewKind::View, false, true),
+            Ok(Some(2)),
+            &[(1, clip_bounds), (2, target_bounds)],
+            Size::new(px(100.0), px(100.0)),
+            Arc::new(Mutex::new(Vec::new())),
+            Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        );
+        let hidden = point(px(25.0), px(30.0));
+        let visible_center = point(px(60.0), px(50.0));
+        let error = agent
+            .explicit_actionable_point(2, 2, hidden, "target")
+            .unwrap_err();
+        assert!(
+            error.contains("`target`") && error.contains("(25, 30)"),
+            "{error}"
+        );
+        assert_eq!(
+            agent.actionable_point(2, 2, hidden, "target"),
+            Ok(visible_center)
+        );
+        let delta = point(px(10.0), px(0.0));
+        let error = agent.drag_node_by(2, Some(hidden), delta).unwrap_err();
+        assert!(
+            error.contains("`node 2`") && error.contains("(25, 30)"),
+            "{error}"
+        );
+        agent.drag_node_by(2, None, delta).unwrap();
     }
 
     /// A platform whose views are where their ids say (`x` is the id), and
