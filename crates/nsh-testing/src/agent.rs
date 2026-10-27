@@ -392,6 +392,31 @@ pub struct Activity {
     pub since_last: Option<Duration>,
 }
 
+/// The native destination represented by a semantic node.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+#[non_exhaustive]
+pub enum SemanticTarget {
+    /// A native view with the same ID as its semantic node.
+    #[default]
+    View,
+    /// A canvas node, with bounds in its canvas owner's local coordinates.
+    Canvas {
+        /// The native canvas view.
+        owner: NodeId,
+        /// The node's bounds relative to its canvas.
+        bounds: Bounds<Points>,
+    },
+    /// A text span, with offsets in UTF-16 code units.
+    Text {
+        /// The native text view.
+        owner: NodeId,
+        /// Inclusive start offset.
+        start: u32,
+        /// Exclusive end offset.
+        end: u32,
+    },
+}
+
 /// Platform-independent accessibility data for one mounted view.
 ///
 /// Nodes are returned in deterministic preorder. Hidden accessibility
@@ -429,6 +454,9 @@ pub struct SemanticNode {
     pub pressable: bool,
     /// The node's accessibility states.
     pub states: Vec<String>,
+    /// The native view or precise native region represented by this node.
+    #[serde(default)]
+    pub native_target: SemanticTarget,
 }
 
 /// A keyboard shortcut the host can fire through its native input path.
@@ -446,6 +474,13 @@ pub struct SemanticKeybinding {
     /// The menu action's stable identifier, when this comes from a menu.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub menu_action_id: Option<u32>,
+}
+
+#[derive(Clone, Copy)]
+struct TargetGeometry {
+    owner: NodeId,
+    bounds: Bounds<Points>,
+    synthetic: bool,
 }
 
 /// The app as an [`Agent`] sees it: the host's [`Model`] (the agent runs on
@@ -520,6 +555,14 @@ pub trait Scene: Send + Sync {
         let _ = selector;
         Ok(None)
     }
+    /// The canvas semantic node, its native owner, and its local bounds.
+    fn canvas_target(
+        &self,
+        selector: &str,
+    ) -> Result<Option<(NodeId, NodeId, Bounds<Points>)>, String> {
+        let _ = selector;
+        Ok(None)
+    }
     /// The view `selector` matches inside view `id` (a text in the button
     /// a press goes to), whose middle a press lands on; `None` when the
     /// match is `id` itself.
@@ -552,6 +595,16 @@ impl Scene for Model {
 
     fn canvas_node(&self, selector: &str) -> Result<Option<(NodeId, Point<Points>)>, String> {
         Ok(self.lock().screen.canvas_node(&Selector::parse(selector)?))
+    }
+
+    fn canvas_target(
+        &self,
+        selector: &str,
+    ) -> Result<Option<(NodeId, NodeId, Bounds<Points>)>, String> {
+        Ok(self
+            .lock()
+            .screen
+            .canvas_target(&Selector::parse(selector)?))
     }
     fn match_inside(&self, selector: &str, id: NodeId) -> Result<Option<NodeId>, String> {
         Ok(self
@@ -811,6 +864,9 @@ pub fn answer(model: &Model, step: &TestStep) -> Option<Result<serde_json::Value
             SceneQuery::CanvasNode { selector } => {
                 model.canvas_node(selector).and_then(|n| json(to_value(n)))
             }
+            SceneQuery::CanvasTarget { selector } => model
+                .canvas_target(selector)
+                .and_then(|n| json(to_value(n))),
             SceneQuery::MatchInside { selector, id } => {
                 model.match_inside(selector, *id).map(Value::from)
             }
@@ -866,6 +922,15 @@ impl Scene for RemoteScene {
 
     fn canvas_node(&self, selector: &str) -> Result<Option<(NodeId, Point<Points>)>, String> {
         self.query(SceneQuery::CanvasNode {
+            selector: selector.into(),
+        })
+    }
+
+    fn canvas_target(
+        &self,
+        selector: &str,
+    ) -> Result<Option<(NodeId, NodeId, Bounds<Points>)>, String> {
+        self.query(SceneQuery::CanvasTarget {
             selector: selector.into(),
         })
     }
@@ -1410,7 +1475,13 @@ impl Agent {
 
     /// Current native bounds for `id`.
     pub fn native_bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
-        self.native.bounds(id)
+        let Ok(nodes) = self.scene.semantic_tree() else {
+            return self.native.bounds(id);
+        };
+        let Some(node) = nodes.iter().find(|node| node.id == id) else {
+            return self.native.bounds(id);
+        };
+        self.target_geometry(node).map(|geometry| geometry.bounds)
     }
 
     /// Current native viewport.
@@ -1426,6 +1497,63 @@ impl Agent {
     /// Current native input value for `id`.
     pub fn native_input_text(&self, id: NodeId) -> Option<String> {
         self.native.input_text(id)
+    }
+
+    fn target_geometry(&self, node: &SemanticNode) -> Option<TargetGeometry> {
+        match &node.native_target {
+            SemanticTarget::View => Some(TargetGeometry {
+                owner: node.id,
+                bounds: self.native.bounds(node.id)?,
+                synthetic: false,
+            }),
+            SemanticTarget::Canvas { owner, bounds } => {
+                let owner_bounds = self.native.bounds(*owner)?;
+                Some(TargetGeometry {
+                    owner: *owner,
+                    bounds: Bounds::new(owner_bounds.origin + bounds.origin, bounds.size),
+                    synthetic: true,
+                })
+            }
+            SemanticTarget::Text { owner, start, end } => Some(TargetGeometry {
+                owner: *owner,
+                bounds: self
+                    .native
+                    .text_bounds(*owner, *start, *end)
+                    .filter(|b| !b.is_empty())?,
+                synthetic: true,
+            }),
+        }
+    }
+
+    fn target_point(&self, id: NodeId, selector: &str) -> Result<Point<Points>, String> {
+        let nodes = self.scene.semantic_tree()?;
+        let node = nodes
+            .iter()
+            .find(|node| node.id == id)
+            .ok_or_else(|| format!("`{selector}` is offscreen (node unavailable)"))?;
+        self.target_point_for_node(node, selector)
+    }
+
+    fn target_point_for_node(
+        &self,
+        node: &SemanticNode,
+        selector: &str,
+    ) -> Result<Point<Points>, String> {
+        match &node.native_target {
+            SemanticTarget::View => self.scroll_into_view(node.id, selector),
+            SemanticTarget::Canvas { owner, bounds } => {
+                self.scroll_point_into_view(*owner, selector, Some(bounds.center()))?;
+                self.target_geometry(node)
+                    .map(|geometry| geometry.bounds.center())
+                    .ok_or_else(|| format!("`{selector}` is offscreen (no native bounds)"))
+            }
+            SemanticTarget::Text { owner, .. } => {
+                self.scroll_into_view(*owner, selector)?;
+                self.target_geometry(node)
+                    .map(|geometry| geometry.bounds.center())
+                    .ok_or_else(|| format!("`{selector}` is offscreen (no native text bounds)"))
+            }
+        }
     }
 
     /// Captures the current surface as actual PNG bytes.
@@ -1473,8 +1601,11 @@ impl Agent {
                 return Err(format!("`{selector}` is not pressable"));
             }
         }
-        let selected = self.scroll_into_view(id, &selector)?;
-        let at = self.actionable_point(id, owner, selected, &selector)?;
+        let selected = self.target_point(id, &selector)?;
+        let geometry = self
+            .target_geometry(target)
+            .ok_or_else(|| format!("`{selector}` is offscreen (no native bounds)"))?;
+        let at = self.actionable_point(id, geometry.owner, selected, &selector)?;
         self.native.press(at);
         self.settled()
     }
@@ -1653,7 +1784,16 @@ impl Agent {
         let selector = format!("node {id}");
         let _ = self.node_point(id)?;
         self.settled()?;
-        let origin = self.actionable_point(id, id, from, &selector)?;
+        let node = self
+            .scene
+            .semantic_tree()?
+            .into_iter()
+            .find(|node| node.id == id)
+            .ok_or_else(|| format!("`{selector}` is offscreen (node unavailable)"))?;
+        let geometry = self
+            .target_geometry(&node)
+            .ok_or_else(|| format!("`{selector}` is offscreen (no native bounds)"))?;
+        let origin = self.actionable_point(id, geometry.owner, from, &selector)?;
         let viewport = self.native.viewport();
         if to.x.0 < 0.0 || to.y.0 < 0.0 || to.x.0 >= viewport.width.0 || to.y.0 >= viewport.height.0
         {
@@ -1687,8 +1827,11 @@ impl Agent {
         if !node.enabled {
             return Err(format!("`{selector}` is disabled"));
         }
-        let at = self.scroll_into_view(id, &selector)?;
-        self.actionable_point(id, id, at, &selector)
+        let at = self.target_point(id, &selector)?;
+        let geometry = self
+            .target_geometry(&node)
+            .ok_or_else(|| format!("`{selector}` is offscreen (no native bounds)"))?;
+        self.actionable_point(id, geometry.owner, at, &selector)
     }
 
     fn checked_point_target(&self, at: Point<Points>) -> Result<Point<Points>, String> {
@@ -1733,11 +1876,10 @@ impl Agent {
         if !node.enabled {
             return Err(format!("`{selector}` is disabled"));
         }
-        let bounds = self
-            .native
-            .bounds(id)
+        let geometry = self
+            .target_geometry(node)
             .ok_or_else(|| format!("`{selector}` is offscreen (no native bounds)"))?;
-        self.actionable_point(id, id, bounds.center(), selector)
+        self.actionable_point(id, geometry.owner, geometry.bounds.center(), selector)
     }
 
     /// Takes `step`; blocks until it is done and the app is quiet.
@@ -1916,6 +2058,9 @@ impl Agent {
             SceneQuery::CanvasNode { selector } => {
                 scene.canvas_node(&selector).and_then(|n| json(to_value(n)))
             }
+            SceneQuery::CanvasTarget { selector } => scene
+                .canvas_target(&selector)
+                .and_then(|n| json(to_value(n))),
             SceneQuery::MatchInside { selector, id } => {
                 scene.match_inside(&selector, id).map(Value::from)
             }
@@ -1925,7 +2070,7 @@ impl Agent {
             }
             SceneQuery::OpenedUrls => scene.opened_urls().map(Value::from),
             SceneQuery::Bounds { id } => {
-                json(to_value(self.native.bounds(id).map(|b| {
+                json(to_value(self.native_bounds(id).map(|b| {
                     [b.origin.x.0, b.origin.y.0, b.size.width.0, b.size.height.0]
                 })))
             }
@@ -1995,11 +2140,49 @@ impl Agent {
         self.settled()?;
         let picked = self.scene.pick(selector, target)?;
         let id = self.picked(picked, selector, what)?;
-        if let Some((canvas, center)) = self.scene.canvas_node(selector)? {
-            let at = self.scroll_point_into_view(canvas, selector, Some(center))?;
-            return Ok((id, self.actionable_point(id, canvas, at, selector)?));
+        if let Some((canvas_id, canvas, _)) = self.scene.canvas_target(selector)? {
+            let at = self.target_point(canvas_id, selector)?;
+            return Ok((id, self.actionable_point(canvas_id, canvas, at, selector)?));
         }
-        let Some((text, start, end)) = self.scene.span(id)? else {
+        let target_node = self
+            .scene
+            .semantic_tree()?
+            .into_iter()
+            .find(|node| node.id == id);
+        if let Some(node) = target_node
+            .as_ref()
+            .filter(|node| matches!(node.native_target, SemanticTarget::Text { .. }))
+        {
+            let geometry = self
+                .target_geometry(node)
+                .ok_or_else(|| format!("`{selector}` is offscreen (no native text bounds)"))?;
+            let at = self.target_point(id, selector)?;
+            return Ok((id, self.actionable_point(id, geometry.owner, at, selector)?));
+        }
+        if let Some((text, start, end)) = self.scene.span(id)? {
+            let mut span_node = target_node
+                .clone()
+                .ok_or_else(|| format!("`{selector}` is offscreen (span target unavailable)"))?;
+            span_node.native_target = SemanticTarget::Text {
+                owner: text,
+                start,
+                end,
+            };
+            let at = self.target_point_for_node(&span_node, selector)?;
+            let geometry = self
+                .target_geometry(&span_node)
+                .ok_or_else(|| format!("`{selector}` is offscreen (no native text bounds)"))?;
+            Ok((
+                id,
+                self.actionable_point_with_target(
+                    id,
+                    geometry.owner,
+                    at,
+                    selector,
+                    Some(&span_node),
+                )?,
+            ))
+        } else {
             // A press on what the selector matches inside the view that
             // takes it (a cell's text in a row) lands on that match, as a
             // finger taps the text it reads.
@@ -2015,23 +2198,8 @@ impl Agent {
                 }
                 _ => (id, self.scroll_into_view(id, selector)?),
             };
-            return Ok((id, self.actionable_point(id, owner, at, selector)?));
-        };
-        // A span of a text: its text view comes into view, then the finger
-        // goes on its characters.
-        self.scroll_into_view(text, selector)?;
-        let at = self
-            .native
-            .text_bounds(text, start, end)
-            .filter(|b| !b.is_empty())
-            .ok_or_else(|| {
-                format!(
-                    "`{selector}` is a span of a text, and this platform does not say where its \
-                     characters are; {}",
-                    self.on_screen()
-                )
-            })?;
-        Ok((id, self.actionable_point(id, text, at.center(), selector)?))
+            Ok((id, self.actionable_point(id, owner, at, selector)?))
+        }
     }
 
     fn actionable_point(
@@ -2041,28 +2209,61 @@ impl Agent {
         fallback: Point<Points>,
         selector: &str,
     ) -> Result<Point<Points>, String> {
+        self.actionable_point_with_target(id, native_owner, fallback, selector, None)
+    }
+
+    fn actionable_point_with_target(
+        &self,
+        id: NodeId,
+        native_owner: NodeId,
+        fallback: Point<Points>,
+        selector: &str,
+        target_override: Option<&SemanticNode>,
+    ) -> Result<Point<Points>, String> {
         if !self.require_hit_test {
             return Ok(fallback);
         }
         let nodes = self.scene.semantic_tree()?;
         let by_id: std::collections::HashMap<NodeId, &SemanticNode> =
             nodes.iter().map(|node| (node.id, node)).collect();
-        let target = by_id
-            .get(&id)
-            .or_else(|| by_id.get(&native_owner))
+        let target = target_override
+            .or_else(|| by_id.get(&id).or_else(|| by_id.get(&native_owner)).copied())
             .ok_or_else(|| format!("`{selector}` is offscreen (node {id} is unavailable)"))?;
         if !target.enabled {
             return Err(format!("`{selector}` is disabled"));
         }
-        let bounds = self
-            .native
-            .bounds(native_owner)
-            .ok_or_else(|| format!("`{selector}` is offscreen (no native bounds)"))?;
+        let geometry = match self.target_geometry(target) {
+            Some(geometry) if geometry.owner == native_owner => geometry,
+            Some(geometry) if !geometry.synthetic => TargetGeometry {
+                owner: native_owner,
+                bounds: self
+                    .native
+                    .bounds(native_owner)
+                    .ok_or_else(|| format!("`{selector}` is offscreen (no native bounds)"))?,
+                synthetic: false,
+            },
+            _ if matches!(target.native_target, SemanticTarget::View) => TargetGeometry {
+                owner: native_owner,
+                bounds: self
+                    .native
+                    .bounds(native_owner)
+                    .ok_or_else(|| format!("`{selector}` is offscreen (no native bounds)"))?,
+                synthetic: false,
+            },
+            _ => return Err(format!("`{selector}` is offscreen (no native bounds)")),
+        };
+        if geometry.synthetic && !geometry.bounds.contains(&fallback) {
+            return Err(format!("`{selector}` is offscreen"));
+        }
         let mut visible = Bounds::new(Point::default(), self.native.viewport());
-        visible =
-            intersection(visible, bounds).ok_or_else(|| format!("`{selector}` is offscreen"))?;
+        visible = intersection(visible, geometry.bounds)
+            .ok_or_else(|| format!("`{selector}` is offscreen"))?;
         let owner_node = by_id.get(&native_owner).copied().unwrap_or(target);
-        let mut parent = owner_node.parent;
+        let mut parent = if geometry.synthetic {
+            Some(native_owner)
+        } else {
+            owner_node.parent
+        };
         while let Some(parent_id) = parent {
             let Some(ancestor) = by_id.get(&parent_id) else {
                 break;
@@ -2525,9 +2726,11 @@ mod tests {
 
     struct GateNative {
         bounds: std::collections::HashMap<NodeId, Bounds<Points>>,
+        text_bounds: std::collections::HashMap<(NodeId, u32, u32), Bounds<Points>>,
         hit: Result<Option<NodeId>, String>,
         hits: Arc<Mutex<Vec<Point<Points>>>>,
         presses: Arc<std::sync::atomic::AtomicUsize>,
+        pressed_at: Arc<Mutex<Vec<Point<Points>>>>,
         typed: Arc<std::sync::atomic::AtomicUsize>,
         viewport: Size<Points>,
     }
@@ -2536,6 +2739,9 @@ mod tests {
         fn bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
             self.bounds.get(&id).copied()
         }
+        fn text_bounds(&self, id: NodeId, start: u32, end: u32) -> Option<Bounds<Points>> {
+            self.text_bounds.get(&(id, start, end)).copied()
+        }
         fn hit_at(&self, at: Point<Points>) -> Result<Option<NodeId>, String> {
             self.hits.lock().unwrap().push(at);
             self.hit.clone()
@@ -2543,9 +2749,10 @@ mod tests {
         fn viewport(&self) -> Size<Points> {
             self.viewport
         }
-        fn press(&self, _: Point<Points>) {
+        fn press(&self, at: Point<Points>) {
             self.presses
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.pressed_at.lock().unwrap().push(at);
         }
         fn long_press(&self, _: Point<Points>, _: Duration) {}
         fn scroll(&self, _: Point<Points>, _: Point<Points>) {}
@@ -2633,13 +2840,220 @@ mod tests {
             model,
             Box::new(GateNative {
                 bounds: bounds.iter().copied().collect(),
+                text_bounds: Default::default(),
                 hit,
                 hits,
                 presses,
+                pressed_at: Arc::new(Mutex::new(Vec::new())),
                 typed,
                 viewport,
             }),
         )
+    }
+
+    fn target_scene(nodes: Vec<SemanticNode>) -> Arc<RemoteScene> {
+        Arc::new(RemoteScene::new(move |step| match step {
+            TestStep::Scene {
+                query: nsh_dev::protocol::SceneQuery::SemanticTree,
+            } => serde_json::to_value(&nodes).map_err(|error| error.to_string()),
+            TestStep::Scene {
+                query: nsh_dev::protocol::SceneQuery::Activity,
+            } => Ok(serde_json::json!({"batches": 1, "since_last_ms": 1000.0})),
+            TestStep::Scene {
+                query: nsh_dev::protocol::SceneQuery::TakeErrors,
+            } => Ok(serde_json::json!([])),
+            TestStep::Scene {
+                query: nsh_dev::protocol::SceneQuery::ScrollAncestors { .. },
+            } => Ok(serde_json::json!([])),
+            _ => Err("unexpected scene query".into()),
+        }))
+    }
+
+    fn semantic_node(
+        id: NodeId,
+        parent: Option<NodeId>,
+        pressable: bool,
+        native_target: SemanticTarget,
+    ) -> SemanticNode {
+        SemanticNode {
+            id,
+            parent,
+            enabled: true,
+            pressable,
+            native_target,
+            ..SemanticNode::default()
+        }
+    }
+
+    #[test]
+    fn synthetic_canvas_and_text_targets_use_precise_native_geometry() {
+        let canvas_bounds = Bounds::new(point(px(60.0), px(20.0)), size(px(10.0), px(10.0)));
+        let canvas_node = semantic_node(
+            10,
+            Some(4),
+            false,
+            SemanticTarget::Canvas {
+                owner: 4,
+                bounds: canvas_bounds,
+            },
+        );
+        let canvas_nodes = vec![
+            semantic_node(1, None, false, SemanticTarget::View),
+            semantic_node(4, Some(1), true, SemanticTarget::View),
+            canvas_node,
+        ];
+        let owner_bounds = Bounds::new(point(px(10.0), px(10.0)), size(px(200.0), px(100.0)));
+        let expected_canvas = Bounds::new(point(px(70.0), px(30.0)), size(px(10.0), px(10.0)));
+        let hits = Arc::new(Mutex::new(Vec::new()));
+        let presses = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let pressed_at = Arc::new(Mutex::new(Vec::new()));
+        let canvas = Agent::requiring_native_hit_test(
+            target_scene(canvas_nodes),
+            Box::new(GateNative {
+                bounds: [(4, owner_bounds)].into(),
+                text_bounds: Default::default(),
+                hit: Ok(Some(4)),
+                hits: hits.clone(),
+                presses: presses.clone(),
+                pressed_at: pressed_at.clone(),
+                typed: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                viewport: Size::new(px(300.0), px(200.0)),
+            }),
+        );
+        assert_eq!(canvas.native_bounds(10), Some(expected_canvas));
+        assert_eq!(
+            canvas
+                .scene_query(nsh_dev::protocol::SceneQuery::Bounds { id: 10 })
+                .unwrap(),
+            serde_json::json!([70.0, 30.0, 10.0, 10.0])
+        );
+        canvas.press_node(10).unwrap();
+        assert_eq!(*hits.lock().unwrap(), vec![expected_canvas.center()]);
+        assert_eq!(*pressed_at.lock().unwrap(), vec![expected_canvas.center()]);
+        assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 1);
+
+        let span_bounds = Bounds::new(point(px(40.0), px(25.0)), size(px(20.0), px(10.0)));
+        let span_nodes = vec![
+            semantic_node(1, None, false, SemanticTarget::View),
+            semantic_node(4, Some(1), false, SemanticTarget::View),
+            semantic_node(
+                11,
+                Some(4),
+                true,
+                SemanticTarget::Text {
+                    owner: 4,
+                    start: 0,
+                    end: 4,
+                },
+            ),
+        ];
+        let hits = Arc::new(Mutex::new(Vec::new()));
+        let presses = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let pressed_at = Arc::new(Mutex::new(Vec::new()));
+        let span = Agent::requiring_native_hit_test(
+            target_scene(span_nodes),
+            Box::new(GateNative {
+                bounds: [(4, owner_bounds)].into(),
+                text_bounds: [((4, 0, 4), span_bounds)].into(),
+                hit: Ok(Some(4)),
+                hits: hits.clone(),
+                presses: presses.clone(),
+                pressed_at: pressed_at.clone(),
+                typed: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                viewport: Size::new(px(300.0), px(200.0)),
+            }),
+        );
+        assert!(span.native_bounds(11).is_some());
+        assert_eq!(span.native_bounds(11), Some(span_bounds));
+        assert_eq!(
+            span.scene_query(nsh_dev::protocol::SceneQuery::Bounds { id: 11 })
+                .unwrap(),
+            serde_json::json!([40.0, 25.0, 20.0, 10.0])
+        );
+        span.press_node(11).unwrap();
+        assert_eq!(*hits.lock().unwrap(), vec![span_bounds.center()]);
+        assert_eq!(*pressed_at.lock().unwrap(), vec![span_bounds.center()]);
+        assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn synthetic_canvas_targets_fail_closed_when_disabled_clipped_or_foreign_hit() {
+        let local = Bounds::new(point(px(60.0), px(20.0)), size(px(10.0), px(10.0)));
+        let target = || {
+            semantic_node(
+                10,
+                Some(4),
+                false,
+                SemanticTarget::Canvas {
+                    owner: 4,
+                    bounds: local,
+                },
+            )
+        };
+        let owner_bounds = Bounds::new(point(px(10.0), px(10.0)), size(px(200.0), px(100.0)));
+        let bounds = [
+            (1, Bounds::new(Point::default(), size(px(50.0), px(50.0)))),
+            (4, owner_bounds),
+        ];
+        let make_agent = |nodes: Vec<SemanticNode>, hit| {
+            let presses = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let agent = Agent::requiring_native_hit_test(
+                target_scene(nodes),
+                Box::new(GateNative {
+                    bounds: bounds.into(),
+                    text_bounds: Default::default(),
+                    hit,
+                    hits: Arc::new(Mutex::new(Vec::new())),
+                    presses: presses.clone(),
+                    pressed_at: Arc::new(Mutex::new(Vec::new())),
+                    typed: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                    viewport: Size::new(px(300.0), px(200.0)),
+                }),
+            );
+            (agent, presses)
+        };
+
+        let mut disabled = target();
+        disabled.enabled = false;
+        let (agent, presses) = make_agent(
+            vec![
+                semantic_node(1, None, false, SemanticTarget::View),
+                semantic_node(4, Some(1), true, SemanticTarget::View),
+                disabled,
+            ],
+            Ok(Some(4)),
+        );
+        assert!(agent.press_node(10).unwrap_err().contains("disabled"));
+        assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 0);
+
+        let mut clipping_root = semantic_node(1, None, false, SemanticTarget::View);
+        clipping_root.clipping = true;
+        let (agent, presses) = make_agent(
+            vec![
+                clipping_root,
+                semantic_node(4, Some(1), true, SemanticTarget::View),
+                target(),
+            ],
+            Ok(Some(4)),
+        );
+        assert!(agent.press_node(10).unwrap_err().contains("offscreen"));
+        assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 0);
+
+        let (agent, presses) = make_agent(
+            vec![
+                semantic_node(1, None, false, SemanticTarget::View),
+                semantic_node(4, Some(1), true, SemanticTarget::View),
+                target(),
+            ],
+            Ok(Some(99)),
+        );
+        assert!(
+            agent
+                .press_node(10)
+                .unwrap_err()
+                .contains("occluded_by: 99")
+        );
+        assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 0);
     }
 
     #[test]
