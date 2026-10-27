@@ -596,9 +596,12 @@ gpui-agent snapshot --pretty
 gpui-agent screenshot --out gallery.png
 ```
 
-Keep `nsh run` in the background while using the GPUI-agent CLI in the same shell. It passes the opt-in and token as
-intent extras to the debuggable development host; no process environment is mutated, and release apps do not start an
-agent. The server binds to `127.0.0.1:17421` by default. A requested viewport resizes only the `NshView` content and
+Keep `nsh run` in the background while using the GPUI-agent CLI in the same shell. It writes the token into the
+debuggable development host's private files (`run-as`, `files/gpui-agent-token`) over adb's standard input, so it is in
+no command line on the host or the device, and removes it when the run ends; the intent carries only the opt-in and the
+address. The host starts no agent without that file and ignores a token in the intent: another app can start its
+activity but not choose the token. No process environment is mutated, and release apps do not start an agent. The
+server binds to `127.0.0.1:17421` by default. A requested viewport resizes only the `NshView` content and
 must fit the device window; it does not change the device resolution. Screenshot names are relative `.png` files in
 the app's cache on the device, not host paths.
 
