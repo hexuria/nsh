@@ -663,6 +663,51 @@ server binds to `127.0.0.1:17421` by default. A requested viewport resizes only 
 must fit the device window; it does not change the device resolution. Screenshot names are relative `.png` files in
 the app's cache on the device, not host paths.
 
+#### Web GPUI-agent development
+
+```sh
+export GPUI_AGENT_TOKEN="$(openssl rand -hex 32)" GPUI_AGENT_ADDR=127.0.0.1:17421
+GPUI_AGENT=1 nsh run examples/gallery --target web &
+gpui-agent wait && gpui-agent snapshot --pretty
+gpui-agent screenshot --out gallery.png
+```
+
+A page cannot listen on a socket and a tab the user opens takes no trusted input, so the agent runs in `nsh`
+(`nsh-cli/src/web_agent.rs`). Next to the address it prints for browsers, `nsh` opens the development page in a
+Chromium of its own (`cdp.rs`, as `nsh test --target web` finds it; headless, in a window with
+`GPUI_AGENT_WEB_HEADED=1`, 1280×800, which is the desktop idiom). It serves
+`nsh_gpui_agent::NshAgentHost` (`PlatformKind::Web`) on `GPUI_AGENT_ADDR` over an
+`Agent::requiring_native_hit_test` on a `RemoteScene` and the shared `WebNative` (`web_native.rs`). The browser closes
+when the run ends, Ctrl-C included.
+
+- **Routing.** `nsh run` serves the network (`0.0.0.0`), so the page is known by a key: 128 random bits that
+  `DevServer::agent_session` holds. CDP's `Page.addScriptToEvaluateOnNewDocument` (after `Page.enable`) gives the key
+  to the page before its scripts run, on every load. `dev.html` keeps it and sends it in its hello. Only a host
+  connecting from this machine with the key is told `test` and `agent`. It gets no `TestSetup`, so the app keeps its
+  own storage, network and clock. Its module keeps an observer model (`nsh_agent_start`), which starts afresh with each
+  app (`Model::reset`). Other hosts, a phone on the network among them, stay ordinary.
+- **Strict hooks** are scene queries the page answers (`nsh.js` `testPage`):
+  - `HitAt`: `elementFromPoint`, up to the first element of the player's `views`. The browser itself skips
+    `pointer-events: none` and `inert` views. Canvases, images, web views' frames, fields and border overlays belong to
+    their view. The dev page's own overlays are no view.
+  - `Focus`: a field's `focus()`, or a focus stop's.
+  - `AppFocused`: `document.hasFocus()`, true under CDP's focus emulation.
+  - `TextBounds`: a `Range` over the text's runs, counting the characters a wrap left out (`_after`).
+  - Key checks are the CLI's (`browser_keys`).
+  - Input, screenshots (`Page.captureScreenshot`, viewport only) and resizing (the idiom stays as it was at start
+    until a reload) are `nsh test`'s CDP calls.
+  - Coordinates are CSS pixels from the viewport's top left, which are points; the page itself never scrolls.
+  - Keybindings are the model's keymap. The web has no menu bar.
+  - There is nothing to paste with, no native context menus (`Menu.popup` is the app's own UI) and no scrolled
+    screenshots, and a web view's cross-origin frame is out of reach.
+- **Security.** The agent's server is loopback only. The token and address are read from `nsh`'s environment, never
+  from argv, and are never sent to the browser. gpui-agent checks the token by an HMAC challenge, so it is never on
+  the wire either. Release builds refuse to start an agent without `GPUI_AGENT_ALLOW_RELEASE`. On an agent's page a
+  password field's `input_text` is a bullet per character, so typed secrets never reach the dev socket, the snapshot
+  or `nsh -v`. `examples/gallery/tests/fixtures/agent-masked.tsx` is the fixture to check that with.
+- `nsh test --target web` is unchanged: its `WebNative` is not the agent's, so it keeps the trait's defaults for
+  those hooks. Its server sets no key, still sends `TestSetup`, and its page still reads a field's real text.
+
 The web (`--target web`, `nsh-cli/src/test_web.rs`): the agent runs in the CLI, the app in a page of a headless
 Chromium browser (Chrome, Edge or Chromium; `--browser <PATH>`, else the one installed where `cdp.rs` looks; nsh never
 fetches one and fails saying so when there is none). One browser serves the run; each `open` gets a page in a browser
