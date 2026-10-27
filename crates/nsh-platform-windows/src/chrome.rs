@@ -1233,8 +1233,9 @@ fn menu_bar_rect(hwnd: HWND) -> Option<RECT> {
 
 #[cfg(all(test, feature = "dev"))]
 mod agent_menu_tests {
-    use super::*;
     use nsh_core::keymap::When;
+
+    use super::*;
 
     fn action(id: u32, label: &str, enabled: bool, role: Option<MenuRole>) -> MenuItem {
         MenuItem::Action(MenuAction {
