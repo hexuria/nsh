@@ -252,6 +252,10 @@ The fork pull request is https://github.com/hexuria/nsh/pull/2. After the implem
 
 ## Post-merge compatibility correction checks
 
+The review fixes serialize Android model reset with batch application after the old engine joins; catalog installed application-menu shortcuts independently of popup menus; map canvas regions and linked text spans to precise native-owner geometry; and include the adapter crate in Linux and Rust-app workflow path filters. Reload acceptance and reset ordering change, not protocol transitions, settle deadlines, or retries.
+
+Before the merge, two full bundle reloads were exercised in the isolated Android fixture host. After each `gpui-agent wait --timeout-ms 30000`, snapshots contained all nine replacement IDs and none of the prior IDs, and the replacement input was empty. The fixture process stayed alive across both reloads. The original gallery was preserved and restored afterward. This is live functional evidence, not an exhaustive concurrency proof.
+
 Commit `746960da12eab1c48324e618c79a63b7c11edda6` restores ordinary `Agent::find` to the reviewed `deb15fab` behavior: selectors use `Pick`, `CanvasNode`, `Span`, and the existing match queries without requiring semantic-tree support. The correction removes the `Scene::canvas_target` trait method and `SceneQuery::CanvasTarget` wire query; the private `Screen::canvas_target` helper remains behind `canvas_node`. `SceneQuery::Bounds` again reports native bounds, while `Agent::native_bounds` retains synthetic target mapping for adapter snapshots. Strict node-ID actions retain synthetic geometry, clipping, and native-hit checks inside `actionable_point`. The new remote-scene regression rejects `SemanticTree` queries and exercises ordinary canvas find/press.
 
 The compatibility fix was merged with `origin/main` at `1849776f68ee41d73c08970fe530cf952451af13` by merge commit `fabbf035ee3e5c2cd03aad9026a265aec6afab43`; the merge completed without conflicts.
@@ -340,13 +344,18 @@ The outstanding `Default` convention question remains unresolved by design: do n
 | `ecd1cec1` | Android: development attach, JNI/Java native hooks, lifecycle, and xtask feature wiring. |
 | `e7d98425` | CLI: pass Android opt-in/token extras and redact launch failures. |
 | `e196ca4d` | Fixtures: deterministic safety/hover fixture and Android launch guide. |
+| `73c6fb59` | Android: serialize scene reset and batch application after stopping the previous engine. |
+| `fc03d19a` | Testing: catalog installed application-menu shortcuts independently of popup lifecycle. |
+| `ccee970f` | Dev: describe installed-menu shortcut metadata. |
+| `02188ac2` | Testing: resolve canvas and linked-span targets through precise native-owner geometry. |
+| `d5fdcfe5` | CI: include adapter changes in Linux and Rust-app workflow filters. |
 | `746960da12eab1c48324e618c79a63b7c11edda6` | Testing: restore legacy ordinary selector queries and add a semantic-tree-independent find/press regression. |
 | `fabbf035ee3e5c2cd03aad9026a265aec6afab43` | Merge: merge updated `origin/main` without rewriting history. |
 | This final report commit | Report: record post-merge validation and compatibility/API changes. |
 
 Earlier report snapshot: `deb15fabc110e01e52fc8c11de7cb393dc57fd1d`. Final report marker: this separate report-only commit, made last before pushing the feature branch. The report commit records the final validation results; no additional implementation changes are included in it.
 
-The feature branch is `devin/gpui-agent-adapter`; it was based on `origin/main` at `1849776f68ee41d73c08970fe530cf952451af13`. The single branch push follows this report-only commit. No CI checks are awaited in this handoff.
+The feature branch is `devin/gpui-agent-adapter`; it includes `origin/main` at `1849776f68ee41d73c08970fe530cf952451af13`. Only this feature branch was pushed. The report is committed last so it can be dropped before proposing the implementation upstream.
 
 ## What Windows needs
 
