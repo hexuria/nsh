@@ -925,8 +925,12 @@ impl Screen {
         let mut nodes: Vec<crate::agent::SemanticNode> = Vec::new();
         // Where each node is in `nodes`, for the hidden views under it.
         let mut at = std::collections::HashMap::new();
-        let mut stack = vec![(ROOT, None, false, false)];
-        while let Some((id, parent, inherited_hidden, inherited_disabled)) = stack.pop() {
+        // The last element: in a hidden subtree, the innermost hidden view
+        // above that takes presses.
+        let mut stack = vec![(ROOT, None, false, false, None)];
+        while let Some((id, parent, inherited_hidden, inherited_disabled, hidden_press)) =
+            stack.pop()
+        {
             if self.closed.contains(&id) {
                 continue;
             }
@@ -946,17 +950,27 @@ impl Screen {
                 self.children.get(&id).cloned().unwrap_or_default()
             };
             if hidden {
+                // A press on it goes to it, or to the hidden view around
+                // it that takes presses, not to `parent`.
+                let hidden_press = if view.events.contains(EventKind::Press) {
+                    Some(id)
+                } else {
+                    hidden_press
+                };
                 // Left out, but still under `parent` (the nearest node in
                 // the tree) for native hits.
                 if let Some(owner) = parent.and_then(|parent| at.get(&parent).copied()) {
                     let owner: &mut crate::agent::SemanticNode = &mut nodes[owner];
                     owner.hidden_descendants.push(id);
+                    if let Some(receiver) = hidden_press {
+                        owner.hidden_press_owners.push((id, receiver));
+                    }
                 }
                 stack.extend(
                     children
                         .into_iter()
                         .rev()
-                        .map(|child| (child, parent, true, disabled)),
+                        .map(|child| (child, parent, true, disabled, hidden_press)),
                 );
                 continue;
             }
@@ -1047,12 +1061,13 @@ impl Screen {
                     crate::agent::SemanticTarget::View
                 },
                 hidden_descendants: Vec::new(),
+                hidden_press_owners: Vec::new(),
             });
             stack.extend(
                 children
                     .into_iter()
                     .rev()
-                    .map(|child| (child, Some(id), hidden, disabled)),
+                    .map(|child| (child, Some(id), hidden, disabled, None)),
             );
         }
         nodes
