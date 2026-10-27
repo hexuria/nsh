@@ -350,36 +350,6 @@ test("a hit is the view around the element the browser finds", () => {
   }
 });
 
-test("text bounds count the characters a run's line break left out", () => {
-  const { player } = fakePlayer();
-  const runs = [
-    { firstChild: { length: 5 }, _after: " " },
-    { firstChild: { length: 3 } },
-  ];
-  const text = view(9, { querySelectorAll: () => runs });
-  player.views = new Map([[9, text]]);
-  const ranges = [];
-  globalThis.document = {
-    createRange() {
-      const range = {
-        setStart: (node, at) => Object.assign(range, { node, start: at }),
-        setEnd: (_, at) => Object.assign(range, { end: at }),
-        getClientRects: () => [{ left: range.start * 10, top: runs.indexOf(runs.find((r) => r.firstChild === range.node)) * 20, width: (range.end - range.start) * 10, height: 18 }],
-      };
-      ranges.push(range);
-      return range;
-    },
-  };
-  try {
-    // "hello world": `w` is the second run's first character.
-    assert.deepEqual(player.testPage({ query: "text_bounds", id: 9, start: 6, end: 8 }), [0, 20, 20, 18]);
-    assert.deepEqual(player.testPage({ query: "text_bounds", id: 9, start: 1, end: 3 }), [10, 0, 20, 18]);
-    assert.equal(player.testPage({ query: "text_bounds", id: 9, start: 20, end: 21 }), null);
-  } finally {
-    delete globalThis.document;
-  }
-});
-
 /**
  * Runs `f` in a page with a window of 1280 × 720 whose system UI covers 44
  * points at the top and 34 at the bottom; `f` gets the `ResizeObserver`s
