@@ -47,10 +47,13 @@ argument, logged, or written to an artifact.
 The attached native surface uses the same Win32 input, rendering, hit testing, focus, menu, resize and screenshot
 paths as the host. It returns errors rather than fabricating results when the surface is gone, an operation times out,
 or a requested native action cannot be proved. A call the main thread does not answer within 10 s fails on its own and later calls
-go on; the attachment becomes unavailable only when its window is gone. The worker attaches once per host process, to
-its first window; a failed bind is logged as one. While the window is minimized, or the engine has yet to lay the app
-out at a new window size, steps wait for that layout and then fail with `the viewport is not laid out yet` if it does
-not come. Strict actions try one reveal scroll before refusing a target as offscreen.
+go on; the attachment becomes unavailable only when its window is gone. One window of the host process holds the worker: the first one opened while no worker runs. The agent ends with that
+window; a window opened later starts a new worker, also after a client stopped the old one. If the bind fails, each
+window opened later tries again and logs the failure. While the window is minimized (no client area), steps,
+snapshots and screenshots fail at once with `the viewport is not laid out yet`. After a resize, steps wait (as for an
+animation) for the engine to lay the app out at the new size and fail the same way if it has not; `hello` and
+`snapshot` report not ready meanwhile. A resize below 200x150 points or of a maximized window is refused before the
+window changes. Strict actions try one reveal scroll before refusing a target as offscreen.
 
 ## Architecture
 

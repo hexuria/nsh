@@ -567,8 +567,8 @@ fn handle(
             let info = unsafe { &mut *(lparam.0 as *mut MINMAXINFO) };
             let s = dpi(hwnd) as f32 / 96.0;
             info.ptMinTrackSize = POINT {
-                x: (200.0 * s) as i32,
-                y: (150.0 * s) as i32,
+                x: (MIN_WIDTH * s) as i32,
+                y: (MIN_HEIGHT * s) as i32,
             };
             return Some(LRESULT(0));
         }
@@ -780,6 +780,8 @@ fn handle(
             crate::system::settings_changed(surface);
         }
         WM_DESTROY => {
+            #[cfg(feature = "dev-agent")]
+            surface.release_agent();
             surface.stop();
             surface.set_hwnd(HWND::default());
         }
@@ -1046,6 +1048,11 @@ pub(crate) fn keep<T: 'static>(value: T) {
     }
     KEPT.with(|k| k.borrow_mut().push(Box::new(value)));
 }
+
+/// The smallest client area a user can drag the window to, in points.
+pub(crate) const MIN_WIDTH: f32 = 200.0;
+/// See [`MIN_WIDTH`].
+pub(crate) const MIN_HEIGHT: f32 = 150.0;
 
 #[cfg(test)]
 mod tests {
