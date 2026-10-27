@@ -735,17 +735,6 @@ pub enum SceneQuery {
     },
     /// Whether the app's window has the system's focus.
     AppFocused,
-    /// Where the characters `start..end` (UTF-16 units) of text view `id`
-    /// are on screen, on their first line: `[x, y, width, height]` or
-    /// `null`.
-    TextBounds {
-        /// The text view.
-        id: u32,
-        /// The first character.
-        start: u32,
-        /// After the last.
-        end: u32,
-    },
 }
 
 /// An app's HTTP request, as a test session's host forwards it

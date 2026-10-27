@@ -635,7 +635,7 @@ when the run ends, Ctrl-C included.
     their view. The dev page's own overlays are no view.
   - `Focus`: a field's `focus()`, or a focus stop's.
   - `AppFocused`: `document.hasFocus()`, true under CDP's focus emulation.
-  - `TextBounds`: a `Range` over the text's runs, counting the characters a wrap left out (`_after`).
+  - `TextBounds`: the page's answer `nsh test --target web` asks too: each run knows its first character's offset.
   - Key checks are the CLI's (`browser_keys`).
   - Input, screenshots (`Page.captureScreenshot`, viewport only) and resizing (the idiom stays as it was at start
     until a reload) are `nsh test`'s CDP calls.
