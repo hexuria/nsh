@@ -44,9 +44,10 @@ enum Message {
 thread_local! {
     /// The surfaces of this (main) thread, by key.
     static SURFACES: RefCell<FxHashMap<u64, Weak<Surface>>> = RefCell::default();
-    /// A window of this process has the GPUI-agent worker.
+    /// The window (by key) whose surface holds this process's GPUI-agent
+    /// worker.
     #[cfg(feature = "dev-agent")]
-    static AGENT_ATTACHED: Cell<bool> = const { Cell::new(false) };
+    static AGENT_OWNER: Cell<Option<u64>> = const { Cell::new(None) };
 }
 
 static NEXT_KEY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -168,10 +169,10 @@ pub(crate) struct Surface {
     /// The model of a test session's app (`nsh test --target windows`).
     #[cfg(feature = "dev")]
     test_model: RefCell<Option<std::sync::Arc<nsh_testing::agent::Model>>>,
-    /// The GPUI-agent model; independent of an `nsh test` model.
     /// A size the engine has yet to lay the app out at
     /// ([`MountSink::resized`]).
     layout_pending: Cell<Option<(f32, f32)>>,
+    /// The GPUI-agent model; independent of an `nsh test` model.
     #[cfg(feature = "dev-agent")]
     agent_model: Arc<nsh_testing::agent::Model>,
     #[cfg(feature = "dev-agent")]
@@ -298,12 +299,43 @@ impl Surface {
         SURFACES.with(|s| s.borrow().get(&key).and_then(Weak::upgrade))
     }
 
+    /// Whether this window's GPUI-agent worker still serves.
+    #[cfg(feature = "dev-agent")]
+    fn agent_running(&self) -> bool {
+        self.agent_worker
+            .borrow()
+            .as_ref()
+            .is_some_and(nsh_gpui_agent::WorkerHandle::is_running)
+    }
+
+    /// Ends this window's GPUI-agent worker, if it has it: the agent ends
+    /// with its window, and a window opened later starts another.
+    #[cfg(feature = "dev-agent")]
+    pub(crate) fn release_agent(&self) {
+        if self.agent_worker.borrow_mut().take().is_none() {
+            return;
+        }
+        self.agent_alive.store(false, Ordering::Release);
+        self.agent_model.reset();
+        let key = self.key;
+        let _ = AGENT_OWNER.try_with(|owner| {
+            if owner.get() == Some(key) {
+                owner.set(None);
+            }
+        });
+    }
+
     #[cfg(feature = "dev-agent")]
     fn start_agent(&self) {
-        // One worker per host process, on its first window: every window
-        // would bind the same address.
-        if AGENT_ATTACHED.with(Cell::get) {
-            return;
+        // One worker per host process (each would bind the same address),
+        // on one of its windows; one that stopped (a client's `shutdown`)
+        // gives way.
+        if let Some(owner) = AGENT_OWNER.with(Cell::get) {
+            match Surface::by_key(owner) {
+                Some(surface) if surface.agent_running() => return,
+                Some(surface) => surface.release_agent(),
+                None => AGENT_OWNER.with(|o| o.set(None)),
+            }
         }
         let (addr, token) = match nsh_gpui_agent::worker_config_from_env() {
             Ok(Some(config)) => config,
@@ -334,7 +366,7 @@ impl Surface {
         match nsh_gpui_agent::spawn_worker(addr, token, host) {
             Ok(worker) => {
                 *self.agent_worker.borrow_mut() = Some(worker);
-                AGENT_ATTACHED.with(|attached| attached.set(true));
+                AGENT_OWNER.with(|owner| owner.set(Some(self.key)));
             }
             Err(error) => log::error!("cannot start the GPUI-agent worker on {addr}: {error}"),
         }
@@ -732,6 +764,8 @@ impl Surface {
                     }
                 }
                 Message::Resized(size) => {
+                    // A late report of an earlier, equal size (A, B, A) clears this
+                    // too early; telling them apart needs a resize generation.
                     if self.layout_pending.get() == Some((size.width.0, size.height.0)) {
                         self.layout_pending.set(None);
                     }
@@ -892,7 +926,12 @@ impl Drop for Surface {
         {
             self.agent_alive.store(false, Ordering::Release);
             if self.agent_worker.get_mut().take().is_some() {
-                let _ = AGENT_ATTACHED.try_with(|attached| attached.set(false));
+                let key = self.key;
+                let _ = AGENT_OWNER.try_with(|owner| {
+                    if owner.get() == Some(key) {
+                        owner.set(None);
+                    }
+                });
             }
         }
         let key = self.key;
