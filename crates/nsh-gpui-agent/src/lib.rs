@@ -294,18 +294,12 @@ impl NshAgentHost {
                     self.agent.drag_nodes(target("from")?, target("to")?)?;
                 } else if args.get("target").is_some() {
                     let id = target("target")?;
-                    let center = self
-                        .agent
-                        .native_bounds(id)
-                        .ok_or_else(|| format!("node {id} is offscreen"))?
-                        .center();
-                    let origin = optional_point(args)?.unwrap_or(center);
                     let dx = number_arg(args, "dx")?;
                     let dy = number_arg(args, "dy")?;
-                    self.agent.drag_from_to(
+                    self.agent.drag_node_by(
                         id,
-                        origin,
-                        Point::new(Points(origin.x.0 + dx), Points(origin.y.0 + dy)),
+                        optional_point(args)?,
+                        Point::new(Points(dx), Points(dy)),
                     )?;
                 } else {
                     let origin =
