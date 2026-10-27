@@ -457,6 +457,11 @@ pub struct SemanticNode {
     /// The native view or precise native region represented by this node.
     #[serde(default)]
     pub native_target: SemanticTarget,
+    /// The mounted views under this node the tree leaves out (hidden
+    /// subtrees, as an icon button's decorative icon): a native hit on one
+    /// is a hit inside this node.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hidden_descendants: Vec<NodeId>,
 }
 
 /// A keyboard shortcut the host can fire through its native input path.
@@ -1359,17 +1364,33 @@ fn press_owner(nodes: &[SemanticNode], target: &SemanticNode) -> Option<NodeId> 
     None
 }
 
+/// Every mounted view's parent the semantic tree knows: its nodes', and
+/// its hidden views' ([`SemanticNode::hidden_descendants`]), linked to the
+/// node they are under.
+fn mounted_parents(nodes: &[SemanticNode]) -> std::collections::HashMap<NodeId, Option<NodeId>> {
+    nodes
+        .iter()
+        .flat_map(|node| {
+            std::iter::once((node.id, node.parent)).chain(
+                node.hidden_descendants
+                    .iter()
+                    .map(move |&hidden| (hidden, Some(node.id))),
+            )
+        })
+        .collect()
+}
+
 fn is_descendant_or_same(
     hit: NodeId,
     target: NodeId,
-    nodes: &std::collections::HashMap<NodeId, &SemanticNode>,
+    parents: &std::collections::HashMap<NodeId, Option<NodeId>>,
 ) -> bool {
     let mut current = Some(hit);
     while let Some(id) = current {
         if id == target {
             return true;
         }
-        current = nodes.get(&id).and_then(|node| node.parent);
+        current = parents.get(&id).copied().flatten();
     }
     false
 }
@@ -2227,14 +2248,15 @@ impl Agent {
         } else {
             visible.center()
         };
+        let parents = mounted_parents(&nodes);
         let deadline = Instant::now() + Duration::from_millis(100);
         loop {
             match self.native.hit_at(at) {
                 Ok(Some(hit))
-                    if is_descendant_or_same(hit, native_owner, &by_id)
+                    if is_descendant_or_same(hit, native_owner, &parents)
                         || press_owner.is_some_and(|owner| {
-                            is_descendant_or_same(native_owner, hit, &by_id)
-                                && is_descendant_or_same(hit, owner, &by_id)
+                            is_descendant_or_same(native_owner, hit, &parents)
+                                && is_descendant_or_same(hit, owner, &parents)
                         }) =>
                 {
                     return Ok(at);
@@ -2858,6 +2880,67 @@ mod tests {
                 result.unwrap();
                 assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 1);
                 assert_eq!(*pressed_at.lock().unwrap(), vec![label_bounds.center()]);
+            }
+        }
+    }
+
+    #[test]
+    fn a_hit_on_an_accessibility_hidden_child_is_a_hit_on_its_owner() {
+        use nsh_core::{MountItem, ViewKind, ViewProps, geometry::Size};
+
+        let bounds = [(
+            2,
+            Bounds::new(point(px(20.0), px(0.0)), size(px(60.0), px(100.0))),
+        )];
+        for hit in [3, 4] {
+            let model = gate_scene(ViewKind::View, false, false);
+            let mut icon = ViewProps::default();
+            icon.accessibility.hidden = true;
+            model.apply(&MountBatch {
+                items: vec![
+                    // A decorative icon inside the button, and an overlay
+                    // beside it.
+                    MountItem::Create {
+                        id: 3,
+                        kind: ViewKind::View,
+                    },
+                    MountItem::ViewProps {
+                        id: 3,
+                        props: Box::new(icon),
+                    },
+                    MountItem::Insert {
+                        parent: 2,
+                        child: 3,
+                        before: None,
+                    },
+                    MountItem::Create {
+                        id: 4,
+                        kind: ViewKind::View,
+                    },
+                    MountItem::Insert {
+                        parent: 1,
+                        child: 4,
+                        before: None,
+                    },
+                ],
+            });
+            let presses = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let agent = gate_agent(
+                model,
+                Ok(Some(hit)),
+                &bounds,
+                Size::new(px(100.0), px(100.0)),
+                Arc::new(Mutex::new(Vec::new())),
+                presses.clone(),
+                Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            );
+            let result = agent.press_node(2);
+            if hit == 3 {
+                result.unwrap();
+                assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 1);
+            } else {
+                assert!(result.unwrap_err().contains("occluded_by: 4"));
+                assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 0);
             }
         }
     }
