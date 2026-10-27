@@ -56,6 +56,11 @@ pub enum ClientMessage {
         /// The host takes test steps ([`ServerMessage::Step`]).
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         tests: bool,
+        /// The key of the GPUI-agent page `nsh run` opened
+        /// (`DevServer::agent_session`): the host that shows it from this
+        /// machine takes the agent's steps.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent: Option<String>,
     },
     /// The outcome of the [`ServerMessage::Step`] with this id.
     StepDone {
@@ -204,6 +209,11 @@ pub enum ServerMessage {
         /// need from the first bundle on ([`ServerMessage::Step`]).
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         test: bool,
+        /// The host is a GPUI agent's page (with `test`): it keeps the
+        /// model of its app as an observer, with no [`ServerMessage::TestSetup`],
+        /// and never answers a masked input's text.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        agent: bool,
     },
     /// What a test session's app starts with (after [`ServerMessage::Hello`],
     /// before the first bundle): the storage it finds, in place of its

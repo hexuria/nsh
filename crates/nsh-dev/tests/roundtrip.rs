@@ -460,3 +460,80 @@ fn a_traced_test_session_hears_the_batches_before_the_step_ends() {
         ["Create { id: 2, kind: View }"]
     );
 }
+
+/// A raw web host: says hello as `dev.html` does, with `agent` (a key)
+/// when given, and returns the server's hello.
+fn web_hello(
+    url: &str,
+    agent: Option<&str>,
+) -> (
+    tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>,
+    serde_json::Value,
+) {
+    let (mut socket, _) = tungstenite::connect(url).expect("connect");
+    let mut hello = serde_json::json!({
+        "type": "hello", "protocol": nsh_dev::protocol::PROTOCOL_VERSION,
+        "bytecode_version": "", "device": "Chrome", "platform": "web", "tests": true,
+    });
+    if let Some(key) = agent {
+        hello["agent"] = key.into();
+    }
+    socket
+        .send(tungstenite::Message::text(hello.to_string()))
+        .unwrap();
+    let reply = loop {
+        if let tungstenite::Message::Text(text) = socket.read().expect("hello") {
+            break serde_json::from_str::<serde_json::Value>(&text).unwrap();
+        }
+    };
+    (socket, reply)
+}
+
+#[test]
+fn an_agent_session_asks_only_the_page_that_holds_its_key() {
+    use nsh_dev::protocol::TestStep;
+
+    let server = DevServer::start("127.0.0.1:0".parse().unwrap(), "bc-1", None, |_| {}).unwrap();
+    server.agent_session("k3y".into());
+    let url = format!("ws://{}{WS_PATH}", server.local_addr());
+    // A host that takes tests, without the key or with another: an
+    // ordinary host, told of no test session and asked nothing.
+    for agent in [None, Some("k3x"), Some("k3")] {
+        let (_socket, hello) = web_hello(&url, agent);
+        assert_eq!(hello["type"], "hello");
+        assert_eq!(hello.get("test"), None, "{agent:?}");
+        assert_eq!(hello.get("agent"), None, "{agent:?}");
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(!server.has_tester(), "{agent:?}");
+    }
+    // The page with the key: a tester as an observer, with no setup.
+    let (mut socket, hello) = web_hello(&url, Some("k3y"));
+    assert_eq!(hello["test"], true);
+    assert_eq!(hello["agent"], true);
+    let deadline = std::time::Instant::now() + TIMEOUT;
+    while !server.has_tester() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the page never became the tester"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let asking = std::thread::spawn({
+        let server = std::sync::Arc::new(server);
+        move || server.step(TestStep::Texts, TIMEOUT)
+    });
+    let step = loop {
+        if let tungstenite::Message::Text(text) = socket.read().expect("step") {
+            break serde_json::from_str::<serde_json::Value>(&text).unwrap();
+        }
+    };
+    assert_eq!(step["type"], "step", "no test setup comes first: {step}");
+    let done = serde_json::json!({
+        "type": "step_done", "id": step["id"],
+        "outcome": { "outcome": "done", "value": ["Hello"] },
+    });
+    socket
+        .send(tungstenite::Message::text(done.to_string()))
+        .unwrap();
+    assert_eq!(asking.join().unwrap(), Ok(serde_json::json!(["Hello"])));
+}
