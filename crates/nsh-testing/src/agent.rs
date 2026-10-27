@@ -1375,6 +1375,23 @@ fn intersection(left: Bounds<Points>, right: Bounds<Points>) -> Option<Bounds<Po
     })
 }
 
+/// What a press on `target` goes to: itself when it is an input or
+/// pressable, else its nearest pressable ancestor (`None`: nothing takes it).
+fn press_owner(nodes: &[SemanticNode], target: &SemanticNode) -> Option<NodeId> {
+    if target.input || target.pressable {
+        return Some(target.id);
+    }
+    let mut parent = target.parent;
+    while let Some(parent_id) = parent {
+        let ancestor = nodes.iter().find(|node| node.id == parent_id)?;
+        if ancestor.pressable {
+            return Some(ancestor.id);
+        }
+        parent = ancestor.parent;
+    }
+    None
+}
+
 fn is_descendant_or_same(
     hit: NodeId,
     target: NodeId,
@@ -1552,29 +1569,8 @@ impl Agent {
         if !target.enabled {
             return Err(format!("`{selector}` is disabled"));
         }
-        let owner = if target.input || target.pressable {
-            id
-        } else {
-            let mut parent = target.parent;
-            let mut owner = id;
-            while let Some(parent_id) = parent {
-                let Some(ancestor) = nodes.iter().find(|node| node.id == parent_id) else {
-                    break;
-                };
-                if ancestor.pressable {
-                    owner = ancestor.id;
-                    break;
-                }
-                parent = ancestor.parent;
-            }
-            owner
-        };
-        if !target.input && !target.pressable {
-            let pressable_ancestor = nodes.iter().any(|node| node.id == owner && node.pressable);
-            if !pressable_ancestor {
-                return Err(format!("`{selector}` is not pressable"));
-            }
-        }
+        let owner =
+            press_owner(&nodes, target).ok_or_else(|| format!("`{selector}` is not pressable"))?;
         let selected = self.target_point(id, &selector)?;
         let geometry = self
             .target_geometry(target)
@@ -1690,28 +1686,28 @@ impl Agent {
 
     /// Presses the semantic node hit by a checked native point.
     pub fn press_at(&self, at: Point<Points>) -> Result<(), String> {
-        let at = self.checked_point_target(at)?;
+        let at = self.checked_point_target(at, true)?;
         self.native.press(at);
         self.settled()
     }
 
     /// Hovers the semantic node hit by a checked native point.
     pub fn hover_at(&self, at: Point<Points>) -> Result<(), String> {
-        let at = self.checked_point_target(at)?;
+        let at = self.checked_point_target(at, false)?;
         self.native.hover(at)?;
         self.settled()
     }
 
     /// Scrolls the semantic node hit by a checked native point.
     pub fn scroll_at(&self, at: Point<Points>, delta: Point<Points>) -> Result<(), String> {
-        let at = self.checked_point_target(at)?;
+        let at = self.checked_point_target(at, false)?;
         self.native.scroll(at, delta);
         self.settled()
     }
 
     /// Drags from a checked native point to an on-screen point.
     pub fn drag_at(&self, from: Point<Points>, to: Point<Points>) -> Result<(), String> {
-        let from = self.checked_point_target(from)?;
+        let from = self.checked_point_target(from, false)?;
         let viewport = self.native.viewport();
         if to.x.0 < 0.0 || to.y.0 < 0.0 || to.x.0 >= viewport.width.0 || to.y.0 >= viewport.height.0
         {
@@ -1826,20 +1822,28 @@ impl Agent {
         self.actionable_point(id, geometry.owner, at, &selector)
     }
 
-    fn checked_point_target(&self, at: Point<Points>) -> Result<Point<Points>, String> {
+    /// Checks that the native hit at `at` is an enabled semantic node and,
+    /// when `pressable`, one a press goes to ([`press_owner`]).
+    fn checked_point_target(
+        &self,
+        at: Point<Points>,
+        pressable: bool,
+    ) -> Result<Point<Points>, String> {
         self.settled()?;
         let id = self
             .native
             .hit_at(at)?
             .ok_or("offscreen: coordinate has no native target")?;
-        let node = self
-            .scene
-            .semantic_tree()?
-            .into_iter()
+        let nodes = self.scene.semantic_tree()?;
+        let node = nodes
+            .iter()
             .find(|node| node.id == id)
             .ok_or("target_gone: coordinate has no semantic target")?;
         if !node.enabled {
             return Err(format!("node {id} is disabled"));
+        }
+        if pressable && press_owner(&nodes, node).is_none() {
+            return Err(format!("node {id} is not pressable"));
         }
         let bounds = self
             .native
@@ -2917,6 +2921,44 @@ mod tests {
                 result.unwrap();
                 assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 1);
                 assert_eq!(*pressed_at.lock().unwrap(), vec![label_bounds.center()]);
+            }
+        }
+    }
+
+    #[test]
+    fn press_at_rejects_a_label_nothing_pressable_owns() {
+        let label_bounds = Bounds::new(point(px(20.0), px(10.0)), size(px(40.0), px(20.0)));
+        for button in [true, false] {
+            let nodes = vec![
+                semantic_node(1, None, false, SemanticTarget::View),
+                semantic_node(2, Some(1), button, SemanticTarget::View),
+                semantic_node(3, Some(2), false, SemanticTarget::View),
+            ];
+            let presses = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let agent = Agent::requiring_native_hit_test(
+                target_scene(nodes),
+                Box::new(GateNative {
+                    bounds: [
+                        (2, Bounds::new(Point::default(), size(px(80.0), px(40.0)))),
+                        (3, label_bounds),
+                    ]
+                    .into(),
+                    text_bounds: Default::default(),
+                    hit: Ok(Some(3)),
+                    hits: Arc::new(Mutex::new(Vec::new())),
+                    presses: presses.clone(),
+                    pressed_at: Arc::new(Mutex::new(Vec::new())),
+                    typed: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                    viewport: size(px(100.0), px(100.0)),
+                }),
+            );
+            let result = agent.press_at(label_bounds.center());
+            if button {
+                result.unwrap();
+                assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 1);
+            } else {
+                assert_eq!(result.unwrap_err(), "node 3 is not pressable");
+                assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 0);
             }
         }
     }
