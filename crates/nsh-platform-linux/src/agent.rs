@@ -106,6 +106,33 @@ impl LinuxNative {
     }
 }
 
+/// What [`Native::press_keys`] does for a keystroke no app shortcut takes;
+/// `None`: nothing. [`Native::validate_keys`] accepts these and the app's
+/// shortcuts.
+enum Synthesized {
+    Enter,
+    Backspace,
+    SelectAll,
+    Char(char),
+    /// The root's keys: going back.
+    Back(gdk::Key),
+}
+
+fn synthesized(stroke: nsh_core::keymap::Keystroke) -> Option<Synthesized> {
+    use nsh_core::keymap::Key as K;
+    let m = stroke.modifiers;
+    let plain = !(m.ctrl || m.alt || m.cmd);
+    Some(match stroke.key {
+        K::Enter if plain => Synthesized::Enter,
+        K::Backspace if plain => Synthesized::Backspace,
+        K::Char('a') if m.ctrl && !m.alt && !m.cmd => Synthesized::SelectAll,
+        K::Char(c) if plain => Synthesized::Char(if m.shift { shifted(c) } else { c }),
+        K::Escape => Synthesized::Back(gdk::Key::Escape),
+        K::Left => Synthesized::Back(gdk::Key::Left),
+        _ => return None,
+    })
+}
+
 impl Native for LinuxNative {
     fn available(&self) -> bool {
         self.available
@@ -293,23 +320,13 @@ impl Native for LinuxNative {
     }
 
     fn validate_keys(&self, keys: &str) -> Result<(), String> {
-        use nsh_core::keymap::{Key as K, Keystroke};
+        use nsh_core::keymap::Keystroke;
         let stroke =
             Keystroke::parse(keys, nsh_core::platform::Os::Linux).map_err(|e| e.to_string())?;
         let has_binding = self
             .on_main(move |surface| crate::keymap::supports(surface, stroke))
             .ok_or_else(|| "the window is gone".to_owned())?;
-        let m = stroke.modifiers;
-        let plain = !(m.ctrl || m.alt || m.cmd);
-        if has_binding
-            || matches!(
-                stroke.key,
-                K::Enter | K::Backspace if plain
-            )
-            || matches!(stroke.key, K::Char('a') if m.ctrl && !m.alt && !m.cmd)
-            || matches!(stroke.key, K::Char(_) if plain)
-            || matches!(stroke.key, K::Escape | K::Left)
-        {
+        if has_binding || synthesized(stroke).is_some() {
             Ok(())
         } else {
             Err(format!("unsupported Linux key chord `{keys}`"))
@@ -348,7 +365,7 @@ impl Native for LinuxNative {
     }
 
     fn press_keys(&self, keys: &str) -> Result<(), String> {
-        use nsh_core::keymap::{Key as K, Keystroke};
+        use nsh_core::keymap::Keystroke;
         let stroke =
             Keystroke::parse(keys, nsh_core::platform::Os::Linux).map_err(|e| e.to_string())?;
         // The app's shortcuts first, as GTK's shortcut controller (capture
@@ -360,7 +377,6 @@ impl Native for LinuxNative {
             return Ok(());
         }
         let m = stroke.modifiers;
-        let plain = !(m.ctrl || m.alt || m.cmd);
         let mut modifiers = gdk::ModifierType::empty();
         for (on, mask) in [
             (m.ctrl, gdk::ModifierType::CONTROL_MASK),
@@ -372,33 +388,29 @@ impl Native for LinuxNative {
                 modifiers |= mask;
             }
         }
-        match stroke.key {
+        // Other keys do nothing here; the strict path rejects them first
+        // (`validate_keys`).
+        match synthesized(stroke) {
             // The focused field's own keys, through its signals.
-            K::Enter if plain => {
+            Some(Synthesized::Enter) => {
                 self.with_window(|_, w| synth::enter(w));
             }
-            K::Backspace if plain => {
+            Some(Synthesized::Backspace) => {
                 self.with_window(|_, w| synth::backspace(w));
             }
-            K::Char('a') if m.ctrl && !m.alt && !m.cmd => {
+            Some(Synthesized::SelectAll) => {
                 self.with_window(|_, w| synth::select_all(w));
             }
-            K::Char(c) if plain => {
-                let c = if m.shift { shifted(c) } else { c };
+            Some(Synthesized::Char(c)) => {
                 self.with_window(move |_, w| synth::type_text(w, &c.to_string()));
             }
             // The root's keys: going back.
-            K::Escape | K::Left => {
-                let key = if stroke.key == K::Escape {
-                    gdk::Key::Escape
-                } else {
-                    gdk::Key::Left
-                };
+            Some(Synthesized::Back(key)) => {
                 self.on_main(move |surface| {
                     crate::navigation::key_pressed(surface, key, modifiers);
                 });
             }
-            _ => return Err(format!("unsupported key `{keys}`")),
+            None => {}
         }
         Ok(())
     }
