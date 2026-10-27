@@ -1542,12 +1542,13 @@ impl Agent {
         let geometry = self
             .target_geometry(target)
             .ok_or_else(|| format!("`{selector}` is offscreen (no native bounds)"))?;
-        let native_owner = if geometry.synthetic {
-            geometry.owner
-        } else {
-            owner
-        };
-        let at = self.actionable_point(id, native_owner, selected, &selector)?;
+        let at = self.actionable_point_with_press_owner(
+            id,
+            geometry.owner,
+            selected,
+            &selector,
+            Some(owner),
+        )?;
         self.native.press(at);
         self.settled()
     }
@@ -2108,6 +2109,17 @@ impl Agent {
         fallback: Point<Points>,
         selector: &str,
     ) -> Result<Point<Points>, String> {
+        self.actionable_point_with_press_owner(id, native_owner, fallback, selector, None)
+    }
+
+    fn actionable_point_with_press_owner(
+        &self,
+        id: NodeId,
+        native_owner: NodeId,
+        fallback: Point<Points>,
+        selector: &str,
+        press_owner: Option<NodeId>,
+    ) -> Result<Point<Points>, String> {
         if !self.require_hit_test {
             return Ok(fallback);
         }
@@ -2175,7 +2187,13 @@ impl Agent {
         let deadline = Instant::now() + Duration::from_millis(100);
         loop {
             match self.native.hit_at(at) {
-                Ok(Some(hit)) if is_descendant_or_same(hit, native_owner, &by_id) => {
+                Ok(Some(hit))
+                    if is_descendant_or_same(hit, native_owner, &by_id)
+                        || press_owner.is_some_and(|owner| {
+                            is_descendant_or_same(native_owner, hit, &by_id)
+                                && is_descendant_or_same(hit, owner, &by_id)
+                        }) =>
+                {
                     return Ok(at);
                 }
                 Ok(Some(hit)) => {
@@ -2751,13 +2769,16 @@ mod tests {
     }
 
     #[test]
-    fn button_label_press_accepts_its_parent_or_descendant_but_not_foreign_hits() {
+    fn button_label_press_rejects_siblings_and_accepts_only_its_ancestry() {
         let label_bounds = Bounds::new(point(px(20.0), px(10.0)), size(px(40.0), px(20.0)));
-        for hit in [2, 3, 99] {
+        for hit in [2, 3, 4, 5, 6, 99] {
             let nodes = vec![
                 semantic_node(1, None, false, SemanticTarget::View),
                 semantic_node(2, Some(1), true, SemanticTarget::View),
-                semantic_node(3, Some(2), false, SemanticTarget::View),
+                semantic_node(6, Some(2), false, SemanticTarget::View),
+                semantic_node(3, Some(6), false, SemanticTarget::View),
+                semantic_node(4, Some(2), true, SemanticTarget::View),
+                semantic_node(5, Some(4), false, SemanticTarget::View),
             ];
             let presses = Arc::new(std::sync::atomic::AtomicUsize::new(0));
             let pressed_at = Arc::new(Mutex::new(Vec::new()));
@@ -2779,8 +2800,8 @@ mod tests {
                 }),
             );
             let result = agent.press_node(3);
-            if hit == 99 {
-                assert!(result.unwrap_err().contains("occluded_by: 99"));
+            if matches!(hit, 4 | 5 | 99) {
+                assert!(result.unwrap_err().contains(&format!("occluded_by: {hit}")));
                 assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 0);
                 assert!(pressed_at.lock().unwrap().is_empty());
             } else {
