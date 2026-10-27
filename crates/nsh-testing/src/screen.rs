@@ -159,6 +159,8 @@ pub struct Screen {
     /// The context menu the app showed (`Menu.popup`), until it is chosen
     /// from or closed.
     menu: Option<Arc<[nsh_core::desktop::MenuItem]>>,
+    /// The installed application menu whose shortcuts native hosts dispatch.
+    application_menu: Option<Arc<[nsh_core::desktop::MenuItem]>>,
     /// The window's size, when the driver knows it: what lies outside it
     /// (and no scroll view brings in) is not on screen.
     viewport: Option<Size<Points>>,
@@ -599,11 +601,15 @@ impl Screen {
                 self.file_answers.push((*id, (**request).clone()));
             }
             Command::Back => self.back_asked = true,
-            Command::Desktop(desktop) => {
-                if let nsh_core::desktop::DesktopCommand::PopupMenu { items, .. } = &**desktop {
+            Command::Desktop(desktop) => match &**desktop {
+                nsh_core::desktop::DesktopCommand::PopupMenu { items, .. } => {
                     self.menu = Some(items.clone());
                 }
-            }
+                nsh_core::desktop::DesktopCommand::SetMenu(menu) => {
+                    self.application_menu = menu.clone();
+                }
+                _ => {}
+            },
             Command::SetJsResponder { block } => {
                 self.js_block = *block;
                 self.js_grants.push(*block);
@@ -1831,7 +1837,7 @@ impl Screen {
                 }
             }));
         }
-        if let Some(menu) = self.menu() {
+        if let Some(menu) = self.application_menu.as_deref() {
             let mut path = Vec::new();
             menu_keybindings(menu, &mut path, &mut bindings);
         }
@@ -2132,27 +2138,53 @@ mod tests {
 
     #[cfg(feature = "agent")]
     #[test]
-    fn semantic_keybindings_retain_menu_paths_and_action_ids() {
+    fn semantic_keybindings_follow_application_menu_commands_not_popup_lifecycle() {
         use nsh_core::{
-            desktop::{MenuAction, MenuItem, Shortcut},
+            desktop::{DesktopCommand, MenuAction, MenuItem, Shortcut},
             keymap::When,
         };
 
-        let items = [MenuItem::Submenu {
-            label: "File".into(),
-            enabled: true,
-            items: vec![MenuItem::Action(MenuAction {
-                id: 19,
-                label: "Save".into(),
-                shortcut: Some(Shortcut::parse("ctrl+s", false).unwrap()),
-                enabled: true,
+        let action = |id, label: &str, shortcut: &str, enabled| {
+            MenuItem::Action(MenuAction {
+                id,
+                label: label.into(),
+                shortcut: Some(Shortcut::parse(shortcut, false).unwrap()),
+                enabled,
                 checked: None,
                 role: None,
                 when: When::Auto,
-            })],
-        }];
-        let mut bindings = Vec::new();
-        menu_keybindings(&items, &mut Vec::new(), &mut bindings);
+            })
+        };
+        let application_menu: Arc<[MenuItem]> = vec![MenuItem::Submenu {
+            label: "File".into(),
+            enabled: true,
+            items: vec![
+                action(19, "Save", "ctrl+s", true),
+                MenuItem::Submenu {
+                    label: "Disabled".into(),
+                    enabled: false,
+                    items: vec![action(20, "Hidden", "ctrl+h", true)],
+                },
+                action(21, "Unavailable", "ctrl+u", false),
+            ],
+        }]
+        .into();
+        let replacement: Arc<[MenuItem]> = vec![action(22, "Open", "ctrl+o", true)].into();
+        let popup: Arc<[MenuItem]> = vec![action(23, "Popup only", "ctrl+p", true)].into();
+        let set_menu = |menu| MountItem::Command {
+            id: ROOT,
+            command: Command::Desktop(Box::new(DesktopCommand::SetMenu(menu))),
+        };
+        let popup_menu = || MountItem::Command {
+            id: ROOT,
+            command: Command::Desktop(Box::new(DesktopCommand::PopupMenu {
+                items: popup.clone(),
+                at: None,
+            })),
+        };
+        let mut screen = Screen::default();
+        screen.apply(&batch(vec![set_menu(Some(application_menu))]));
+        let bindings = screen.semantic_keybindings();
         assert_eq!(bindings.len(), 1);
         assert_eq!(bindings[0].id, "menu.File/Save#19");
         assert_eq!(bindings[0].chord, "ctrl+s");
@@ -2161,6 +2193,21 @@ mod tests {
             Some(&["File".to_owned(), "Save".to_owned()][..])
         );
         assert_eq!(bindings[0].menu_action_id, Some(19));
+        screen.apply(&batch(vec![popup_menu()]));
+        assert!(screen.menu().is_some());
+        assert_eq!(screen.semantic_keybindings(), bindings);
+        screen.menu_closed();
+        assert!(screen.menu().is_none());
+        assert_eq!(screen.semantic_keybindings(), bindings);
+        screen.apply(&batch(vec![set_menu(Some(replacement))]));
+        let bindings = screen.semantic_keybindings();
+        assert_eq!(bindings.len(), 1);
+        assert_eq!(bindings[0].id, "menu.Open#22");
+        screen.apply(&batch(vec![popup_menu(), set_menu(None)]));
+        assert!(screen.menu().is_some());
+        assert!(screen.semantic_keybindings().is_empty());
+        screen.menu_closed();
+        assert!(screen.semantic_keybindings().is_empty());
     }
 
     fn batch(items: Vec<MountItem>) -> MountBatch {
