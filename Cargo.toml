@@ -43,6 +43,7 @@ nsh-platform-macos = { version = "0.3.0", path = "crates/nsh-platform-macos", de
 nsh-platform-windows = { version = "0.3.0", path = "crates/nsh-platform-windows", default-features = false }
 nsh-dev = { version = "0.3.0", path = "crates/nsh-dev" }
 nsh-testing = { version = "0.3.0", path = "crates/nsh-testing", default-features = false }
+nsh-gpui-agent = { version = "0.3.0", path = "crates/nsh-gpui-agent" }
 gpui-agent = "=0.1.0"
 
 anyhow = "1"
