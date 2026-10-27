@@ -28,7 +28,7 @@ pub(crate) struct DevSession {
     entry: PathBuf,
     src_dir: PathBuf,
     release: bool,
-    server: DevServer,
+    server: Arc<DevServer>,
     devices: Arc<Devices>,
     /// The modules of the last good development build: updates are
     /// computed against it.
@@ -75,7 +75,7 @@ impl DevSession {
             entry,
             src_dir,
             release,
-            server,
+            server: Arc::new(server),
             devices,
             hot: Default::default(),
             watch_files: Default::default(),
@@ -84,6 +84,11 @@ impl DevSession {
         };
         session.rebuild();
         Ok(session)
+    }
+
+    /// The dev server (a GPUI agent asks its page through it).
+    pub(crate) fn server(&self) -> Arc<DevServer> {
+        self.server.clone()
     }
 
     /// The port the dev server listens on.
