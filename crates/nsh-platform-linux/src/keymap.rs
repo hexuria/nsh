@@ -141,6 +141,21 @@ pub(crate) fn press(surface: &Surface, stroke: Keystroke) -> bool {
     fired.is_some()
 }
 
+#[cfg(feature = "dev")]
+pub(crate) fn supports(surface: &Surface, stroke: Keystroke) -> bool {
+    surface
+        .keymap
+        .keymap
+        .borrow()
+        .as_ref()
+        .is_some_and(|keymap| {
+            keymap
+                .bindings()
+                .iter()
+                .any(|binding| binding.keystroke == stroke)
+        })
+}
+
 /// Whether a binding fires for `event` where the focus is: the application
 /// menu's shortcuts (`chrome.rs`), whose controller the window runs first,
 /// give way to it, as menus' key equivalents do on macOS.
