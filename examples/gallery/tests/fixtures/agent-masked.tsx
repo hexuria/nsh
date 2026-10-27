@@ -11,7 +11,7 @@ function App() {
         testID="agent-secret"
         masked
         value={secret()}
-        onChange={(text) => secret.set(text)}
+        onChange={({ value: text }) => secret.set(text)}
         style={{ height: 36 }}
       />
       <Text testID="agent-secret-length">{`length:${secret().length}`}</Text>
