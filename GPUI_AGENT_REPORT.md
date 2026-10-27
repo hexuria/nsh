@@ -323,9 +323,11 @@ The outstanding `Default` convention question remains unresolved by design: do n
 
 ## Button-label press owner correction
 
-This follow-up starts from the reviewed feature-branch head `9cc82ae5b41684582247708d341ddffcda00ffc1`; the preceding report snapshot was `80a59fe7afa831fe96dfc0393b0326663a3e9888`. Commit `3d8d9f8071cfa4ddd6fd67c5e43fa800710b2eaf` fixes strict `press_node` owner selection: ordinary native views use their resolved pressable ancestor for hit verification, while synthetic canvas/text regions retain their precise native owner. This lets a button-label press accept a native hit on the button or its descendant, but still rejects a foreign hit before dispatching a press. The regression `button_label_press_accepts_its_parent_or_descendant_but_not_foreign_hits` covers parent, descendant, and foreign hits, including no press side effect on rejection. No protocol or public API changed.
+Commit `3d8d9f8071cfa4ddd6fd67c5e43fa800710b2eaf` was the earlier button-label owner correction, based on branch head `9cc82ae5b41684582247708d341ddffcda00ffc1`. Its broad acceptance of hits anywhere beneath the resolved button owner also admitted sibling controls; that behavior is superseded by `497ae5a3bcc20e1394aa1082b4562835f9d9932a`.
 
-Latest shared checks for this correction:
+The current `press_node` keeps the selected geometry, clipping, and hit-test target on the actual target native owner. It accepts hits on that target or its descendants, and hits on the ancestor chain from the target up through the resolved pressable owner. It rejects siblings of the target and their descendants, even when they share the same pressable ancestor. Ordinary `actionable_point` callers pass no press-owner exception and retain their prior semantics; synthetic targets keep their precise geometry. The regression `button_label_press_rejects_siblings_and_accepts_only_its_ancestry` covers the button, target label, and intermediate wrapper as accepted hits, and a sibling control, its child, and a foreign node as rejected hits with no press dispatched. No protocol or public API changed.
+
+Historical checks for the superseded correction:
 
 ```text
 cargo test -p nsh-testing --features agent --lib button_label_press_accepts_its_parent_or_descendant_but_not_foreign_hits
@@ -346,7 +348,26 @@ git diff --check
   passed
 ```
 
-The GTK and Android builds/clippy plus live runtime evidence above cover the pre-correction revision at `9cc82ae5`; they were not rerun for this shared `nsh-testing` owner-selection fix. No runtime or app processes were changed.
+Latest shared checks for `497ae5a3bcc20e1394aa1082b4562835f9d9932a`:
+
+```text
+cargo test -p nsh-testing --features agent --lib button_label_press_rejects_siblings_and_accepts_only_its_ancestry
+  1 passed, 0 failed, 36 filtered out
+cargo test -p nsh-testing --features agent --lib
+  37 passed, 0 failed, 0 ignored
+cargo test -p nsh-gpui-agent --features dev-agent
+  7 passed, 0 failed; 0 doc tests
+cargo clippy -p nsh-testing --features agent --all-targets -- -D warnings
+  Finished dev profile successfully
+cargo clippy -p nsh-gpui-agent --features dev-agent --all-targets -- -D warnings
+  Finished dev profile successfully
+cargo +nightly fmt --all
+  passed
+cargo +nightly fmt --all --check
+  passed
+```
+
+The GTK and Android builds/clippy and live runtime evidence above remain pre-correction evidence from the `9cc82ae5` revision. They were not rerun for either button-label owner correction. No runtime or app processes were changed.
 
 ## Limitations and unverified behavior
 
@@ -379,10 +400,11 @@ The GTK and Android builds/clippy plus live runtime evidence above cover the pre
 | `746960da12eab1c48324e618c79a63b7c11edda6` | Testing: restore legacy ordinary selector queries and add a semantic-tree-independent find/press regression. |
 | `fabbf035ee3e5c2cd03aad9026a265aec6afab43` | Merge: merge updated `origin/main` without rewriting history. |
 | `80a59fe7afa831fe96dfc0393b0326663a3e9888` | Report: prior post-merge validation snapshot. |
-| `3d8d9f8071cfa4ddd6fd67c5e43fa800710b2eaf` | Testing: preserve the pressable ancestor for strict native button-label presses. |
-| This final report commit | Report: record the button-label correction and latest shared checks. |
+| `3d8d9f8071cfa4ddd6fd67c5e43fa800710b2eaf` | Testing: initial label-owner correction; its broad sibling acceptance was superseded by the following fix. |
+| `497ae5a3bcc20e1394aa1082b4562835f9d9932a` | Testing: restrict label hits to the target ancestry and reject sibling controls. |
+| This final report commit | Report: record the ancestry restriction and latest shared checks. |
 
-Earlier report snapshot: `deb15fabc110e01e52fc8c11de7cb393dc57fd1d`; subsequent report snapshot: `80a59fe7afa831fe96dfc0393b0326663a3e9888`; this follow-up began at branch head `9cc82ae5b41684582247708d341ddffcda00ffc1`. Final report marker: this separate report-only commit, made last before pushing the feature branch. The report commit records the latest shared validation; no additional implementation changes are included in it.
+Earlier report snapshot: `deb15fabc110e01e52fc8c11de7cb393dc57fd1d`; subsequent report snapshot: `80a59fe7afa831fe96dfc0393b0326663a3e9888`. The previous label-owner follow-up began at branch head `9cc82ae5b41684582247708d341ddffcda00ffc1`; this ancestry-restriction follow-up began at `98ebc9f3ed85378af350c3baf54e0a7baed69936`. Final report marker: this separate report-only commit, made last before pushing the feature branch. The report commit records the latest shared validation; no additional implementation changes are included in it.
 
 The feature branch is `devin/gpui-agent-adapter`; it includes `origin/main` at `1849776f68ee41d73c08970fe530cf952451af13`. Only this feature branch was pushed. The report is committed last so it can be dropped before proposing the implementation upstream.
 
