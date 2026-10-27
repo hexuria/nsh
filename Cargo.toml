@@ -53,6 +53,7 @@ nsh-platform-windows = { version = "0.6.0", path = "crates/nsh-platform-windows"
 nsh-platform-tui = { version = "0.6.0", path = "crates/nsh-platform-tui", default-features = false }
 nsh-dev = { version = "0.6.0", path = "crates/nsh-dev" }
 nsh-testing = { version = "0.6.0", path = "crates/nsh-testing", default-features = false }
+gpui-agent = "=0.1.0"
 
 anyhow = "1"
 thiserror = "2"
@@ -68,8 +69,6 @@ libc = "0.2"
 env_filter = { version = "2", default-features = false }
 # C functions over macros Rust cannot call (`nsh-platform-apple`'s `os_log_with_type`).
 cc = "1.8"
-# The gpui-agent wire protocol (`nsh-platform-macos` feature `gpui-agent`).
-gpui-agent = "0.1.0"
 imagesize = "0.15"
 # A GIF's first frame (the size resvg decodes) for the SVG layer budget.
 gif = "0.14"
