@@ -988,6 +988,7 @@ impl MountItem {
             MountItem::ScrollBehavior { .. } => "ScrollBehavior",
             MountItem::Refreshing { .. } => "Refreshing",
             MountItem::Canvas { .. } => "Canvas",
+            MountItem::Shader { .. } => "Shader",
             MountItem::AnimationBindings { .. } => "AnimationBindings",
             MountItem::Gestures { .. } => "Gestures",
             MountItem::ViewProps { .. } => "ViewProps",
