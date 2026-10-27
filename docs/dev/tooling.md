@@ -633,6 +633,8 @@ when the run ends, Ctrl-C included.
   or `nsh -v`. `examples/gallery/tests/fixtures/agent-masked.tsx` is the fixture to check that with.
 - `nsh test --target web` is unchanged: its `WebNative` is not the agent's, so it keeps the trait's defaults for
   those hooks. Its server sets no key, still sends `TestSetup`, and its page still reads a field's real text.
+- A Rust app (`nsh.json` `"root"`) is not attached: its page runs the app's own runtime, which has no test hooks, so
+  `nsh run --target web` refuses `GPUI_AGENT=1` for it rather than run without the agent.
 
 The web (`--target web`, `nsh-cli/src/test_web.rs`): the agent runs in the CLI, the app in a page of a headless
 Chromium browser (Chrome, Edge or Chromium; `--browser <PATH>`, else the one installed where `cdp.rs` looks; nsh never
