@@ -25,6 +25,8 @@ mod test_ios;
 mod test_web;
 mod ui;
 mod web;
+mod web_agent;
+mod web_native;
 mod windows;
 
 use std::{
