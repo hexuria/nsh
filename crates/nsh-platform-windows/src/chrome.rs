@@ -998,6 +998,68 @@ fn choose(surface: &Rc<Surface>, id: u32, role: Option<MenuRole>) {
     }
 }
 
+/// Fires an application-menu shortcut through the same native action as a
+/// keyboard shortcut.
+#[cfg(feature = "dev")]
+pub(crate) fn fire_menu_keybinding(
+    surface: &Rc<Surface>,
+    binding: &nsh_testing::agent::SemanticKeybinding,
+) -> Result<(), String> {
+    let action_id = binding
+        .menu_action_id
+        .ok_or("menu shortcut has no action id")?;
+    let path = binding
+        .menu_path
+        .as_deref()
+        .ok_or("menu shortcut has no action path")?;
+    let items = surface
+        .chrome
+        .menu
+        .borrow()
+        .clone()
+        .ok_or("the application menu is unavailable")?;
+    let (id, role) = resolve_menu_keybinding(&items, action_id, path)?;
+    choose(surface, id, role);
+    Ok(())
+}
+
+#[cfg(feature = "dev")]
+fn resolve_menu_keybinding(
+    items: &[MenuItem],
+    action_id: u32,
+    path: &[String],
+) -> Result<(u32, Option<MenuRole>), String> {
+    let mut level: &[MenuItem] = items;
+    let mut chosen = None;
+    for (index, label) in path.iter().enumerate() {
+        let last = index + 1 == path.len();
+        let item = level
+            .iter()
+            .find(|item| match item {
+                MenuItem::Action(action) => {
+                    last && action.enabled && action.id == action_id && action.label == *label
+                }
+                MenuItem::Submenu {
+                    label: submenu,
+                    enabled: true,
+                    ..
+                } => !last && submenu == label,
+                MenuItem::Separator | MenuItem::Submenu { .. } => false,
+            })
+            .ok_or_else(|| format!("the application menu has no action {label:?}"))?;
+        match item {
+            MenuItem::Action(action) => chosen = Some((action.id, action.role)),
+            MenuItem::Submenu { items, .. } => level = items,
+            MenuItem::Separator => {}
+        }
+    }
+    let (id, role) = chosen.ok_or("no menu action chosen")?;
+    if unsupported(role) {
+        return Err("the menu action is unsupported on Windows".into());
+    }
+    Ok((id, role))
+}
+
 /// `WM_NSH_MENU`: shows the context menu asked for.
 pub(crate) fn show_popup(surface: &Rc<Surface>) {
     let Some(Popup { items, at, actions }) = surface.chrome.popup.borrow_mut().take() else {
@@ -1167,6 +1229,62 @@ fn menu_bar_rect(hwnd: HWND) -> Option<RECT> {
     r.top -= window.top;
     r.bottom -= window.top;
     Some(r)
+}
+
+#[cfg(all(test, feature = "dev"))]
+mod agent_menu_tests {
+    use super::*;
+    use nsh_core::keymap::When;
+
+    fn action(id: u32, label: &str, enabled: bool, role: Option<MenuRole>) -> MenuItem {
+        MenuItem::Action(MenuAction {
+            id,
+            label: label.into(),
+            shortcut: None,
+            enabled,
+            checked: None,
+            role,
+            when: When::Always,
+        })
+    }
+
+    fn menu(role: Option<MenuRole>, enabled: bool) -> Vec<MenuItem> {
+        vec![MenuItem::Submenu {
+            label: "File".into(),
+            enabled: true,
+            items: vec![action(7, "Open", enabled, role)],
+        }]
+    }
+
+    fn path() -> Vec<String> {
+        vec!["File".into(), "Open".into()]
+    }
+
+    #[test]
+    fn resolves_enabled_menu_keybinding_by_path_and_id() {
+        assert_eq!(
+            resolve_menu_keybinding(&menu(None, true), 7, &path()),
+            Ok((7, None))
+        );
+        assert!(resolve_menu_keybinding(&menu(None, true), 8, &path()).is_err());
+    }
+
+    #[test]
+    fn rejects_missing_and_disabled_menu_keybindings() {
+        assert!(resolve_menu_keybinding(&menu(None, true), 7, &["Missing".into()]).is_err());
+        assert!(resolve_menu_keybinding(&menu(None, false), 7, &path()).is_err());
+        let disabled_submenu = vec![MenuItem::Submenu {
+            label: "File".into(),
+            enabled: false,
+            items: vec![action(7, "Open", true, None)],
+        }];
+        assert!(resolve_menu_keybinding(&disabled_submenu, 7, &path()).is_err());
+    }
+
+    #[test]
+    fn rejects_windows_unsupported_menu_roles() {
+        assert!(resolve_menu_keybinding(&menu(Some(MenuRole::About), true), 7, &path()).is_err());
+    }
 }
 
 /// The menu bar's messages in the dark theme (`WM_UAHDRAWMENU`,

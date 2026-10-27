@@ -15,6 +15,6 @@ workspace = true
 log.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-nsh-platform-windows = { workspace = true, features = ["dev"] }
+nsh-platform-windows = { workspace = true, features = ["dev-agent"] }
 nsh-dev.workspace = true
 nsh-engine = { workspace = true, features = ["js"] }
