@@ -616,7 +616,6 @@ fn run_android(
     let _reverse = android::Reverse::add(&sdk, &serial, session.port())?;
     let url = session.local_url();
     let mut start = vec![
-        "shell",
         "am",
         "start",
         "-S",
@@ -627,6 +626,18 @@ fn run_android(
         &url,
     ];
     if let Some((address, token)) = &agent {
+        // The token goes into the host's private files, read over standard
+        // input: it is in no process's arguments (here or on the device),
+        // and an intent another app sends cannot choose it.
+        let write = android::shell_command(&[
+            "run-as",
+            BUNDLE_ID,
+            "sh",
+            "-c",
+            &format!("umask 077 && mkdir -p files && cat > {ANDROID_AGENT_TOKEN}"),
+        ]);
+        android::adb_with_input(&sdk, &serial, &["shell", "-T", &write], token)
+            .context("store the GPUI-agent token in the development host")?;
         start.extend([
             "--es",
             "GPUI_AGENT",
@@ -634,48 +645,27 @@ fn run_android(
             "--es",
             "GPUI_AGENT_ADDR",
             address,
-            "--es",
-            "GPUI_AGENT_TOKEN",
-            token,
         ]);
     }
     if trace {
         start.extend(["--ez", "trace", "true"]);
     }
     let step = ui::Step::start("launching the development host");
-    start_android_activity(
-        &sdk,
-        &serial,
-        &start,
-        agent.as_ref().map(|(_, token)| token.as_str()),
-    )?;
+    android::adb(&sdk, &serial, &["shell", &android::shell_command(&start)])?;
     step.finish();
     let result = session.watch(|| Ok(false));
     let _ = android::adb(&sdk, &serial, &["shell", "am", "force-stop", BUNDLE_ID]);
+    if agent.is_some() {
+        let remove =
+            android::shell_command(&["run-as", BUNDLE_ID, "rm", "-f", ANDROID_AGENT_TOKEN]);
+        let _ = android::adb(&sdk, &serial, &["shell", &remove]);
+    }
     result
 }
 
-fn start_android_activity(
-    sdk: &crate::android::Sdk,
-    serial: &str,
-    args: &[&str],
-    secret: Option<&str>,
-) -> anyhow::Result<()> {
-    let output = Command::new(sdk.adb())
-        .args(["-s", serial])
-        .args(args)
-        .output()
-        .context("start Android development host")?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stderr = secret.map_or_else(
-            || stderr.to_string(),
-            |value| stderr.replace(value, "<redacted>"),
-        );
-        anyhow::bail!("Android development-host launch failed: {}", stderr.trim());
-    }
-    Ok(())
-}
+/// Where the Android development host reads its GPUI-agent token from, in
+/// its data directory (`DevActivity`).
+const ANDROID_AGENT_TOKEN: &str = "files/gpui-agent-token";
 
 /// Builds the Android development host (when its runtime changed) into
 /// `work` and installs it on device `serial` (when the device does not have
