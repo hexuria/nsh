@@ -34,6 +34,12 @@ const FRAME: Duration = Duration::from_millis(16);
 /// How far one scroll event moves at most, in points.
 const SCROLL_STEP: f32 = 20.0;
 
+fn viewport_window_dimension(requested: Points, window: i32, content: i32) -> i32 {
+    (requested.0.round() as i32)
+        .saturating_add(window.saturating_sub(content))
+        .max(1)
+}
+
 /// The surface the agent acts on, by key (its calls must be `Send`).
 pub(crate) struct LinuxNative {
     key: u64,
@@ -438,8 +444,32 @@ impl Native for LinuxNative {
     }
 
     fn resize(&self, width: Points, height: Points) -> Result<(), String> {
-        self.with_window(move |_, w| w.set_default_size(width.0 as i32, height.0 as i32))
-            .ok_or_else(|| "the window is gone".to_owned())
+        let attached = self.available.is_some();
+        self.with_window(move |surface, window| {
+            if !attached {
+                window.set_default_size(width.0 as i32, height.0 as i32);
+                return Ok(());
+            }
+            if window.is_maximized() || window.is_fullscreen() {
+                return Err(
+                    "cannot resize the viewport of a maximized or fullscreen window".into(),
+                );
+            }
+            let (window_width, window_height) = window.default_size();
+            let (content_width, content_height) = (surface.root.width(), surface.root.height());
+            if window_width <= 0 || window_height <= 0 || content_width <= 0 || content_height <= 0
+            {
+                return Err("the viewport is not laid out yet".into());
+            }
+            // GTK's default size, not its widget allocation, is the resize
+            // coordinate space. Preserve its measured difference from content.
+            window.set_default_size(
+                viewport_window_dimension(width, window_width, content_width),
+                viewport_window_dimension(height, window_height, content_height),
+            );
+            Ok(())
+        })
+        .unwrap_or_else(|| Err("the window is gone".to_owned()))
     }
 
     fn set_dark(&self, dark: bool) -> Result<(), String> {
@@ -449,5 +479,19 @@ impl Native for LinuxNative {
 
     fn quit(&self) {
         self.with_window(|_, w| w.close());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn viewport_dimensions_compensate_chrome_without_accumulating_it() {
+        assert_eq!(viewport_window_dimension(Points(1000.0), 800, 790), 1010);
+        assert_eq!(viewport_window_dimension(Points(1000.0), 1010, 1000), 1010);
+        assert_eq!(viewport_window_dimension(Points(390.0), 1010, 1000), 400);
+        assert_eq!(viewport_window_dimension(Points(844.0), 900, 850), 894);
+        assert_eq!(viewport_window_dimension(Points(390.0), 800, 800), 390);
     }
 }
