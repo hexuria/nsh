@@ -1009,23 +1009,26 @@ pub(crate) fn simulate(surface: &Rc<Surface>, action: Simulated) {
 /// `grab_focus` selects all its text (`gtk-entry-select-on-focus`), which
 /// the keys typed next would replace.
 #[cfg(feature = "dev")]
-fn focus_native(widget: &gtk::Widget) {
+pub(crate) fn focus_native(widget: &gtk::Widget) -> bool {
     if let Some(text) = text_inside(widget)
         && text.grab_focus_without_selecting()
     {
-        return;
+        return true;
     }
     if widget.grab_focus() {
-        return;
+        return true;
     }
     let mut child = widget.first_child();
     while let Some(c) = child {
         if c.is_focusable() && c.grab_focus() {
-            return;
+            return true;
         }
-        focus_native(&c);
+        if focus_native(&c) {
+            return true;
+        }
         child = c.next_sibling();
     }
+    false
 }
 
 /// `widget` if it is a `GtkText`, else the first inside it.
@@ -1125,6 +1128,10 @@ struct Hit {
 /// The innermost view at `(x, y)` (root coordinates).
 fn pick(root: &NshView, x: f32, y: f32) -> Option<Hit> {
     pick_in(root, graphene::Point::new(x, y))
+}
+
+pub(crate) fn pick_node(root: &NshView, x: f32, y: f32) -> Option<nsh_core::NodeId> {
+    pick(root, x, y).map(|hit| hit.view.state().id)
 }
 
 fn pick_in(view: &NshView, p: graphene::Point) -> Option<Hit> {

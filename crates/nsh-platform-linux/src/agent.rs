@@ -10,7 +10,7 @@ use std::{
     rc::Rc,
     sync::{
         Arc,
-        atomic::{AtomicU32, Ordering},
+        atomic::{AtomicBool, AtomicU32, Ordering},
         mpsc,
     },
     time::{Duration, Instant},
@@ -43,6 +43,8 @@ pub(crate) struct LinuxNative {
     key: u64,
     /// The window pointer input goes to (its root node; `target_window`).
     target: Arc<AtomicU32>,
+    /// Whether the surface is still there (`None`: assumed, `nsh test`'s).
+    available: Option<Arc<AtomicBool>>,
 }
 
 impl LinuxNative {
@@ -50,6 +52,16 @@ impl LinuxNative {
         LinuxNative {
             key,
             target: Arc::new(AtomicU32::new(ROOT_ID)),
+            available: None,
+        }
+    }
+
+    #[cfg(feature = "dev-agent")]
+    pub(crate) fn attached(key: u64, available: Arc<AtomicBool>) -> Self {
+        LinuxNative {
+            key,
+            target: Arc::new(AtomicU32::new(ROOT_ID)),
+            available: Some(available),
         }
     }
 
@@ -160,6 +172,12 @@ impl LinuxNative {
 }
 
 impl Native for LinuxNative {
+    fn available(&self) -> bool {
+        self.available
+            .as_ref()
+            .is_none_or(|available| available.load(Ordering::Acquire))
+    }
+
     fn bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
         self.on_main(move |surface| {
             let view = surface.mounter.borrow().views.get(&id)?.clone();
@@ -174,6 +192,12 @@ impl Native for LinuxNative {
             ))
         })
         .flatten()
+    }
+
+    fn hit_at(&self, at: Point<Points>) -> Result<Option<NodeId>, String> {
+        let (x, y) = (at.x.0, at.y.0);
+        self.on_main(move |surface| crate::input::pick_node(&surface.root, x, y))
+            .ok_or_else(|| "the window is gone".to_owned())
     }
 
     fn text_bounds(&self, text: NodeId, start: u32, end: u32) -> Option<Bounds<Points>> {
@@ -381,6 +405,61 @@ impl Native for LinuxNative {
         .ok_or_else(|| "the window is gone".to_owned())
     }
 
+    fn validate_keys(&self, keys: &str) -> Result<(), String> {
+        use nsh_core::keymap::{Key as K, Keystroke};
+        let stroke =
+            Keystroke::parse(keys, nsh_core::platform::Os::Linux).map_err(|e| e.to_string())?;
+        let has_binding = self
+            .on_main(move |surface| crate::keymap::supports(surface, stroke))
+            .ok_or_else(|| "the window is gone".to_owned())?;
+        let m = stroke.modifiers;
+        let plain = !(m.ctrl || m.alt || m.cmd);
+        if has_binding
+            || matches!(
+                stroke.key,
+                K::Enter | K::Backspace if plain
+            )
+            || matches!(stroke.key, K::Char('a') if m.ctrl && !m.alt && !m.cmd)
+            || matches!(stroke.key, K::Char(_) if plain)
+            || matches!(stroke.key, K::Escape | K::Left)
+        {
+            Ok(())
+        } else {
+            Err(format!("unsupported Linux key chord `{keys}`"))
+        }
+    }
+
+    fn focus_node(&self, id: NodeId) -> Result<(), String> {
+        self.on_main(move |surface| {
+            let view = surface.mounter.borrow().views.get(&id).cloned();
+            view.is_some_and(|view| {
+                let widget = view.upcast_ref::<gtk::Widget>();
+                let focused = widget.root().and_then(|root| root.focus());
+                focused
+                    .as_ref()
+                    .is_some_and(|focused| focused == widget || focused.is_ancestor(widget))
+                    || crate::input::focus_native(widget)
+            })
+        })
+        .ok_or_else(|| "the window is gone".to_owned())?
+        .then_some(())
+        .ok_or_else(|| format!("node {id} cannot receive native focus"))
+    }
+
+    fn app_focused(&self) -> bool {
+        self.with_window(|_, window| window.is_active())
+            .unwrap_or(false)
+    }
+
+    fn fire_menu_keybinding(
+        &self,
+        binding: &nsh_testing::agent::SemanticKeybinding,
+    ) -> Result<(), String> {
+        let binding = binding.clone();
+        self.on_main(move |surface| crate::chrome::fire_menu_keybinding(surface, &binding))
+            .unwrap_or_else(|| Err("the window is gone".into()))
+    }
+
     fn press_keys(&self, keys: &str) -> Result<(), String> {
         use nsh_core::keymap::{Key as K, Keystroke};
         let stroke =
@@ -461,7 +540,7 @@ impl Native for LinuxNative {
                     crate::navigation::key_pressed(surface, key, modifiers);
                 });
             }
-            _ => {}
+            _ => return Err(format!("unsupported key `{keys}`")),
         }
         Ok(())
     }
