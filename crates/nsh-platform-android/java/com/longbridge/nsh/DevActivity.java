@@ -134,12 +134,16 @@ public final class DevActivity extends Activity {
         }
     }
 
-    /** The GPUI-agent token `nsh run` stored in this app's files; null when there is none. */
+    /**
+     * The GPUI-agent token `nsh run` stored in this app's files; null when
+     * there is none. As it is: `nsh run` writes the token's bytes alone
+     * and refuses one with whitespace around it.
+     */
     private String agentToken() {
         try {
             byte[] bytes = java.nio.file.Files.readAllBytes(
                     new java.io.File(getFilesDir(), "gpui-agent-token").toPath());
-            String token = new String(bytes, java.nio.charset.StandardCharsets.UTF_8).trim();
+            String token = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
             return token.isEmpty() ? null : token;
         } catch (java.io.IOException e) {
             return null;
