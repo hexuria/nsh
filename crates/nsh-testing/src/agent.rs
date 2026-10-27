@@ -2404,9 +2404,16 @@ impl Agent {
         selector: &str,
         local: Option<Point<Points>>,
     ) -> Result<(Point<Points>, bool), String> {
+        // Strict mode's errors say `offscreen`, as its others do; the
+        // ordinary wording is the headless driver's.
         let not_on_screen = || {
+            let state = if self.require_hit_test {
+                "is offscreen"
+            } else {
+                "is not on screen"
+            };
             format!(
-                "`{selector}` is offscreen (it has no native view); {}",
+                "`{selector}` {state} (it has no native view); {}",
                 self.on_screen()
             )
         };
@@ -3379,6 +3386,37 @@ mod tests {
             agent.actionable_point(2, 2, selected, "target"),
             Ok(selected)
         );
+    }
+
+    #[test]
+    fn a_view_without_native_bounds_is_not_on_screen_unless_strict() {
+        use nsh_core::{ViewKind, geometry::Size};
+
+        for strict in [false, true] {
+            let native = GateNative {
+                bounds: Default::default(),
+                text_bounds: Default::default(),
+                hit: Ok(None),
+                hits: Arc::new(Mutex::new(Vec::new())),
+                presses: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                pressed_at: Arc::new(Mutex::new(Vec::new())),
+                typed: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                viewport: Size::new(px(100.0), px(100.0)),
+            };
+            let scene = gate_scene(ViewKind::View, false, false);
+            let agent = if strict {
+                Agent::requiring_native_hit_test(scene, Box::new(native))
+            } else {
+                Agent::new(scene, Box::new(native))
+            };
+            let error = agent.scroll_into_view(2, "id:target").unwrap_err();
+            let expected = if strict {
+                "`id:target` is offscreen (it has no native view)"
+            } else {
+                "`id:target` is not on screen (it has no native view)"
+            };
+            assert!(error.starts_with(expected), "{error}");
+        }
     }
 
     #[test]
