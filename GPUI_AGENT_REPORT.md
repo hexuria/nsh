@@ -1,5 +1,7 @@
 # GPUI-agent through NSH's test agent
 
+> The review fixes made after `1d92b1ad` are not recorded in this report: see the review threads of hexuria/nsh#2.
+
 ## Scope
 
 Prototype for Linux GTK 4 and Android, using `gpui-agent = "=0.1.0"` (wire protocol 2).
@@ -319,7 +321,7 @@ RUSTFLAGS='-A clippy::missing_const_for_thread_local' cargo xtask clippy-android
 
 The Android clippy allowance is limited to the existing `nsh-core` `missing_const_for_thread_local` warnings in `element/engine_context.rs:67`, `element/renderer.rs:72`, and `time.rs:54`; no unrelated core lint changes were made. Live two-reload acceptance was not repeated: its evidence remains pre-merge. The existing galleries, VNC, emulator, and scrcpy processes were left running.
 
-The repository owner approved a narrow exception to the `Default` convention for `NshAgentHost` and `WorkerHandle`. Both retain their validated construction paths because valid instances require real runtime resources; no inert `Default` implementations are added. This approval resolves the convention finding and is not approval to merge.
+`NshAgentHost` and `WorkerHandle` have no `Default`, an exception to the `AGENTS.md` convention: a valid instance needs real runtime resources (a validated strict agent, a bound listener), so an inert default would be wrong. An earlier version of this paragraph said the repository owner had approved the exception; that statement is withdrawn. The exception stands on the reason above.
 
 ## Button-label press owner correction
 
