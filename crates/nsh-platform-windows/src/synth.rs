@@ -131,7 +131,7 @@ pub(crate) fn press(surface: &Rc<Surface>, vk: u16, modifiers: Modifiers) {
 }
 
 /// Resizes the window so that its client area is `w` x `h` points.
-pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) {
+pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) -> Result<(), String> {
     use windows::Win32::{
         Foundation::RECT,
         UI::{
@@ -155,8 +155,9 @@ pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) {
     unsafe {
         let style = WINDOW_STYLE(GetWindowLongW(hwnd, GWL_STYLE) as u32);
         let ex = WINDOW_EX_STYLE(GetWindowLongW(hwnd, GWL_EXSTYLE) as u32);
-        let _ = AdjustWindowRectExForDpi(&mut rect, style, false, ex, dpi);
-        let _ = SetWindowPos(
+        AdjustWindowRectExForDpi(&mut rect, style, false, ex, dpi)
+            .map_err(|error| format!("AdjustWindowRectExForDpi failed: {error}"))?;
+        SetWindowPos(
             hwnd,
             None,
             0,
@@ -164,8 +165,10 @@ pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) {
             rect.right - rect.left,
             rect.bottom - rect.top,
             SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
-        );
+        )
+        .map_err(|error| format!("SetWindowPos failed: {error}"))?;
     }
+    Ok(())
 }
 
 /// A picture of what the window shows, as a PNG: captured as DWM composes
