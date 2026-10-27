@@ -33,8 +33,8 @@ function App() {
         <View
           testID="cover"
           onPress={() => {}}
-          onHoverIn={() => hoverIns.set(hoverIns() + 1)}
-          onHoverOut={() => hoverOuts.set(hoverOuts() + 1)}
+          onMouseEnter={() => hoverIns.set(hoverIns() + 1)}
+          onMouseLeave={() => hoverOuts.set(hoverOuts() + 1)}
           style={{ position: "absolute", left: 0, top: 0, width: 220, height: 56 }}
         >
           <Text>cover</Text>
