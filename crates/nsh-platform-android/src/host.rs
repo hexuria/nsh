@@ -2,6 +2,8 @@
 //! UI thread and owns the UI-thread animator. Every `Native.java` method is
 //! exported here.
 
+#[cfg(feature = "dev-agent")]
+use std::sync::atomic::AtomicBool;
 use std::{
     collections::VecDeque,
     sync::{
@@ -89,9 +91,72 @@ pub(crate) struct Host {
     /// every batch and error goes to it.
     #[cfg(feature = "dev")]
     pub(crate) test_model: Mutex<Option<Arc<nsh_testing::agent::Model>>>,
+    #[cfg(feature = "dev-agent")]
+    agent_model: Mutex<Option<Arc<nsh_testing::agent::Model>>>,
+    #[cfg(feature = "dev-agent")]
+    agent_batches: Mutex<VecDeque<(u64, MountBatch)>>,
+    #[cfg(feature = "dev-agent")]
+    agent_worker: Mutex<Option<nsh_gpui_agent::WorkerHandle>>,
+    #[cfg(feature = "dev-agent")]
+    pub(crate) agent_alive: AtomicBool,
 }
 
 impl Host {
+    #[cfg(feature = "dev-agent")]
+    fn start_agent(
+        self: &Arc<Self>,
+        address: &str,
+        token: &str,
+        screenshot_directory: &str,
+    ) -> Result<(), String> {
+        use std::net::SocketAddr;
+
+        let mut worker_slot = self
+            .agent_worker
+            .lock()
+            .map_err(|_| "agent worker lock is unavailable")?;
+        if worker_slot.is_some() {
+            return Err("GPUI-agent is already attached".into());
+        }
+        if screenshot_directory.is_empty()
+            || !std::path::Path::new(screenshot_directory).is_absolute()
+        {
+            return Err("GPUI-agent screenshot directory is invalid".into());
+        }
+        let address = address
+            .parse::<SocketAddr>()
+            .map_err(|_| "GPUI-agent address is invalid")?;
+        let model = Arc::new(nsh_testing::agent::Model::default());
+        let agent = Arc::new(nsh_testing::agent::Agent::requiring_native_hit_test(
+            model.clone(),
+            Box::new(crate::agent::AndroidNative::new_for_agent(
+                Arc::downgrade(self),
+                self.density.get(),
+            )),
+        ));
+        let host = nsh_gpui_agent::NshAgentHost::new(
+            "Native Shell",
+            nsh_gpui_agent::PlatformKind::Mobile,
+            agent,
+        )?
+        .with_screenshot_directory(std::path::PathBuf::from(screenshot_directory));
+        *self.agent_model.lock().unwrap_or_else(|e| e.into_inner()) = Some(model);
+        self.agent_alive.store(true, Ordering::Release);
+        let worker = match nsh_gpui_agent::spawn_worker(address, token.to_owned(), host) {
+            Ok(worker) => worker,
+            Err(error) => {
+                self.agent_alive.store(false, Ordering::Release);
+                self.agent_model
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .take();
+                return Err(error);
+            }
+        };
+        *worker_slot = Some(worker);
+        Ok(())
+    }
+
     /// The display's density: pixels per point.
     #[cfg(feature = "dev")]
     pub(crate) fn density(&self) -> f32 {
@@ -133,6 +198,15 @@ impl Host {
 
     /// Runs `app`, replacing the running app.
     pub(crate) fn load(self: &Arc<Self>, app: impl Into<App>) {
+        #[cfg(feature = "dev-agent")]
+        if let Some(model) = &*self.agent_model.lock().unwrap_or_else(|e| e.into_inner()) {
+            model.reset();
+        }
+        #[cfg(feature = "dev-agent")]
+        self.agent_batches
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
         let mut app = app.into();
         let access = match &mut app {
             App::Js(bundle) => {
@@ -397,6 +471,17 @@ impl MountSink for Sink {
         if let Some(model) = &*host.test_model.lock().unwrap_or_else(|e| e.into_inner()) {
             model.apply(&batch);
         }
+        #[cfg(feature = "dev-agent")]
+        let agent_batch = if host
+            .agent_model
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some()
+        {
+            Some(batch.clone())
+        } else {
+            None
+        };
         answer_clipboard_reads(host, &batch);
         register_inline_images(host, &batch);
         let mut encoded = encode::encode(batch);
@@ -407,6 +492,13 @@ impl MountSink for Sink {
                 .set(keymap);
         }
         let seq = host.seq.fetch_add(1, Ordering::Relaxed) + 1;
+        #[cfg(feature = "dev-agent")]
+        if let Some(batch) = agent_batch {
+            host.agent_batches
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push_back((seq, batch));
+        }
         if !encoded.animation.is_empty() {
             host.animation_queue
                 .lock()
@@ -474,6 +566,10 @@ impl MountSink for Sink {
     fn report_error(&self, message: &str) {
         #[cfg(feature = "dev")]
         if let Some(model) = &*self.0.test_model.lock().unwrap_or_else(|e| e.into_inner()) {
+            model.error(message);
+        }
+        #[cfg(feature = "dev-agent")]
+        if let Some(model) = &*self.0.agent_model.lock().unwrap_or_else(|e| e.into_inner()) {
             model.error(message);
         }
         #[cfg(feature = "dev")]
@@ -571,8 +667,58 @@ extern "system" fn Java_com_longbridge_nsh_Native_create(
         dev: Mutex::new(None),
         #[cfg(feature = "dev")]
         test_model: Mutex::new(None),
+        #[cfg(feature = "dev-agent")]
+        agent_model: Mutex::new(None),
+        #[cfg(feature = "dev-agent")]
+        agent_batches: Mutex::new(VecDeque::new()),
+        #[cfg(feature = "dev-agent")]
+        agent_worker: Mutex::new(None),
+        #[cfg(feature = "dev-agent")]
+        agent_alive: AtomicBool::new(false),
     });
     Box::into_raw(Box::new(host)) as jlong
+}
+
+#[unsafe(no_mangle)]
+extern "system" fn Java_com_longbridge_nsh_Native_startAgent(
+    mut env: JNIEnv<'_>,
+    _: JClass<'_>,
+    handle: jlong,
+    address: JString<'_>,
+    token: JString<'_>,
+    screenshot_directory: JString<'_>,
+) -> jboolean {
+    if handle == 0 {
+        return 0;
+    }
+    #[cfg(feature = "dev-agent")]
+    {
+        // SAFETY: Java calls this while `NshView.hostLock` holds the live
+        // handle returned by `Native.create`.
+        let host = unsafe { host(handle) };
+        let Ok(address) = env.get_string(&address) else {
+            return 0;
+        };
+        let Ok(token) = env.get_string(&token) else {
+            return 0;
+        };
+        let Ok(directory) = env.get_string(&screenshot_directory) else {
+            return 0;
+        };
+        match host.start_agent(
+            &String::from(address),
+            &String::from(token),
+            &String::from(directory),
+        ) {
+            Ok(()) => 1,
+            Err(_) => 0,
+        }
+    }
+    #[cfg(not(feature = "dev-agent"))]
+    {
+        let _ = (&mut env, address, token, screenshot_directory);
+        0
+    }
 }
 
 /// What the embedding app grants the apps it loads at most (JSON in the
@@ -932,6 +1078,20 @@ extern "system" fn Java_com_longbridge_nsh_Native_destroy(
     }
     // SAFETY: the handle came from `create` and Java drops it exactly once.
     let host = unsafe { Box::from_raw(handle as *mut Arc<Host>) };
+    #[cfg(feature = "dev-agent")]
+    {
+        host.agent_alive.store(false, Ordering::Release);
+        drop(
+            host.agent_worker
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take(),
+        );
+        host.agent_model
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
+    }
     #[cfg(feature = "dev")]
     drop(host.dev.lock().expect("dev").take());
     *host.answers.lock().expect("answers") = None;
@@ -1517,6 +1677,23 @@ extern "system" fn Java_com_longbridge_nsh_Native_afterBatch(
             items.extend(queue.pop_front().expect("front").1);
         }
     }
+    #[cfg(feature = "dev-agent")]
+    {
+        let mut applied = Vec::new();
+        let mut queue = host.agent_batches.lock().unwrap_or_else(|e| e.into_inner());
+        while queue
+            .front()
+            .is_some_and(|(batch_seq, _)| *batch_seq <= seq as u64)
+        {
+            applied.push(queue.pop_front().expect("front").1);
+        }
+        drop(queue);
+        if let Some(model) = &*host.agent_model.lock().unwrap_or_else(|e| e.into_inner()) {
+            for batch in applied {
+                model.apply(&batch);
+            }
+        }
+    }
     let mut ui = host.ui.lock().expect("ui");
     for item in items {
         ui.apply(item);
@@ -1864,6 +2041,10 @@ extern "system" fn Java_com_longbridge_nsh_Native_frame(
 ) {
     // SAFETY: Java passes its live handle.
     let host = unsafe { host(handle) };
+    #[cfg(feature = "dev-agent")]
+    if let Some(model) = &*host.agent_model.lock().unwrap_or_else(|e| e.into_inner()) {
+        model.frame();
+    }
     if let Some(control) = host.control() {
         control.frame();
     }
