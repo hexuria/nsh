@@ -52,7 +52,7 @@ window; a window opened later starts a new worker, also after a client stopped t
 window opened later tries again and logs the failure. While the window is minimized (no client area), steps,
 snapshots and screenshots fail at once with `the viewport is not laid out yet`. After a resize, steps wait (as for an
 animation) for the engine to lay the app out at the new size and fail the same way if it has not; `hello` and
-`snapshot` report not ready meanwhile. A resize below 200x150 points or of a maximized window is refused before the
+`snapshot` report not ready meanwhile. A resize below about 200x150 points or of a maximized window is refused before the
 window changes. Strict actions try one reveal scroll before refusing a target as offscreen.
 
 ## Architecture
