@@ -730,6 +730,54 @@ pub(crate) fn choose_open_menu(surface: &Rc<Surface>, path: &[String]) -> Result
     Ok(())
 }
 
+/// Fires an item from the application menu by its scene identity.
+#[cfg(feature = "dev")]
+pub(crate) fn fire_menu_keybinding(
+    surface: &Rc<Surface>,
+    binding: &nsh_testing::agent::SemanticKeybinding,
+) -> Result<(), String> {
+    let action_id = binding
+        .menu_action_id
+        .ok_or("menu shortcut has no action id")?;
+    let path = binding
+        .menu_path
+        .as_deref()
+        .ok_or("menu shortcut has no action path")?;
+    let items = surface
+        .chrome
+        .menu
+        .borrow()
+        .clone()
+        .ok_or("the application menu is unavailable")?;
+    let mut level: &[MenuItem] = &items;
+    let mut chosen = None;
+    for (index, label) in path.iter().enumerate() {
+        let last = index + 1 == path.len();
+        let item = level
+            .iter()
+            .find(|item| match item {
+                MenuItem::Action(action) => {
+                    last && action.enabled && action.id == action_id && action.label == *label
+                }
+                MenuItem::Submenu {
+                    label: submenu,
+                    enabled: true,
+                    ..
+                } => !last && submenu == label,
+                MenuItem::Separator | MenuItem::Submenu { .. } => false,
+            })
+            .ok_or_else(|| format!("the application menu has no action {label:?}"))?;
+        match item {
+            MenuItem::Action(action) => chosen = Some((action.id, action.role)),
+            MenuItem::Submenu { items, .. } => level = items,
+            MenuItem::Separator => {}
+        }
+    }
+    let (id, role) = chosen.ok_or("no menu action chosen")?;
+    choose(surface, id, role);
+    Ok(())
+}
+
 /// Closes the app's open context menu with nothing chosen.
 #[cfg(feature = "dev")]
 pub(crate) fn close_open_menu(surface: &Surface) -> Result<(), String> {
