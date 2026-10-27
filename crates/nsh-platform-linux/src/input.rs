@@ -728,18 +728,21 @@ pub(crate) fn simulate(surface: &Rc<Surface>, action: Simulated) {
 
 /// Focuses `widget` or the first focusable widget inside it.
 #[cfg(feature = "dev")]
-fn focus_native(widget: &gtk::Widget) {
+pub(crate) fn focus_native(widget: &gtk::Widget) -> bool {
     if widget.grab_focus() {
-        return;
+        return true;
     }
     let mut child = widget.first_child();
     while let Some(c) = child {
         if c.is_focusable() && c.grab_focus() {
-            return;
+            return true;
         }
-        focus_native(&c);
+        if focus_native(&c) {
+            return true;
+        }
         child = c.next_sibling();
     }
+    false
 }
 
 // --- Hit testing --------------------------------------------------------------------
@@ -782,6 +785,10 @@ struct Hit {
 /// The innermost view at `(x, y)` (root coordinates).
 fn pick(root: &NshView, x: f32, y: f32) -> Option<Hit> {
     pick_in(root, graphene::Point::new(x, y))
+}
+
+pub(crate) fn pick_node(root: &NshView, x: f32, y: f32) -> Option<nsh_core::NodeId> {
+    pick(root, x, y).map(|hit| hit.view.state().id)
 }
 
 fn pick_in(view: &NshView, p: graphene::Point) -> Option<Hit> {
