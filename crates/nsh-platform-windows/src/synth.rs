@@ -22,6 +22,16 @@ pub(crate) fn pointer(
     button: u8,
     held: u8,
 ) {
+    // A press takes the keyboard from a web view's page, as a real click
+    // on the window does, unless it lands on a web view.
+    if kind == PointerKind::Down
+        && focused_child(surface).is_some()
+        && !crate::input::raw_at(surface, x, y)
+    {
+        // SAFETY: focusing the surface's own window on its thread.
+        let _ =
+            unsafe { windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(Some(surface.hwnd())) };
+    }
     crate::input::pointer(
         surface,
         PointerEvent {
