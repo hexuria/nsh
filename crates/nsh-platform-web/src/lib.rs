@@ -78,6 +78,10 @@ thread_local! {
     #[cfg(feature = "dev")]
     static TEST_MODEL: RefCell<Option<std::sync::Arc<nsh_testing::agent::Model>>> =
         const { RefCell::new(None) };
+    /// The model observes for a GPUI agent ([`nsh_agent_start`]): each app
+    /// started starts it afresh.
+    #[cfg(feature = "dev")]
+    static TEST_AGENT: Cell<bool> = const { Cell::new(false) };
     /// The last answer of [`nsh_test_answer`] (JSON).
     #[cfg(feature = "dev")]
     static TEST_ANSWER: RefCell<String> = const { RefCell::new(String::new()) };
@@ -525,10 +529,14 @@ fn run(app: App, width: f32, height: f32, environment: Environment, limits: Limi
         host: Default::default(),
         picker: None,
     };
-    // A test session's app: the test's storage, network and trace.
+    // A test session's app: the test's storage, network and trace. An
+    // agent's model has no setup and sees each app from its first batch.
     #[cfg(feature = "dev")]
     TEST_MODEL.with(|m| {
         if let Some(model) = &*m.borrow() {
+            if TEST_AGENT.with(Cell::get) {
+                model.reset();
+            }
             model.set_up_engine(&mut config);
         }
     });
@@ -626,6 +634,17 @@ pub extern "C" fn nsh_test_start() {
         m.borrow_mut()
             .get_or_insert_with(|| std::sync::Arc::new(nsh_testing::agent::Model::default()));
     });
+}
+
+/// A GPUI agent attached to `nsh run --target web` drives this page: the
+/// app's model is kept from the next bundle on, as in a test session, but
+/// only observes (the app keeps its own storage, network and clock), and
+/// starts afresh with each app.
+#[cfg(feature = "dev")]
+#[unsafe(no_mangle)]
+pub extern "C" fn nsh_agent_start() {
+    TEST_AGENT.with(|a| a.set(true));
+    nsh_test_start();
 }
 
 /// Answers a test step (JSON `nsh_dev::protocol::TestStep`, `len` bytes at
