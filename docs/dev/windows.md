@@ -37,6 +37,18 @@ The Windows binaries are built for the machine itself, so the CLI finds them in 
 Features: `js` (default; JS apps; without it the crate only runs Rust apps and links no QuickJS) and `dev` (the dev
 server client, log forwarding, the error overlay: `dev.rs`). The host turns on `dev`, the runner only `js`.
 
+### GPUI-agent development attachment
+
+The Windows development host enables the optional `dev-agent` feature. To attach a GPUI-agent client, set
+`GPUI_AGENT=1`, `GPUI_AGENT_ADDR` to a loopback address, and `GPUI_AGENT_TOKEN` to the client's ephemeral token.
+The worker is dev-only and loopback-only. The token is random and ephemeral: it is never passed as a command-line
+argument, logged, or written to an artifact.
+
+The attached native surface uses the same Win32 input, rendering, hit testing, focus, menu, resize and screenshot
+paths as the host. It returns errors rather than fabricating results when the surface is gone, an operation times out,
+or a requested native action cannot be proved. A dispatch timeout makes the attached connection unavailable until the
+host is restarted; there are no retries.
+
 ## Architecture
 
 - **One retained view per node, one window per surface.** Each node is an `NshView` (`view.rs`): an `Rc` node with
