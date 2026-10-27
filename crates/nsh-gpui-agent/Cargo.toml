@@ -1,0 +1,25 @@
+[package]
+name = "nsh-gpui-agent"
+description = "GPUI-agent adapter for Native Shell's shared test agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+readme.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+dev-agent = []
+
+[dependencies]
+gpui-agent.workspace = true
+nsh-core.workspace = true
+nsh-testing = { workspace = true, features = ["agent"], default-features = false }
+serde_json.workspace = true
+
+[dev-dependencies]
+nsh-dev.workspace = true

@@ -3963,6 +3963,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "nsh-gpui-agent"
+version = "0.4.0"
+dependencies = [
+ "gpui-agent",
+ "nsh-core",
+ "nsh-dev",
+ "nsh-testing",
+ "serde_json",
+]
+
+[[package]]
 name = "nsh-i18n"
 version = "0.6.0"
 dependencies = [
