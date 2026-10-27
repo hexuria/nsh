@@ -79,7 +79,7 @@ final class TestAgent {
         return onMain(() -> {
             View root = target(host);
             float[] point = targetPoint(host, x, y);
-            View hit = deepest(root, point[0], point[1]);
+            View hit = TouchTracker.deepest(root, point[0], point[1], true);
             for (View view = hit; view != null; view = view.getParent() instanceof View
                     ? (View) view.getParent() : null) {
                 for (int i = 0; i < host.mounter().views.size(); i++) {
@@ -90,44 +90,6 @@ final class TestAgent {
             }
             return hit == null ? HIT_NONE : HIT_FOREIGN;
         }, HIT_FAILED);
-    }
-
-    private static View deepest(View view, float x, float y) {
-        if (!view.isShown()) {
-            return null;
-        }
-        boolean inside = x >= 0 && y >= 0 && x < view.getWidth() && y < view.getHeight();
-        boolean clipped = view instanceof ViewGroup && (((ViewGroup) view).getClipChildren()
-                || view instanceof Box && ((Box) view).clip
-                || view instanceof android.widget.ScrollView
-                || view instanceof android.widget.HorizontalScrollView);
-        boolean overflow = view instanceof Box && !((Box) view).clip
-                && ((Box) view).overflow != null && ((Box) view).overflow.contains(x, y);
-        if (!inside && (clipped || !overflow)) return null;
-        if (view instanceof Box && ((Box) view).pointerEvents == 1) return null;
-        if (view instanceof ViewGroup
-                && (!(view instanceof Box) || ((Box) view).pointerEvents != 3)) {
-            ViewGroup group = (ViewGroup) view;
-            java.util.ArrayList<View> children = new java.util.ArrayList<>();
-            for (int i = 0; i < group.getChildCount(); i++) children.add(group.getChildAt(i));
-            children.sort((a, b) -> {
-                int z = Float.compare(a.getZ(), b.getZ());
-                return z != 0 ? z : Integer.compare(group.indexOfChild(a), group.indexOfChild(b));
-            });
-            for (int i = children.size() - 1; i >= 0; i--) {
-                View child = children.get(i);
-                float[] point = {x + group.getScrollX() - child.getLeft(),
-                        y + group.getScrollY() - child.getTop()};
-                android.graphics.Matrix inverse = new android.graphics.Matrix();
-                if (!child.getMatrix().invert(inverse)) continue;
-                inverse.mapPoints(point);
-                View hit = deepest(child, point[0], point[1]);
-                if (hit != null) return hit;
-            }
-        }
-        if (!inside) return null;
-        if (view instanceof Box && ((Box) view).pointerEvents == 2) return null;
-        return view;
     }
 
     private static int[] screenLocation(View view) {

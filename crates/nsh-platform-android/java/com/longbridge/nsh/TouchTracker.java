@@ -122,7 +122,7 @@ final class TouchTracker {
         int action = e.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) {
             cancelFeedback();
-            View target = deepest(root, e.getX(), e.getY());
+            View target = deepest(root, e.getX(), e.getY(), false);
             for (View v = target; v != null; ) {
                 if (v instanceof Node) {
                     int id = ((Node) v).nodeId();
@@ -329,7 +329,7 @@ final class TouchTracker {
 
     /** The node view under ({@code x}, {@code y}) of the root and the nodes around it listening to touches. */
     private Tracked hit(float x, float y) {
-        View target = deepest(root, x, y);
+        View target = deepest(root, x, y, false);
         if (target == null) return null;
         ArrayList<Integer> path = new ArrayList<>();
         View node = null;
@@ -352,8 +352,13 @@ final class TouchTracker {
         return t;
     }
 
-    /** The innermost node view that can take a touch at ({@code x}, {@code y}) of {@code v}. */
-    private static View deepest(View v, float x, float y) {
+    /**
+     * The innermost node view that can take a touch at ({@code x}, {@code y})
+     * of {@code v}. With {@code foreign}, views that are not nodes count too:
+     * what the test agent asks to find what covers a point (a dialog's
+     * views, a native component's), where a touch passes through them.
+     */
+    static View deepest(View v, float x, float y, boolean foreign) {
         int pointerEvents = v instanceof Box ? ((Box) v).pointerEvents : 0;
         if (pointerEvents == 1 || v.getVisibility() != View.VISIBLE) return null;
         if (v instanceof ViewGroup && pointerEvents != 3) {
@@ -373,13 +378,13 @@ final class TouchTracker {
                 // still be there (`MountItem::Overflow`).
                 if (!inside && !(c instanceof Box && ((Box) c).overflow != null && !((Box) c).clip
                         && ((Box) c).overflow.contains(pt[0], pt[1]))) continue;
-                View hit = deepest(c, pt[0], pt[1]);
+                View hit = deepest(c, pt[0], pt[1], foreign);
                 if (hit != null) return hit;
             }
         }
         if (pointerEvents == 2) return null;
         // Reached through its overflow area: only its descendants count.
         if (x < 0 || y < 0 || x >= v.getWidth() || y >= v.getHeight()) return null;
-        return v instanceof Node ? v : null;
+        return foreign || v instanceof Node ? v : null;
     }
 }
