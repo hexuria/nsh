@@ -1048,7 +1048,9 @@ pub(crate) fn keep<T: 'static>(value: T) {
     }
     KEPT.with(|k| k.borrow_mut().push(Box::new(value)));
 }
-/// The smallest client area a user can drag the window to, in points.
+/// The smallest size a user can drag the window to, in points. It bounds
+/// the whole window (`ptMinTrackSize`, borders included), so the smallest
+/// client area is about this, not exactly.
 pub(crate) const MIN_WIDTH: f32 = 200.0;
 /// See [`MIN_WIDTH`].
 pub(crate) const MIN_HEIGHT: f32 = 150.0;
