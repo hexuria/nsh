@@ -42,7 +42,7 @@ pub(crate) fn pointer(
 
 /// The window of another module that has the keyboard focus (a web view's
 /// page), if any.
-fn focused_child(surface: &Surface) -> Option<windows::Win32::Foundation::HWND> {
+pub(crate) fn focused_child(surface: &Surface) -> Option<windows::Win32::Foundation::HWND> {
     use windows::Win32::UI::Input::KeyboardAndMouse::GetFocus;
     // SAFETY: a plain query.
     let focus = unsafe { GetFocus() };
@@ -137,8 +137,8 @@ pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) -> Result<(), String
         UI::{
             HiDpi::AdjustWindowRectExForDpi,
             WindowsAndMessaging::{
-                GWL_EXSTYLE, GWL_STYLE, GetWindowLongW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER,
-                SetWindowPos, WINDOW_EX_STYLE, WINDOW_STYLE,
+                GWL_EXSTYLE, GWL_STYLE, GetMenu, GetWindowLongW, SWP_NOACTIVATE, SWP_NOMOVE,
+                SWP_NOZORDER, SetWindowPos, WINDOW_EX_STYLE, WINDOW_STYLE,
             },
         },
     };
@@ -155,7 +155,9 @@ pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) -> Result<(), String
     unsafe {
         let style = WINDOW_STYLE(GetWindowLongW(hwnd, GWL_STYLE) as u32);
         let ex = WINDOW_EX_STYLE(GetWindowLongW(hwnd, GWL_EXSTYLE) as u32);
-        AdjustWindowRectExForDpi(&mut rect, style, false, ex, dpi)
+        // The menu bar is part of the frame, not the client area.
+        let menu = !GetMenu(hwnd).is_invalid();
+        AdjustWindowRectExForDpi(&mut rect, style, menu, ex, dpi)
             .map_err(|error| format!("AdjustWindowRectExForDpi failed: {error}"))?;
         SetWindowPos(
             hwnd,
