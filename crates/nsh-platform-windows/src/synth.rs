@@ -145,8 +145,8 @@ pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) {
         UI::{
             HiDpi::AdjustWindowRectExForDpi,
             WindowsAndMessaging::{
-                GWL_EXSTYLE, GWL_STYLE, GetWindowLongW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER,
-                SetWindowPos, WINDOW_EX_STYLE, WINDOW_STYLE,
+                GWL_EXSTYLE, GWL_STYLE, GetMenu, GetWindowLongW, SWP_NOACTIVATE, SWP_NOMOVE,
+                SWP_NOZORDER, SetWindowPos, WINDOW_EX_STYLE, WINDOW_STYLE,
             },
         },
     };
@@ -163,8 +163,20 @@ pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) {
     unsafe {
         let style = WINDOW_STYLE(GetWindowLongW(hwnd, GWL_STYLE) as u32);
         let ex = WINDOW_EX_STYLE(GetWindowLongW(hwnd, GWL_EXSTYLE) as u32);
+<<<<<<< /tmp/ours_f
         let _ = AdjustWindowRectExForDpi(&mut rect, style, false, ex, dpi);
         let _ = SetWindowPos(
+||||||| /tmp/base_f
+        AdjustWindowRectExForDpi(&mut rect, style, false, ex, dpi)
+            .map_err(|error| format!("AdjustWindowRectExForDpi failed: {error}"))?;
+        SetWindowPos(
+=======
+        // The menu bar is part of the frame, not the client area.
+        let menu = !GetMenu(hwnd).is_invalid();
+        AdjustWindowRectExForDpi(&mut rect, style, menu, ex, dpi)
+            .map_err(|error| format!("AdjustWindowRectExForDpi failed: {error}"))?;
+        SetWindowPos(
+>>>>>>> /tmp/theirs_f
             hwnd,
             None,
             0,
