@@ -1318,6 +1318,9 @@ fn set_prop(
         && name.as_bytes()[2].is_ascii_uppercase()
         && let Some(event) = EventKind::from_handler(name)
     {
+        if name == "onChangeText" {
+            return set_change_text(cx, p, value);
+        }
         return set_event(cx, p, event, value);
     }
     // Native animation nodes these props use (a shader's `uniforms`
@@ -1393,6 +1396,41 @@ fn set_prop(
 fn followed(cx: *mut JsContext, name: &str, value: JsValue) -> bool {
     // SAFETY: an inline check of a borrowed value.
     name == "tooltip" && unsafe { qjs::JS_IsFunction(cx, value) } && node_ptr(cx, value).is_null()
+}
+
+/// React Native's `onChangeText` (`EventKind::from_handler`) hands its
+/// handler the text itself, where `onChange` gets `{ value }`: the handler
+/// is wrapped to take `value` out.
+fn set_change_text(cx: *mut JsContext, p: *mut NodeData, value: JsValue) -> Result<(), JsValue> {
+    // SAFETY: an inline check of a borrowed value.
+    if !unsafe { qjs::JS_IsFunction(cx, value) } {
+        return set_event(cx, p, EventKind::ChangeText, value);
+    }
+    const WRAP: &CStr =
+        c"(f) => function (e) { return f(e !== null && typeof e === \"object\" ? e.value : e); }";
+    // SAFETY: a live context; the source is NUL-terminated; every value made
+    // here is freed (`set_event` keeps its own reference to the wrapper).
+    unsafe {
+        let make = qjs::JS_Eval(
+            cx,
+            WRAP.as_ptr(),
+            WRAP.count_bytes() as _,
+            c"onChangeText".as_ptr(),
+            qjs::JS_EVAL_TYPE_GLOBAL as c_int,
+        );
+        if qjs::JS_IsException(make) {
+            return Err(make);
+        }
+        let mut handler = value;
+        let wrapped = qjs::JS_Call(cx, make, qjs::JS_UNDEFINED, 1, &mut handler);
+        qjs::JS_FreeValue(cx, make);
+        if qjs::JS_IsException(wrapped) {
+            return Err(wrapped);
+        }
+        let set = set_event(cx, p, EventKind::ChangeText, wrapped);
+        qjs::JS_FreeValue(cx, wrapped);
+        set
+    }
 }
 
 /// Sets the handler of `event` on node `p` to `value` (borrowed; not a
