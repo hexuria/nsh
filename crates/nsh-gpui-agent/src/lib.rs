@@ -137,7 +137,10 @@ impl AgentHost for NshAgentHost {
     }
 
     fn snapshot(&self) -> UiTree {
-        if !self.agent.native_available() || !matches!(self.agent.has_rendered_batch(), Ok(true)) {
+        if !self.agent.native_available()
+            || !matches!(self.agent.has_rendered_batch(), Ok(true))
+            || self.agent.native_laid_out().is_err()
+        {
             return UiTree {
                 app: self.app.clone(),
                 platform: self.platform,
@@ -783,11 +786,20 @@ mod tests {
     }
 
     /// Available, and node 3's native input text.
-    struct SnapshotNative(bool, Option<String>);
+    /// Available, the text of a masked input, not laid out.
+    struct SnapshotNative(bool, Option<String>, bool);
 
     impl Native for SnapshotNative {
         fn available(&self) -> bool {
             self.0
+        }
+
+        fn laid_out(&self) -> Result<(), String> {
+            if self.2 {
+                Err("the viewport is not laid out yet".into())
+            } else {
+                Ok(())
+            }
         }
 
         fn bounds(&self, id: NodeId) -> Option<nsh_core::geometry::Bounds<Points>> {
@@ -838,7 +850,7 @@ mod tests {
     }
 
     fn snapshot_host_with_availability(scene: SnapshotScene, available: bool) -> NshAgentHost {
-        snapshot_host_with_native(scene, SnapshotNative(available, None))
+        snapshot_host_with_native(scene, SnapshotNative(available, None, false))
     }
 
     fn snapshot_host_with_native(scene: SnapshotScene, native: SnapshotNative) -> NshAgentHost {
@@ -919,7 +931,7 @@ mod tests {
             }
             let mut host = snapshot_host_with_native(
                 SnapshotScene(Ok(nodes), 1, Default::default()),
-                SnapshotNative(true, Some(secret.into())),
+                SnapshotNative(true, Some(secret.into()), false),
             );
             let snapshot = host.snapshot();
             let input = &snapshot.nodes[0].children[1];
@@ -960,6 +972,17 @@ mod tests {
     #[test]
     fn snapshot_is_not_ready_before_the_first_batch() {
         let host = snapshot_host(SnapshotScene(Ok(sample_nodes()), 0, Default::default()));
+        let snapshot = host.snapshot();
+        assert!(!snapshot.ready);
+        assert!(snapshot.nodes.is_empty());
+    }
+
+    #[test]
+    fn snapshot_is_not_ready_while_the_viewport_is_not_laid_out() {
+        let host = snapshot_host_with_native(
+            SnapshotScene(Ok(sample_nodes()), 1, Default::default()),
+            SnapshotNative(true, None, true),
+        );
         let snapshot = host.snapshot();
         assert!(!snapshot.ready);
         assert!(snapshot.nodes.is_empty());
