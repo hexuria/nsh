@@ -392,6 +392,8 @@ The five Devin Review findings on `5db96ef3` were fixed by the owner:
 
 The Android Z-order hit test and token-file deletion were build-verified, but were not live-tested on the emulator. Dismissed: GTK `default_size` staleness (GTK updates it on resize; repeated/shrink/restore passed live) and Linux unsupported keys as a no-op (intentional per owner finding 5; strict path uses `validate_keys`).
 
+Rebased onto `main` (`e87d5b5f`); the checks below were re-run after the rebase: `nsh-testing` 47 passed, `nsh-gpui-agent` 9 passed, `nsh-cli` 100 passed / 1 ignored; GTK `nsh-platform-linux` tests 66 passed / 1 ignored, including the viewport regression, and its `dev-agent` clippy passed; clippy for `nsh-testing`, `nsh-gpui-agent`, and `nsh-cli` passed; Android x86_64 development build and Java runtime compilation passed; Android clippy emitted only the two baseline `host.rs` lints (`redundant_closure`, `chunks_exact_to_as_chunks`) and exited 1 under `-D warnings`; wasm check and nightly format check passed.
+
 ## Limitations and unverified behavior
 
 - The raw Android clippy command encounters pre-existing `nsh-core` `missing_const_for_thread_local` warnings. The final checks above distinguish that baseline failure from the lint-allowed result; no unrelated core lint rewrite is included.
