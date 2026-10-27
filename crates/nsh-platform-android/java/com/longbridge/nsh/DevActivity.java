@@ -48,8 +48,13 @@ public final class DevActivity extends Activity {
         if (agent && (getApplicationInfo().flags
                 & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             String address = getIntent().getStringExtra("GPUI_AGENT_ADDR");
-            String token = getIntent().getStringExtra("GPUI_AGENT_TOKEN");
-            if (!view.startAgent(address != null ? address : "127.0.0.1:17421", token)) {
+            // Only from this app's own files (`nsh run` writes it with
+            // `run-as`), never from the intent: any app can start this
+            // activity, but cannot choose the token.
+            String token = agentToken();
+            if (token == null) {
+                android.util.Log.w("nsh", "GPUI-agent not started: no token in files/gpui-agent-token");
+            } else if (!view.startAgent(address != null ? address : "127.0.0.1:17421", token)) {
                 android.util.Log.w("nsh", "GPUI-agent attachment failed");
             }
         }
@@ -167,6 +172,18 @@ public final class DevActivity extends Activity {
             int light = android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
                     | android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
             decor.setSystemUiVisibility(dark ? flags & ~light : flags | light);
+        }
+    }
+
+    /** The GPUI-agent token `nsh run` stored in this app's files; null when there is none. */
+    private String agentToken() {
+        try {
+            byte[] bytes = java.nio.file.Files.readAllBytes(
+                    new java.io.File(getFilesDir(), "gpui-agent-token").toPath());
+            String token = new String(bytes, java.nio.charset.StandardCharsets.UTF_8).trim();
+            return token.isEmpty() ? null : token;
+        } catch (java.io.IOException e) {
+            return null;
         }
     }
 }
