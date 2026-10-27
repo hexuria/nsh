@@ -1615,6 +1615,8 @@ fn handle(
             crate::presence::session_changed(surface, wparam.0 as u32);
         }
         WM_DESTROY => {
+            #[cfg(feature = "dev-agent")]
+            surface.release_agent();
             crate::window_close::destroyed(surface);
             crate::tray::destroyed(hwnd);
             crate::global_shortcut::destroyed(hwnd);
@@ -1655,8 +1657,8 @@ fn window_api(
                 // The main window stays big enough to show something.
                 None if main => {
                     info.ptMinTrackSize = POINT {
-                        x: (200.0 * scale) as i32,
-                        y: (150.0 * scale) as i32,
+                        x: (MIN_WIDTH * scale) as i32,
+                        y: (MIN_HEIGHT * scale) as i32,
                     }
                 }
                 None => {}
@@ -2163,6 +2165,10 @@ pub(crate) fn keep<T: 'static>(value: T) {
     }
     KEPT.with(|k| k.borrow_mut().push(Box::new(value)));
 }
+/// The smallest client area a user can drag the window to, in points.
+pub(crate) const MIN_WIDTH: f32 = 200.0;
+/// See [`MIN_WIDTH`].
+pub(crate) const MIN_HEIGHT: f32 = 150.0;
 
 #[cfg(test)]
 mod tests {
