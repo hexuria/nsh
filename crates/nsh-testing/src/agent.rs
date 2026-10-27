@@ -81,6 +81,10 @@ const CLOCK_TIMEOUT: Duration = Duration::from_secs(60);
 const LONG_PRESS: Duration = Duration::from_millis(500);
 /// How many gestures scrolling a view into view takes at most.
 const SCROLLS_INTO_VIEW: usize = 20;
+/// Error returned by platforms that cannot perform a native hit-test.
+pub const NATIVE_HIT_TEST_UNSUPPORTED: &str = "native hit-testing is unsupported";
+/// Error returned by platforms that cannot focus a node without a press.
+pub const NATIVE_FOCUS_UNSUPPORTED: &str = "native focus is unsupported on this platform";
 
 /// What a host's app shows, as test steps see it: the batches the host
 /// applied and the errors the app reported.
@@ -128,6 +132,13 @@ struct State {
 }
 
 impl Model {
+    /// Clears the app state while keeping this model available to observers.
+    pub fn reset(&self) {
+        self.setup.lock().unwrap_or_else(|e| e.into_inner()).take();
+        *self.lock() = State::default();
+        self.changed.notify_all();
+    }
+
     /// Takes in a batch the host applied (on its main thread, after
     /// applying it).
     pub fn apply(&self, batch: &MountBatch) {
@@ -147,6 +158,12 @@ impl Model {
         state.batches += 1;
         state.last = Some(Instant::now());
         drop(state);
+        self.changed.notify_all();
+    }
+
+    /// The app requested a JavaScript animation frame.
+    pub fn frame(&self) {
+        self.lock().last = Some(Instant::now());
         self.changed.notify_all();
     }
 
@@ -375,12 +392,76 @@ pub struct Activity {
     pub since_last: Option<Duration>,
 }
 
+/// Platform-independent accessibility data for one mounted view.
+///
+/// Nodes are returned in deterministic preorder. Hidden accessibility
+/// subtrees are omitted, while offscreen nodes remain present.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+#[non_exhaustive]
+pub struct SemanticNode {
+    /// The engine's node identifier.
+    pub id: NodeId,
+    /// The containing node, if any.
+    pub parent: Option<NodeId>,
+    /// The app-provided test identifier.
+    pub test_id: Option<String>,
+    /// The accessibility role, or `generic`.
+    pub role: String,
+    /// The accessible label, falling back to visible text.
+    pub label: Option<String>,
+    /// The accessibility hint.
+    pub hint: Option<String>,
+    /// The text or range value, when present.
+    pub value: Option<String>,
+    /// Whether this node and its ancestors are enabled.
+    pub enabled: bool,
+    /// Whether the node is selected.
+    pub selected: bool,
+    /// Whether this node groups its descendants for accessibility.
+    pub grouped: bool,
+    /// Whether this node clips its descendants.
+    pub clipping: bool,
+    /// Whether this node is a text input.
+    pub input: bool,
+    /// Whether this node scrolls its contents.
+    pub scroll: bool,
+    /// Whether this node handles press events.
+    pub pressable: bool,
+    /// The node's accessibility states.
+    pub states: Vec<String>,
+}
+
+/// A keyboard shortcut the host can fire through its native input path.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct SemanticKeybinding {
+    /// Stable identifier supplied by the app or menu.
+    pub id: String,
+    /// The shortcut in `nsh/keymap` notation.
+    pub chord: String,
+    /// The visible label, when this comes from a menu.
+    pub label: Option<String>,
+    /// The menu action path, or `None` for a keymap binding.
+    pub menu_path: Option<Vec<String>>,
+    /// The menu action's stable identifier, when this comes from a menu.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub menu_action_id: Option<u32>,
+}
+
 /// The app as an [`Agent`] sees it: the host's [`Model`] (the agent runs on
 /// the host), or one asked about through the host ([`RemoteScene`]: the
 /// web, whose agent runs in `nsh`).
 pub trait Scene: Send + Sync {
     /// How busy the app is.
     fn activity(&self) -> Result<Activity, String>;
+    /// The app's portable semantic scene, including offscreen nodes.
+    fn semantic_tree(&self) -> Result<Vec<SemanticNode>, String> {
+        Err("the host does not provide a semantic scene".into())
+    }
+    /// Keyboard shortcuts from the app's keymap and visible menu.
+    fn keybindings(&self) -> Result<Vec<SemanticKeybinding>, String> {
+        Ok(Vec::new())
+    }
     /// Waits until a batch after the `seen`th came or the app threw,
     /// `timeout` at most.
     fn wait_for_batch(&self, seen: u64, timeout: Duration) {
@@ -463,6 +544,14 @@ pub trait Scene: Send + Sync {
 }
 
 impl Scene for Model {
+    fn semantic_tree(&self) -> Result<Vec<SemanticNode>, String> {
+        Ok(self.lock().screen.semantic_nodes())
+    }
+
+    fn keybindings(&self) -> Result<Vec<SemanticKeybinding>, String> {
+        Ok(self.lock().screen.semantic_keybindings())
+    }
+
     fn canvas_node(&self, selector: &str) -> Result<Option<(NodeId, Point<Points>)>, String> {
         Ok(self.lock().screen.canvas_node(&Selector::parse(selector)?))
     }
@@ -713,6 +802,12 @@ pub fn answer(model: &Model, step: &TestStep) -> Option<Result<serde_json::Value
                     "since_last_ms": a.since_last.map(|d| d.as_secs_f64() * 1000.0),
                 })
             }),
+            SceneQuery::SemanticTree => model
+                .semantic_tree()
+                .and_then(|nodes| json(to_value(nodes))),
+            SceneQuery::Keybindings => model
+                .keybindings()
+                .and_then(|bindings| json(to_value(bindings))),
             SceneQuery::TakeErrors => model.take_errors().map(Value::from),
             SceneQuery::Pick { selector, target } => model.pick(selector, *target).map(pick_value),
             SceneQuery::ScrollAncestors { id } => {
@@ -778,6 +873,14 @@ impl RemoteScene {
 }
 
 impl Scene for RemoteScene {
+    fn semantic_tree(&self) -> Result<Vec<SemanticNode>, String> {
+        self.query(SceneQuery::SemanticTree)
+    }
+
+    fn keybindings(&self) -> Result<Vec<SemanticKeybinding>, String> {
+        self.query(SceneQuery::Keybindings)
+    }
+
     fn canvas_node(&self, selector: &str) -> Result<Option<(NodeId, Point<Points>)>, String> {
         self.query(SceneQuery::CanvasNode {
             selector: selector.into(),
@@ -915,9 +1018,19 @@ pub enum Key {
 /// Called from the agent's thread; each call does its work on the host's
 /// main thread and returns once it is done (input posted, not answered).
 pub trait Native: Send + Sync {
+    /// Whether the native surface still exists.
+    fn available(&self) -> bool {
+        true
+    }
     /// The view `id`'s bounds in the window's content, in points from its
     /// top-left (`None`: it has no native view on screen).
     fn bounds(&self, id: NodeId) -> Option<Bounds<Points>>;
+    /// Returns the native view at `at`; `Err(NATIVE_HIT_TEST_UNSUPPORTED)`
+    /// means the host cannot prove that a target is unobstructed.
+    fn hit_at(&self, at: Point<Points>) -> Result<Option<NodeId>, String> {
+        let _ = at;
+        Err(NATIVE_HIT_TEST_UNSUPPORTED.into())
+    }
     /// Where the characters `start..end` (UTF-16 units) of text view
     /// `text` are on screen: the part on their first line, in the
     /// window's content as [`Native::bounds`] (`None`: not on screen, or
@@ -1017,6 +1130,25 @@ pub trait Native: Send + Sync {
             "holding keys (`keyboard.down` / `keyboard.up`) runs headless and on Linux for now"
                 .into(),
         )
+    }
+
+    /// Checks whether `keys` can be sent before an input target is focused.
+    fn validate_keys(&self, keys: &str) -> Result<(), String> {
+        let _ = keys;
+        Ok(())
+    }
+    /// Focuses a text input without synthesizing a pointer press.
+    fn focus_node(&self, id: NodeId) -> Result<(), String> {
+        let _ = id;
+        Err(NATIVE_FOCUS_UNSUPPORTED.into())
+    }
+    /// Fires a menu shortcut through the platform's native action.
+    fn fire_menu_keybinding(&self, binding: &SemanticKeybinding) -> Result<(), String> {
+        self.press_keys(&binding.chord)
+    }
+    /// Whether the app currently has native window focus.
+    fn app_focused(&self) -> bool {
+        false
     }
     /// Types `text` into the focused input, key by key.
     fn type_text(&self, text: &str);
@@ -1215,10 +1347,39 @@ fn well_inside(bounds: &Bounds<Points>, at: Point<Points>, horizontal: bool) -> 
     (x0..=x1).contains(&at.x.0) && (y0..=y1).contains(&at.y.0)
 }
 
+fn intersection(left: Bounds<Points>, right: Bounds<Points>) -> Option<Bounds<Points>> {
+    let x0 = left.origin.x.0.max(right.origin.x.0);
+    let y0 = left.origin.y.0.max(right.origin.y.0);
+    let x1 = (left.origin.x.0 + left.size.width.0).min(right.origin.x.0 + right.size.width.0);
+    let y1 = (left.origin.y.0 + left.size.height.0).min(right.origin.y.0 + right.size.height.0);
+    (x0 < x1 && y0 < y1).then(|| {
+        Bounds::new(
+            Point::new(Points(x0), Points(y0)),
+            Size::new(Points(x1 - x0), Points(y1 - y0)),
+        )
+    })
+}
+
+fn is_descendant_or_same(
+    hit: NodeId,
+    target: NodeId,
+    nodes: &std::collections::HashMap<NodeId, &SemanticNode>,
+) -> bool {
+    let mut current = Some(hit);
+    while let Some(id) = current {
+        if id == target {
+            return true;
+        }
+        current = nodes.get(&id).and_then(|node| node.parent);
+    }
+    false
+}
+
 /// Takes test steps on a host's app ([`Model`], [`Native`]).
 pub struct Agent {
     scene: std::sync::Arc<dyn Scene>,
     native: Box<dyn Native>,
+    require_hit_test: bool,
     /// The window's size the scene was told last.
     viewport: Mutex<Option<Size<Points>>>,
     /// Where a `dragAndHold` left the pointer down.
@@ -1231,9 +1392,376 @@ impl Agent {
         Agent {
             scene,
             native,
+            require_hit_test: false,
             viewport: Mutex::new(None),
             held: Mutex::new(None),
         }
+    }
+
+    /// Creates an agent that requires native hit-testing before targeted input.
+    pub fn requiring_native_hit_test(
+        scene: std::sync::Arc<dyn Scene>,
+        native: Box<dyn Native>,
+    ) -> Agent {
+        Agent {
+            scene,
+            native,
+            require_hit_test: true,
+            viewport: Mutex::new(None),
+            held: Mutex::new(None),
+        }
+    }
+
+    /// Semantic nodes currently exposed by the scene.
+    pub fn semantic_nodes(&self) -> Result<Vec<SemanticNode>, String> {
+        self.scene.semantic_tree()
+    }
+
+    /// Whether the native scene has applied its first rendered batch.
+    pub fn has_rendered_batch(&self) -> Result<bool, String> {
+        Ok(self.scene.activity()?.batches > 0)
+    }
+
+    /// Whether this agent's native surface is still available.
+    pub fn native_available(&self) -> bool {
+        self.native.available()
+    }
+
+    /// Waits for the current scene to settle before a host resolves a target.
+    pub fn settle(&self) -> Result<(), String> {
+        self.settled()
+    }
+
+    /// Current native bounds for `id`.
+    pub fn native_bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
+        self.native.bounds(id)
+    }
+
+    /// Current native viewport.
+    pub fn native_viewport(&self) -> Size<Points> {
+        self.native.viewport()
+    }
+
+    /// Whether the native app window currently has focus.
+    pub fn app_focused(&self) -> bool {
+        self.native.app_focused()
+    }
+
+    /// Current native input value for `id`.
+    pub fn native_input_text(&self, id: NodeId) -> Option<String> {
+        self.native.input_text(id)
+    }
+
+    /// Captures the current surface as actual PNG bytes.
+    pub fn native_screenshot(&self) -> Result<Vec<u8>, String> {
+        self.native.screenshot()
+    }
+
+    /// Whether actions require native hit-test proof before dispatch.
+    pub fn requires_native_hit_test(&self) -> bool {
+        self.require_hit_test
+    }
+
+    /// Clicks semantic node `id`, after native actionability is established.
+    pub fn press_node(&self, id: NodeId) -> Result<(), String> {
+        self.settled()?;
+        let selector = format!("node {id}");
+        let nodes = self.scene.semantic_tree()?;
+        let target = nodes
+            .iter()
+            .find(|node| node.id == id)
+            .ok_or_else(|| format!("`{selector}` is offscreen (node unavailable)"))?;
+        if !target.enabled {
+            return Err(format!("`{selector}` is disabled"));
+        }
+        let owner = if target.input || target.pressable {
+            id
+        } else {
+            let mut parent = target.parent;
+            let mut owner = id;
+            while let Some(parent_id) = parent {
+                let Some(ancestor) = nodes.iter().find(|node| node.id == parent_id) else {
+                    break;
+                };
+                if ancestor.pressable {
+                    owner = ancestor.id;
+                    break;
+                }
+                parent = ancestor.parent;
+            }
+            owner
+        };
+        if !target.input && !target.pressable {
+            let pressable_ancestor = nodes.iter().any(|node| node.id == owner && node.pressable);
+            if !pressable_ancestor {
+                return Err(format!("`{selector}` is not pressable"));
+            }
+        }
+        let selected = self.scroll_into_view(id, &selector)?;
+        let at = self.actionable_point(id, owner, selected, &selector)?;
+        self.native.press(at);
+        self.settled()
+    }
+
+    /// Focuses input `id`, types `text`, and waits for the resulting state.
+    pub fn type_node(&self, id: NodeId, text: &str) -> Result<(), String> {
+        let at = self.node_point(id)?;
+        let node = self
+            .scene
+            .semantic_tree()?
+            .into_iter()
+            .find(|node| node.id == id)
+            .ok_or_else(|| format!("node {id} is offscreen or unavailable"))?;
+        if !node.input {
+            return Err(format!("node {id} is not a text input"));
+        }
+        self.native.press(at);
+        self.native.type_text(text);
+        self.settled()
+    }
+
+    /// Replaces the value of input `id`.
+    pub fn set_value_node(&self, id: NodeId, value: &str) -> Result<(), String> {
+        let at = self.node_point(id)?;
+        let node = self
+            .scene
+            .semantic_tree()?
+            .into_iter()
+            .find(|node| node.id == id)
+            .ok_or_else(|| format!("node {id} is offscreen or unavailable"))?;
+        if !node.input {
+            return Err(format!("node {id} is not a text input"));
+        }
+        self.native.press(at);
+        self.native.key(Key::SelectAll);
+        self.native.key(Key::Backspace);
+        self.native.type_text(value);
+        self.settled()
+    }
+
+    /// Sends a hardware key chord after verifying the target.
+    pub fn key_node(&self, id: NodeId, keys: &str) -> Result<(), String> {
+        self.settled()?;
+        let node = self
+            .scene
+            .semantic_tree()?
+            .into_iter()
+            .find(|node| node.id == id)
+            .ok_or_else(|| format!("node {id} is offscreen or unavailable"))?;
+        if !node.enabled {
+            return Err(format!("node {id} is disabled"));
+        }
+        self.native.validate_keys(keys)?;
+        let at = self.node_point(id)?;
+        if let Err(error) = self.native.focus_node(id) {
+            if node.input && error == NATIVE_FOCUS_UNSUPPORTED {
+                self.native.press(at);
+            } else {
+                return Err(error);
+            }
+        }
+        self.native.press_keys(keys)?;
+        self.settled()
+    }
+
+    /// Returns the app's current keymap and visible menu shortcuts.
+    pub fn semantic_keybindings(&self) -> Result<Vec<SemanticKeybinding>, String> {
+        self.scene.keybindings()
+    }
+
+    /// Fires a catalogued shortcut using the platform's native dispatch.
+    pub fn fire_keybinding(&self, binding: &str) -> Result<(), String> {
+        self.settled()?;
+        let entry = self
+            .scene
+            .keybindings()?
+            .into_iter()
+            .find(|entry| entry.id == binding)
+            .ok_or_else(|| format!("unknown binding `{binding}`"))?;
+        if entry.menu_path.is_some() {
+            self.native.fire_menu_keybinding(&entry)?;
+        } else {
+            self.native.press_keys(&entry.chord)?;
+        }
+        self.settled()
+    }
+
+    /// Scrolls the native content at semantic node `id`.
+    pub fn scroll_node(&self, id: NodeId, delta: Point<Points>) -> Result<(), String> {
+        let at = self.node_point(id)?;
+        self.native.scroll(at, delta);
+        self.settled()
+    }
+
+    /// Hovers semantic node `id`, failing when this native platform has no mouse.
+    pub fn hover_node(&self, id: NodeId) -> Result<(), String> {
+        let at = self.node_point(id)?;
+        self.native.hover(at)?;
+        self.settled()
+    }
+
+    /// Presses the semantic node hit by a checked native point.
+    pub fn press_at(&self, at: Point<Points>) -> Result<(), String> {
+        let at = self.checked_point_target(at)?;
+        self.native.press(at);
+        self.settled()
+    }
+
+    /// Hovers the semantic node hit by a checked native point.
+    pub fn hover_at(&self, at: Point<Points>) -> Result<(), String> {
+        let at = self.checked_point_target(at)?;
+        self.native.hover(at)?;
+        self.settled()
+    }
+
+    /// Scrolls the semantic node hit by a checked native point.
+    pub fn scroll_at(&self, at: Point<Points>, delta: Point<Points>) -> Result<(), String> {
+        let at = self.checked_point_target(at)?;
+        self.native.scroll(at, delta);
+        self.settled()
+    }
+
+    /// Drags from a checked native point to an on-screen point.
+    pub fn drag_at(&self, from: Point<Points>, to: Point<Points>) -> Result<(), String> {
+        let from = self.checked_point_target(from)?;
+        let viewport = self.native.viewport();
+        if to.x.0 < 0.0 || to.y.0 < 0.0 || to.x.0 >= viewport.width.0 || to.y.0 >= viewport.height.0
+        {
+            return Err("drag destination is offscreen".into());
+        }
+        if self.native.hit_at(to)?.is_none() {
+            return Err("drag destination is offscreen or unavailable".into());
+        }
+        self.native.drag(from, to);
+        self.settled()
+    }
+
+    /// Drags from one checked semantic node to another.
+    pub fn drag_nodes(&self, from: NodeId, to: NodeId) -> Result<(), String> {
+        let from_selector = format!("node {from}");
+        let to_selector = format!("node {to}");
+        let _ = self.node_point(from)?;
+        let _ = self.node_point(to)?;
+        self.settled()?;
+        let from = self.node_point_without_reveal(from, &from_selector)?;
+        let to = self.node_point_without_reveal(to, &to_selector)?;
+        self.native.drag(from, to);
+        self.settled()
+    }
+
+    /// Drags a checked node to an on-screen native drop point.
+    pub fn drag_to(&self, from: NodeId, to: Point<Points>) -> Result<(), String> {
+        let selector = format!("node {from}");
+        let _ = self.node_point(from)?;
+        self.settled()?;
+        let origin = self.node_point_without_reveal(from, &selector)?;
+        let viewport = self.native.viewport();
+        if to.x.0 < 0.0 || to.y.0 < 0.0 || to.x.0 >= viewport.width.0 || to.y.0 >= viewport.height.0
+        {
+            return Err("drag destination is offscreen".into());
+        }
+        if self.native.hit_at(to)?.is_none() {
+            return Err("drag destination is offscreen or unavailable".into());
+        }
+        self.native.drag(origin, to);
+        self.settled()
+    }
+
+    /// Drags from a point within a checked node to an on-screen native point.
+    pub fn drag_from_to(
+        &self,
+        id: NodeId,
+        from: Point<Points>,
+        to: Point<Points>,
+    ) -> Result<(), String> {
+        let selector = format!("node {id}");
+        let _ = self.node_point(id)?;
+        self.settled()?;
+        let origin = self.actionable_point(id, id, from, &selector)?;
+        let viewport = self.native.viewport();
+        if to.x.0 < 0.0 || to.y.0 < 0.0 || to.x.0 >= viewport.width.0 || to.y.0 >= viewport.height.0
+        {
+            return Err("drag destination is offscreen".into());
+        }
+        if self.native.hit_at(to)?.is_none() {
+            return Err("drag destination is offscreen or unavailable".into());
+        }
+        self.native.drag(origin, to);
+        self.settled()
+    }
+
+    /// Resizes the native content viewport, rejecting invalid dimensions.
+    pub fn resize_viewport(&self, width: Points, height: Points) -> Result<(), String> {
+        if !width.0.is_finite() || width.0 <= 0.0 || !height.0.is_finite() || height.0 <= 0.0 {
+            return Err("viewport width and height must be finite and positive".into());
+        }
+        self.native.resize(width, height)?;
+        self.settled()
+    }
+
+    fn node_point(&self, id: NodeId) -> Result<Point<Points>, String> {
+        self.settled()?;
+        let selector = format!("node {id}");
+        let node = self
+            .scene
+            .semantic_tree()?
+            .into_iter()
+            .find(|node| node.id == id)
+            .ok_or_else(|| format!("`{selector}` is offscreen (node unavailable)"))?;
+        if !node.enabled {
+            return Err(format!("`{selector}` is disabled"));
+        }
+        let at = self.scroll_into_view(id, &selector)?;
+        self.actionable_point(id, id, at, &selector)
+    }
+
+    fn checked_point_target(&self, at: Point<Points>) -> Result<Point<Points>, String> {
+        self.settled()?;
+        let id = self
+            .native
+            .hit_at(at)?
+            .ok_or("offscreen: coordinate has no native target")?;
+        let node = self
+            .scene
+            .semantic_tree()?
+            .into_iter()
+            .find(|node| node.id == id)
+            .ok_or("target_gone: coordinate has no semantic target")?;
+        if !node.enabled {
+            return Err(format!("node {id} is disabled"));
+        }
+        let bounds = self
+            .native
+            .bounds(id)
+            .ok_or_else(|| format!("offscreen: node {id} has no native bounds"))?;
+        if at.x.0 < bounds.origin.x.0
+            || at.y.0 < bounds.origin.y.0
+            || at.x.0 >= bounds.origin.x.0 + bounds.size.width.0
+            || at.y.0 >= bounds.origin.y.0 + bounds.size.height.0
+        {
+            return Err(format!("offscreen: coordinate is outside node {id}"));
+        }
+        self.actionable_point(id, id, at, &format!("node {id}"))
+    }
+
+    fn node_point_without_reveal(
+        &self,
+        id: NodeId,
+        selector: &str,
+    ) -> Result<Point<Points>, String> {
+        let nodes = self.scene.semantic_tree()?;
+        let node = nodes
+            .iter()
+            .find(|node| node.id == id)
+            .ok_or_else(|| format!("`{selector}` is offscreen (node unavailable)"))?;
+        if !node.enabled {
+            return Err(format!("`{selector}` is disabled"));
+        }
+        let bounds = self
+            .native
+            .bounds(id)
+            .ok_or_else(|| format!("`{selector}` is offscreen (no native bounds)"))?;
+        self.actionable_point(id, id, bounds.center(), selector)
     }
 
     /// Takes `step`; blocks until it is done and the app is quiet.
@@ -1393,6 +1921,8 @@ impl Agent {
                     "since_last_ms": a.since_last.map(|d| d.as_secs_f64() * 1000.0),
                 })
             }),
+            SceneQuery::SemanticTree => json(to_value(scene.semantic_tree()?)),
+            SceneQuery::Keybindings => json(to_value(scene.keybindings()?)),
             SceneQuery::TakeErrors => scene.take_errors().map(Value::from),
             SceneQuery::Pick { selector, target } => scene.pick(&selector, target).map(pick_value),
             SceneQuery::ScrollAncestors { id } => {
@@ -1493,10 +2023,8 @@ impl Agent {
         let picked = self.scene.pick(selector, target)?;
         let id = self.picked(picked, selector, what)?;
         if let Some((canvas, center)) = self.scene.canvas_node(selector)? {
-            return Ok((
-                id,
-                self.scroll_point_into_view(canvas, selector, Some(center))?,
-            ));
+            let at = self.scroll_point_into_view(canvas, selector, Some(center))?;
+            return Ok((id, self.actionable_point(id, canvas, at, selector)?));
         }
         let Some((text, start, end)) = self.scene.span(id)? else {
             // A press on what the selector matches inside the view that
@@ -1508,13 +2036,13 @@ impl Agent {
             } else {
                 None
             };
-            let at = match inner {
+            let (owner, at) = match inner {
                 Some(inner) if self.native.bounds(inner).is_some() => {
-                    self.scroll_into_view(inner, selector)?
+                    (inner, self.scroll_into_view(inner, selector)?)
                 }
-                _ => self.scroll_into_view(id, selector)?,
+                _ => (id, self.scroll_into_view(id, selector)?),
             };
-            return Ok((id, at));
+            return Ok((id, self.actionable_point(id, owner, at, selector)?));
         };
         // A span of a text: its text view comes into view, then the finger
         // goes on its characters.
@@ -1530,7 +2058,79 @@ impl Agent {
                     self.on_screen()
                 )
             })?;
-        Ok((id, at.center()))
+        Ok((id, self.actionable_point(id, text, at.center(), selector)?))
+    }
+
+    fn actionable_point(
+        &self,
+        id: NodeId,
+        native_owner: NodeId,
+        fallback: Point<Points>,
+        selector: &str,
+    ) -> Result<Point<Points>, String> {
+        if !self.require_hit_test {
+            return Ok(fallback);
+        }
+        let nodes = self.scene.semantic_tree()?;
+        let by_id: std::collections::HashMap<NodeId, &SemanticNode> =
+            nodes.iter().map(|node| (node.id, node)).collect();
+        let target = by_id
+            .get(&id)
+            .or_else(|| by_id.get(&native_owner))
+            .ok_or_else(|| format!("`{selector}` is offscreen (node {id} is unavailable)"))?;
+        if !target.enabled {
+            return Err(format!("`{selector}` is disabled"));
+        }
+        let bounds = self
+            .native
+            .bounds(native_owner)
+            .ok_or_else(|| format!("`{selector}` is offscreen (no native bounds)"))?;
+        let mut visible = Bounds::new(Point::default(), self.native.viewport());
+        visible =
+            intersection(visible, bounds).ok_or_else(|| format!("`{selector}` is offscreen"))?;
+        let owner_node = by_id.get(&native_owner).copied().unwrap_or(target);
+        let mut parent = owner_node.parent;
+        while let Some(parent_id) = parent {
+            let Some(ancestor) = by_id.get(&parent_id) else {
+                break;
+            };
+            if ancestor.clipping {
+                let ancestor_bounds = self.native.bounds(parent_id).ok_or_else(|| {
+                    format!("`{selector}` is offscreen (clipping ancestor has no native bounds)")
+                })?;
+                visible = intersection(visible, ancestor_bounds)
+                    .ok_or_else(|| format!("`{selector}` is offscreen"))?;
+            }
+            parent = ancestor.parent;
+        }
+        let at = if visible.contains(&fallback) {
+            fallback
+        } else {
+            visible.center()
+        };
+        let deadline = Instant::now() + Duration::from_millis(100);
+        loop {
+            match self.native.hit_at(at) {
+                Ok(Some(hit)) if is_descendant_or_same(hit, native_owner, &by_id) => {
+                    return Ok(at);
+                }
+                Ok(Some(hit)) => {
+                    if Instant::now() >= deadline {
+                        return Err(format!("occluded_by: {hit}"));
+                    }
+                }
+                Ok(None) => {
+                    if Instant::now() >= deadline {
+                        return Err(format!("`{selector}` is offscreen or has no native hit"));
+                    }
+                }
+                Err(error) if error == NATIVE_HIT_TEST_UNSUPPORTED => {
+                    return Err(error);
+                }
+                Err(error) => return Err(error),
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
 
     /// The middle of view `id` on screen, scrolled into view first when it
@@ -1572,7 +2172,7 @@ impl Agent {
     ) -> Result<(Point<Points>, bool), String> {
         let not_on_screen = || {
             format!(
-                "`{selector}` is not on screen (it has no native view); {}",
+                "`{selector}` is offscreen (it has no native view); {}",
                 self.on_screen()
             )
         };
@@ -1948,6 +2548,279 @@ mod tests {
                     .on_press(move || count.update(|c| *c += 1))
                     .child(text("Add")),
             )
+    }
+
+    struct GateNative {
+        bounds: std::collections::HashMap<NodeId, Bounds<Points>>,
+        hit: Result<Option<NodeId>, String>,
+        hits: Arc<Mutex<Vec<Point<Points>>>>,
+        presses: Arc<std::sync::atomic::AtomicUsize>,
+        typed: Arc<std::sync::atomic::AtomicUsize>,
+        viewport: Size<Points>,
+    }
+
+    impl Native for GateNative {
+        fn bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
+            self.bounds.get(&id).copied()
+        }
+        fn hit_at(&self, at: Point<Points>) -> Result<Option<NodeId>, String> {
+            self.hits.lock().unwrap().push(at);
+            self.hit.clone()
+        }
+        fn viewport(&self) -> Size<Points> {
+            self.viewport
+        }
+        fn press(&self, _: Point<Points>) {
+            self.presses
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        fn long_press(&self, _: Point<Points>, _: Duration) {}
+        fn scroll(&self, _: Point<Points>, _: Point<Points>) {}
+        fn drag(&self, _: Point<Points>, _: Point<Points>) {}
+        fn type_text(&self, _: &str) {
+            self.typed
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        fn key(&self, _: Key) {}
+        fn input_text(&self, _: NodeId) -> Option<String> {
+            None
+        }
+        fn back(&self) -> Result<(), String> {
+            Err("unsupported".into())
+        }
+        fn answer_dialog(&self, _: Option<&str>) -> Result<(), String> {
+            Ok(())
+        }
+        fn animating(&self) -> bool {
+            false
+        }
+        fn screenshot(&self) -> Result<Vec<u8>, String> {
+            Err("unsupported".into())
+        }
+        fn resize(&self, _: Points, _: Points) -> Result<(), String> {
+            Ok(())
+        }
+        fn set_dark(&self, _: bool) -> Result<(), String> {
+            Ok(())
+        }
+        fn quit(&self) {}
+    }
+
+    fn gate_scene(kind: nsh_core::ViewKind, disabled: bool, clip_root: bool) -> Arc<Model> {
+        use nsh_core::{EventMask, MountItem, ViewProps, ViewStyle};
+
+        let model = Arc::new(Model::default());
+        let mut events = EventMask::default();
+        events.set(EventKind::Press, true);
+        let mut props = ViewProps {
+            test_id: Some("target".into()),
+            ..ViewProps::default()
+        };
+        props.accessibility.state.disabled = disabled;
+        let mut items = vec![
+            MountItem::Create { id: 2, kind },
+            MountItem::Frame {
+                id: 2,
+                frame: Bounds::new(point(px(20.0), px(0.0)), size(px(60.0), px(100.0))),
+            },
+            MountItem::Insert {
+                parent: 1,
+                child: 2,
+                before: None,
+            },
+            MountItem::Events { id: 2, events },
+            MountItem::ViewProps {
+                id: 2,
+                props: Box::new(props),
+            },
+        ];
+        if clip_root {
+            items.push(MountItem::ViewStyle {
+                id: 1,
+                style: Box::new(ViewStyle {
+                    overflow_hidden: true,
+                    ..Default::default()
+                }),
+            });
+        }
+        model.apply(&MountBatch { items });
+        model
+    }
+
+    fn gate_agent(
+        model: Arc<Model>,
+        hit: Result<Option<NodeId>, String>,
+        bounds: &[(NodeId, Bounds<Points>)],
+        viewport: Size<Points>,
+        hits: Arc<Mutex<Vec<Point<Points>>>>,
+        presses: Arc<std::sync::atomic::AtomicUsize>,
+        typed: Arc<std::sync::atomic::AtomicUsize>,
+    ) -> Agent {
+        Agent::requiring_native_hit_test(
+            model,
+            Box::new(GateNative {
+                bounds: bounds.iter().copied().collect(),
+                hit,
+                hits,
+                presses,
+                typed,
+                viewport,
+            }),
+        )
+    }
+
+    #[test]
+    fn disabled_press_and_type_fail_before_native_hit_or_input() {
+        use nsh_core::{ViewKind, geometry::Size};
+
+        let model = gate_scene(ViewKind::Input, true, false);
+        let hits = Arc::new(Mutex::new(Vec::new()));
+        let presses = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let typed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let agent = gate_agent(
+            model,
+            Ok(Some(2)),
+            &[(
+                2,
+                Bounds::new(point(px(0.0), px(0.0)), size(px(80.0), px(40.0))),
+            )],
+            Size::new(px(100.0), px(100.0)),
+            hits.clone(),
+            presses.clone(),
+            typed.clone(),
+        );
+        assert!(agent.press_node(2).unwrap_err().contains("disabled"));
+        assert!(
+            agent
+                .type_node(2, "forbidden")
+                .unwrap_err()
+                .contains("disabled")
+        );
+        assert!(hits.lock().unwrap().is_empty());
+        assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 0);
+        assert_eq!(typed.load(std::sync::atomic::Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn strict_actionability_reports_occlusion_offscreen_and_accepts_descendants() {
+        use nsh_core::{MountItem, geometry::Size};
+
+        let model = gate_scene(nsh_core::ViewKind::View, false, false);
+        model.apply(&MountBatch {
+            items: vec![
+                MountItem::Create {
+                    id: 3,
+                    kind: nsh_core::ViewKind::View,
+                },
+                MountItem::Insert {
+                    parent: 2,
+                    child: 3,
+                    before: None,
+                },
+            ],
+        });
+        let bounds = [(
+            2,
+            Bounds::new(point(px(0.0), px(0.0)), size(px(80.0), px(40.0))),
+        )];
+        let viewport = Size::new(px(100.0), px(100.0));
+        let hits = Arc::new(Mutex::new(Vec::new()));
+        let presses = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let typed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let occluded = gate_agent(
+            model.clone(),
+            Ok(Some(99)),
+            &bounds,
+            viewport,
+            hits.clone(),
+            presses.clone(),
+            typed.clone(),
+        );
+        assert!(
+            occluded
+                .actionable_point(2, 2, point(px(40.0), px(20.0)), "target")
+                .unwrap_err()
+                .contains("occluded_by: 99")
+        );
+        let offscreen = gate_agent(
+            model.clone(),
+            Ok(None),
+            &[(
+                2,
+                Bounds::new(point(px(120.0), px(0.0)), size(px(20.0), px(20.0))),
+            )],
+            viewport,
+            hits.clone(),
+            presses.clone(),
+            typed.clone(),
+        );
+        assert!(
+            offscreen
+                .actionable_point(2, 2, point(px(125.0), px(5.0)), "target")
+                .unwrap_err()
+                .contains("offscreen")
+        );
+        let descendant = gate_agent(
+            model,
+            Ok(Some(3)),
+            &bounds,
+            viewport,
+            hits.clone(),
+            presses.clone(),
+            typed.clone(),
+        );
+        let accepted = descendant.actionable_point(2, 2, point(px(40.0), px(20.0)), "target");
+        assert!(accepted.is_ok(), "{accepted:?}");
+        assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 0);
+        assert_eq!(typed.load(std::sync::atomic::Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn clipping_ancestor_without_native_bounds_fails_closed() {
+        use nsh_core::{ViewKind, geometry::Size};
+
+        let agent = gate_agent(
+            gate_scene(ViewKind::View, false, true),
+            Ok(Some(2)),
+            &[(
+                2,
+                Bounds::new(point(px(20.0), px(0.0)), size(px(60.0), px(100.0))),
+            )],
+            Size::new(px(100.0), px(100.0)),
+            Arc::new(Mutex::new(Vec::new())),
+            Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        );
+        assert!(
+            agent
+                .actionable_point(2, 2, point(px(40.0), px(20.0)), "target")
+                .unwrap_err()
+                .contains("offscreen")
+        );
+    }
+
+    #[test]
+    fn strict_actionability_preserves_a_selected_point_inside_partial_clip() {
+        use nsh_core::{ViewKind, geometry::Size};
+
+        let model = gate_scene(ViewKind::View, false, true);
+        let clip_bounds = Bounds::new(point(px(40.0), px(0.0)), size(px(60.0), px(100.0)));
+        let target_bounds = Bounds::new(point(px(20.0), px(0.0)), size(px(60.0), px(100.0)));
+        let hits = Arc::new(Mutex::new(Vec::new()));
+        let agent = gate_agent(
+            model,
+            Ok(Some(2)),
+            &[(1, clip_bounds), (2, target_bounds)],
+            Size::new(px(100.0), px(100.0)),
+            hits,
+            Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        );
+        let selected = point(px(45.0), px(30.0));
+        assert_eq!(
+            agent.actionable_point(2, 2, selected, "target"),
+            Ok(selected)
+        );
     }
 
     /// A platform whose views are where their ids say (`x` is the id), and
