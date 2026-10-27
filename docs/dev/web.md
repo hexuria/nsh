@@ -95,7 +95,9 @@ build to the same file) and takes `nsh.js` from the crate.
   hello says `tests` (`player.takesTests`), so the server sends it steps; each `step` is answered at once with
   `player.testStep`: `nsh_test_answer` answers what the model knows (selectors, texts, dialogs, activity) and whether
   an animation runs, `testPage` what only the DOM knows (`getBoundingClientRect` in CSS pixels, the viewport, an
-  input's value, where a dialog's button is). The input itself is the browser's trusted input, sent by the CLI.
+  input's value, where a dialog's button is). The input itself is the browser's trusted input, sent by the CLI. A GPUI agent
+  attached to `nsh run --target web` (`GPUI_AGENT=1`) drives a page of its own the same way, asking also where hits
+  land, focus and text spans are (`docs/dev/tooling.md` "Web GPUI-agent development").
 
 `nsh_bundle_options` sets how the next `nsh_start` / `nsh_start_bytecode` runs: development settings by default (the
 player, the playground, the dev host), hardened (`Policy::default()`) for published apps, the declared capabilities,
