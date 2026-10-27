@@ -94,8 +94,6 @@ pub(crate) struct Host {
     #[cfg(feature = "dev-agent")]
     agent_model: Mutex<Option<Arc<nsh_testing::agent::Model>>>,
     #[cfg(feature = "dev-agent")]
-    agent_batches: Mutex<VecDeque<(u64, MountBatch)>>,
-    #[cfg(feature = "dev-agent")]
     agent_worker: Mutex<Option<nsh_gpui_agent::WorkerHandle>>,
     #[cfg(feature = "dev-agent")]
     pub(crate) agent_alive: AtomicBool,
@@ -108,10 +106,6 @@ impl Host {
         if let Some(model) = model.as_ref() {
             model.reset();
         }
-        self.agent_batches
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clear();
     }
 
     #[cfg(feature = "dev-agent")]
@@ -474,17 +468,12 @@ impl MountSink for Sink {
         if let Some(model) = &*host.test_model.lock().unwrap_or_else(|e| e.into_inner()) {
             model.apply(&batch);
         }
+        // As the test model: by reference, just before the batch is posted
+        // to the UI thread (no copy kept until it is applied there).
         #[cfg(feature = "dev-agent")]
-        let agent_batch = if host
-            .agent_model
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .is_some()
-        {
-            Some(batch.clone())
-        } else {
-            None
-        };
+        if let Some(model) = &*host.agent_model.lock().unwrap_or_else(|e| e.into_inner()) {
+            model.apply(&batch);
+        }
         answer_clipboard_reads(host, &batch);
         register_inline_images(host, &batch);
         let mut encoded = encode::encode(batch);
@@ -495,13 +484,6 @@ impl MountSink for Sink {
                 .set(keymap);
         }
         let seq = host.seq.fetch_add(1, Ordering::Relaxed) + 1;
-        #[cfg(feature = "dev-agent")]
-        if let Some(batch) = agent_batch {
-            host.agent_batches
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .push_back((seq, batch));
-        }
         if !encoded.animation.is_empty() {
             host.animation_queue
                 .lock()
@@ -672,8 +654,6 @@ extern "system" fn Java_com_longbridge_nsh_Native_create(
         test_model: Mutex::new(None),
         #[cfg(feature = "dev-agent")]
         agent_model: Mutex::new(None),
-        #[cfg(feature = "dev-agent")]
-        agent_batches: Mutex::new(VecDeque::new()),
         #[cfg(feature = "dev-agent")]
         agent_worker: Mutex::new(None),
         #[cfg(feature = "dev-agent")]
@@ -1677,24 +1657,6 @@ extern "system" fn Java_com_longbridge_nsh_Native_afterBatch(
         let mut queue = host.animation_queue.lock().expect("queue");
         while queue.front().is_some_and(|(s, _)| *s <= seq as u64) {
             items.extend(queue.pop_front().expect("front").1);
-        }
-    }
-    #[cfg(feature = "dev-agent")]
-    {
-        let mut applied = Vec::new();
-        let model = host.agent_model.lock().unwrap_or_else(|e| e.into_inner());
-        let mut queue = host.agent_batches.lock().unwrap_or_else(|e| e.into_inner());
-        while queue
-            .front()
-            .is_some_and(|(batch_seq, _)| *batch_seq <= seq as u64)
-        {
-            applied.push(queue.pop_front().expect("front").1);
-        }
-        drop(queue);
-        if let Some(model) = model.as_ref() {
-            for batch in applied {
-                model.apply(&batch);
-            }
         }
     }
     let mut ui = host.ui.lock().expect("ui");
