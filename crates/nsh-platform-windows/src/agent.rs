@@ -9,11 +9,13 @@ use std::{
     rc::Rc,
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicU64, Ordering},
         mpsc,
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
+#[cfg(feature = "dev-agent")]
+use std::{sync::atomic::AtomicBool, time::Instant};
 
 use nsh_core::{
     NodeId, ROOT_ID,
@@ -87,13 +89,6 @@ impl WindowsNative {
         }
     }
 
-    #[cfg(feature = "dev-agent")]
-    fn unavailable(&self) {
-        if let Some(available) = &self.available {
-            available.store(false, Ordering::Release);
-        }
-    }
-
     /// `f` on the main thread with the surface's input in the window the
     /// pointer acts in ([`Native::target_window`]): its points are that
     /// window's content's.
@@ -142,28 +137,24 @@ impl WindowsNative {
         self.ui.invoke(move || {
             #[cfg(feature = "dev-agent")]
             if let Some(available) = &callback_available {
-                if !dispatch_is_live(available, deadline) {
-                    let _ = tx.send(None);
-                    return;
-                }
-                let Some(surface) = Surface::by_key(key) else {
-                    available.store(false, Ordering::Release);
-                    let _ = tx.send(None);
-                    return;
-                };
-                let _ = tx.send(Some(f(&surface)));
+                let _ = tx.send(dispatch(
+                    available,
+                    deadline,
+                    || Surface::by_key(key),
+                    |surface| f(&surface),
+                ));
                 return;
             }
             let _ = tx.send(Surface::by_key(key).map(|surface| f(&surface)));
         });
-        let result = rx.recv_timeout(MAIN).ok().flatten();
-        #[cfg(feature = "dev-agent")]
-        if result.is_none() && self.available.is_some() {
-            // A dispatch timeout makes the attached connection unavailable
-            // until its host is restarted.
-            self.unavailable();
+        match rx.recv_timeout(MAIN) {
+            Ok(result) => result,
+            Err(_) => {
+                // This call fails; a later one may still be answered.
+                log::warn!("the main thread did not answer in {} s", MAIN.as_secs());
+                None
+            }
         }
-        result
     }
 
     fn click(&self, at: Point<Points>, hold: Duration, button: u8) {
@@ -408,6 +399,21 @@ impl Native for WindowsNative {
         self.on_main(|s| s.animating()).unwrap_or(false)
     }
 
+    fn laid_out(&self) -> Result<(), String> {
+        // Waits for the layout a resize started, not for a size to come.
+        const LAYOUT: Duration = Duration::from_secs(3);
+        let deadline = std::time::Instant::now() + LAYOUT;
+        loop {
+            let (pixels, pending) = self
+                .on_main(|s| (s.pixel_size(), s.layout_pending()))
+                .ok_or("the window is gone")?;
+            if !pending || pixels.0 == 0 || pixels.1 == 0 || std::time::Instant::now() >= deadline {
+                return layout_state(pixels, pending);
+            }
+            std::thread::sleep(Duration::from_millis(16));
+        }
+    }
+
     fn screenshot(&self) -> Result<Vec<u8>, String> {
         self.on_main(synth::screenshot)
             .unwrap_or_else(|| Err("the window is gone".into()))
@@ -517,14 +523,35 @@ fn windows_key(keys: &str) -> Result<(u16, Modifiers), String> {
     ))
 }
 
-#[cfg(feature = "dev-agent")]
-fn dispatch_is_live(available: &AtomicBool, deadline: Instant) -> bool {
-    if !available.load(Ordering::Acquire) || Instant::now() >= deadline {
-        available.store(false, Ordering::Release);
-        false
+/// Whether the surface shows a layout at its window's size: not while the
+/// window has no client area (minimized) or the engine has yet to lay the
+/// app out at the size the window last took.
+fn layout_state(pixels: (u32, u32), pending: bool) -> Result<(), String> {
+    if pixels.0 == 0 || pixels.1 == 0 || pending {
+        Err("the viewport is not laid out yet".into())
     } else {
-        true
+        Ok(())
     }
+}
+
+/// `f` with the surface `surface` finds, unless the call's `deadline`
+/// passed (its caller stopped waiting) or the attachment is unavailable; a
+/// surface that is gone makes the attachment unavailable.
+#[cfg(feature = "dev-agent")]
+fn dispatch<S, R>(
+    available: &AtomicBool,
+    deadline: Instant,
+    surface: impl FnOnce() -> Option<S>,
+    f: impl FnOnce(S) -> R,
+) -> Option<R> {
+    if !available.load(Ordering::Acquire) || Instant::now() >= deadline {
+        return None;
+    }
+    let Some(surface) = surface() else {
+        available.store(false, Ordering::Release);
+        return None;
+    };
+    Some(f(surface))
 }
 
 /// The box `(x, y, width, height)` of a view (in its coordinates) in the
@@ -573,15 +600,52 @@ mod tests {
         assert!(windows_key("not-a-windows-key").is_err());
     }
 
+    #[test]
+    fn a_window_without_its_layout_is_not_laid_out() {
+        assert!(layout_state((0, 0), false).is_err());
+        assert!(layout_state((1200, 0), false).is_err());
+        assert!(layout_state((1200, 831), true).is_err());
+        assert!(layout_state((1200, 831), false).is_ok());
+    }
+
     #[cfg(feature = "dev-agent")]
     #[test]
-    fn expired_attached_dispatch_skips_callback_and_disables_connection() {
+    fn a_late_dispatch_skips_the_call_and_keeps_the_attachment() {
         let available = AtomicBool::new(true);
         let mut called = false;
-        if dispatch_is_live(&available, Instant::now() - Duration::from_millis(1)) {
-            called = true;
-        }
+        let result = dispatch(
+            &available,
+            Instant::now() - Duration::from_millis(1),
+            || Some(()),
+            |()| called = true,
+        );
+        assert!(result.is_none());
+        assert!(!called);
+        assert!(available.load(Ordering::Acquire));
+    }
+
+    #[cfg(feature = "dev-agent")]
+    #[test]
+    fn a_dispatch_to_a_gone_surface_disables_the_attachment() {
+        let available = AtomicBool::new(true);
+        let mut called = false;
+        let result = dispatch(
+            &available,
+            Instant::now() + MAIN,
+            || None::<()>,
+            |()| called = true,
+        );
+        assert!(result.is_none());
         assert!(!called);
         assert!(!available.load(Ordering::Acquire));
+    }
+
+    #[cfg(feature = "dev-agent")]
+    #[test]
+    fn a_live_dispatch_runs_the_call() {
+        let available = AtomicBool::new(true);
+        let result = dispatch(&available, Instant::now() + MAIN, || Some(2), |n| n * 3);
+        assert_eq!(result, Some(6));
+        assert!(available.load(Ordering::Acquire));
     }
 }

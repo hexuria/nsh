@@ -62,6 +62,9 @@ const TEST_FRAME: f64 = 1.0 / 60.0;
 thread_local! {
     /// The surfaces of this thread, by key.
     static SURFACES: RefCell<FxHashMap<u64, Weak<Surface>>> = RefCell::default();
+    /// A window of this process has the GPUI-agent worker.
+    #[cfg(feature = "dev-agent")]
+    static AGENT_ATTACHED: Cell<bool> = const { Cell::new(false) };
 }
 
 static NEXT_KEY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -218,6 +221,9 @@ pub(crate) struct Surface {
     #[cfg(feature = "dev")]
     test_model: RefCell<Option<std::sync::Arc<nsh_testing::agent::Model>>>,
     /// The GPUI-agent model; independent of an `nsh test` model.
+    /// A size the engine has yet to lay the app out at
+    /// ([`MountSink::resized`]).
+    layout_pending: Cell<Option<(f32, f32)>>,
     #[cfg(feature = "dev-agent")]
     agent_model: Arc<nsh_testing::agent::Model>,
     #[cfg(feature = "dev-agent")]
@@ -315,6 +321,7 @@ impl Surface {
             keeper: Cell::new(None),
             #[cfg(feature = "dev")]
             test_model: RefCell::default(),
+            layout_pending: Cell::new(None),
             #[cfg(feature = "dev-agent")]
             agent_model: Arc::default(),
             #[cfg(feature = "dev-agent")]
@@ -385,6 +392,19 @@ impl Surface {
 
     #[cfg(feature = "dev-agent")]
     fn start_agent(&self) {
+        // One worker per host process, on its first window: every window
+        // would bind the same address.
+        if AGENT_ATTACHED.with(Cell::get) {
+            return;
+        }
+        let (addr, token) = match nsh_gpui_agent::worker_config_from_env() {
+            Ok(Some(config)) => config,
+            Ok(None) => return,
+            Err(error) => {
+                log::error!("invalid GPUI_AGENT development configuration: {error}");
+                return;
+            }
+        };
         let agent = Arc::new(nsh_testing::agent::Agent::requiring_native_hit_test(
             self.agent_model.clone(),
             Box::new(crate::agent::WindowsNative::attached(
@@ -404,9 +424,12 @@ impl Surface {
                 return;
             }
         };
-        match nsh_gpui_agent::start_from_env(host) {
-            Ok(worker) => *self.agent_worker.borrow_mut() = worker,
-            Err(_) => log::error!("invalid GPUI_AGENT development configuration"),
+        match nsh_gpui_agent::spawn_worker(addr, token, host) {
+            Ok(worker) => {
+                *self.agent_worker.borrow_mut() = Some(worker);
+                AGENT_ATTACHED.with(|attached| attached.set(true));
+            }
+            Err(error) => log::error!("cannot start the GPUI-agent worker on {addr}: {error}"),
         }
     }
 
@@ -557,6 +580,7 @@ impl Surface {
         crate::keymap::clear(self);
         self.js_frame.set(false);
         self.resize_late.set(false);
+        self.layout_pending.set(None);
         self.frame_clients.borrow_mut().clear();
         crate::app_window::close_all(self);
         self.invalidate();
@@ -625,6 +649,9 @@ impl Surface {
         env.window = Size::new(Points(width), Points(height));
         env.pixel_ratio = scale;
         self.environment.set(env);
+        if self.control.borrow().is_some() {
+            self.layout_pending.set(Some((width, height)));
+        }
         self.control(|c| {
             c.resize(Size::new(Points(width), Points(height)));
             c.set_environment(env);
@@ -854,7 +881,9 @@ impl Surface {
                     model.error(message.to_string());
                 }
                 #[cfg(feature = "dev-agent")]
-                self.agent_model.error(message.clone());
+                if self.agent_worker.borrow().is_some() {
+                    self.agent_model.error(message.clone());
+                }
                 if let Some(f) = &*self.on_error.borrow() {
                     f(&message);
                 }
@@ -862,14 +891,21 @@ impl Surface {
             Message::Frame => {
                 self.js_frame.set(true);
                 #[cfg(feature = "dev-agent")]
-                self.agent_model.frame();
+                if self.agent_worker.borrow().is_some() {
+                    self.agent_model.frame();
+                }
             }
             Message::HotUpdateFailed => {
                 if let Some(f) = &*self.on_hot_update_failed.borrow() {
                     f();
                 }
             }
-            Message::Resized(_) => self.resize_late.set(false),
+            Message::Resized(size) => {
+                self.resize_late.set(false);
+                if self.layout_pending.get() == Some((size.width.0, size.height.0)) {
+                    self.layout_pending.set(None);
+                }
+            }
         }
         false
     }
@@ -905,7 +941,9 @@ impl Surface {
             model.apply(batch);
         }
         #[cfg(feature = "dev-agent")]
-        self.agent_model.apply(batch);
+        if self.agent_worker.borrow().is_some() {
+            self.agent_model.apply(batch);
+        }
         crate::access::batch_applied(self);
         crate::input::batch_applied(self);
     }
@@ -960,7 +998,15 @@ impl Surface {
     /// (transitions, scroll glides).
     #[cfg(feature = "dev")]
     pub(crate) fn animating(&self) -> bool {
-        self.anim.borrow().finishing() || !self.frame_clients.borrow().is_empty()
+        self.anim.borrow().finishing()
+            || !self.frame_clients.borrow().is_empty()
+            || self.layout_pending()
+    }
+
+    /// The engine has yet to lay the app out at the window's size.
+    #[cfg(feature = "dev")]
+    pub(crate) fn layout_pending(&self) -> bool {
+        self.layout_pending.get().is_some()
     }
 
     /// Keeps the model `nsh test --target` steps see of the app
@@ -1134,7 +1180,9 @@ impl Drop for Surface {
         #[cfg(feature = "dev-agent")]
         {
             self.agent_alive.store(false, Ordering::Release);
-            drop(self.agent_worker.get_mut().take());
+            if self.agent_worker.get_mut().take().is_some() {
+                let _ = AGENT_ATTACHED.try_with(|attached| attached.set(false));
+            }
         }
         let key = self.key;
         let _ = SURFACES.try_with(|s| s.borrow_mut().remove(&key));
