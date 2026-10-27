@@ -684,11 +684,6 @@ pub enum SceneQuery {
         /// The canvas node's selector.
         selector: String,
     },
-    /// The canvas semantic node's native owner and canvas-local bounds.
-    CanvasTarget {
-        /// The canvas node's selector.
-        selector: String,
-    },
     /// The view `selector` matches inside view `id` (a text in the button a
     /// press goes to), whose middle the press lands on, or `null` when the
     /// match is `id` itself.

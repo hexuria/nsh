@@ -557,14 +557,6 @@ pub trait Scene: Send + Sync {
         let _ = selector;
         Ok(None)
     }
-    /// The canvas semantic node, its native owner, and its local bounds.
-    fn canvas_target(
-        &self,
-        selector: &str,
-    ) -> Result<Option<(NodeId, NodeId, Bounds<Points>)>, String> {
-        let _ = selector;
-        Ok(None)
-    }
     /// The view `selector` matches inside view `id` (a text in the button
     /// a press goes to), whose middle a press lands on; `None` when the
     /// match is `id` itself.
@@ -599,15 +591,6 @@ impl Scene for Model {
         Ok(self.lock().screen.canvas_node(&Selector::parse(selector)?))
     }
 
-    fn canvas_target(
-        &self,
-        selector: &str,
-    ) -> Result<Option<(NodeId, NodeId, Bounds<Points>)>, String> {
-        Ok(self
-            .lock()
-            .screen
-            .canvas_target(&Selector::parse(selector)?))
-    }
     fn match_inside(&self, selector: &str, id: NodeId) -> Result<Option<NodeId>, String> {
         Ok(self
             .lock()
@@ -881,9 +864,6 @@ pub fn answer(model: &Model, step: &TestStep) -> Option<Result<serde_json::Value
             SceneQuery::CanvasNode { selector } => {
                 model.canvas_node(selector).and_then(|n| json(to_value(n)))
             }
-            SceneQuery::CanvasTarget { selector } => model
-                .canvas_target(selector)
-                .and_then(|n| json(to_value(n))),
             SceneQuery::MatchInside { selector, id } => {
                 model.match_inside(selector, *id).map(Value::from)
             }
@@ -943,14 +923,6 @@ impl Scene for RemoteScene {
         })
     }
 
-    fn canvas_target(
-        &self,
-        selector: &str,
-    ) -> Result<Option<(NodeId, NodeId, Bounds<Points>)>, String> {
-        self.query(SceneQuery::CanvasTarget {
-            selector: selector.into(),
-        })
-    }
     fn match_inside(&self, selector: &str, id: NodeId) -> Result<Option<NodeId>, String> {
         self.query(SceneQuery::MatchInside {
             selector: selector.into(),
@@ -2085,9 +2057,6 @@ impl Agent {
             SceneQuery::CanvasNode { selector } => {
                 scene.canvas_node(&selector).and_then(|n| json(to_value(n)))
             }
-            SceneQuery::CanvasTarget { selector } => scene
-                .canvas_target(&selector)
-                .and_then(|n| json(to_value(n))),
             SceneQuery::MatchInside { selector, id } => {
                 scene.match_inside(&selector, id).map(Value::from)
             }
@@ -2097,7 +2066,7 @@ impl Agent {
             }
             SceneQuery::OpenedUrls => scene.opened_urls().map(Value::from),
             SceneQuery::Bounds { id } => {
-                json(to_value(self.native_bounds(id).map(|b| {
+                json(to_value(self.native.bounds(id).map(|b| {
                     [b.origin.x.0, b.origin.y.0, b.size.width.0, b.size.height.0]
                 })))
             }
@@ -2167,49 +2136,11 @@ impl Agent {
         self.settled()?;
         let picked = self.scene.pick(selector, target)?;
         let id = self.picked(picked, selector, what)?;
-        if let Some((canvas_id, canvas, _)) = self.scene.canvas_target(selector)? {
-            let at = self.target_point(canvas_id, selector)?;
-            return Ok((id, self.actionable_point(canvas_id, canvas, at, selector)?));
+        if let Some((canvas, center)) = self.scene.canvas_node(selector)? {
+            let at = self.scroll_point_into_view(canvas, selector, Some(center))?;
+            return Ok((id, self.actionable_point(id, canvas, at, selector)?));
         }
-        let target_node = self
-            .scene
-            .semantic_tree()?
-            .into_iter()
-            .find(|node| node.id == id);
-        if let Some(node) = target_node
-            .as_ref()
-            .filter(|node| matches!(node.native_target, SemanticTarget::Text { .. }))
-        {
-            let geometry = self
-                .target_geometry(node)
-                .ok_or_else(|| format!("`{selector}` is offscreen (no native text bounds)"))?;
-            let at = self.target_point(id, selector)?;
-            return Ok((id, self.actionable_point(id, geometry.owner, at, selector)?));
-        }
-        if let Some((text, start, end)) = self.scene.span(id)? {
-            let mut span_node = target_node
-                .clone()
-                .ok_or_else(|| format!("`{selector}` is offscreen (span target unavailable)"))?;
-            span_node.native_target = SemanticTarget::Text {
-                owner: text,
-                start,
-                end,
-            };
-            let at = self.target_point_for_node(&span_node, selector)?;
-            let geometry = self
-                .target_geometry(&span_node)
-                .ok_or_else(|| format!("`{selector}` is offscreen (no native text bounds)"))?;
-            Ok((
-                id,
-                self.actionable_point_with_target(
-                    id,
-                    geometry.owner,
-                    at,
-                    selector,
-                    Some(&span_node),
-                )?,
-            ))
-        } else {
+        let Some((text, start, end)) = self.scene.span(id)? else {
             // A press on what the selector matches inside the view that
             // takes it (a cell's text in a row) lands on that match, as a
             // finger taps the text it reads.
@@ -2225,8 +2156,23 @@ impl Agent {
                 }
                 _ => (id, self.scroll_into_view(id, selector)?),
             };
-            Ok((id, self.actionable_point(id, owner, at, selector)?))
-        }
+            return Ok((id, self.actionable_point(id, owner, at, selector)?));
+        };
+        // A span of a text: its text view comes into view, then the finger
+        // goes on its characters.
+        self.scroll_into_view(text, selector)?;
+        let at = self
+            .native
+            .text_bounds(text, start, end)
+            .filter(|b| !b.is_empty())
+            .ok_or_else(|| {
+                format!(
+                    "`{selector}` is a span of a text, and this platform does not say where its \
+                     characters are; {}",
+                    self.on_screen()
+                )
+            })?;
+        Ok((id, self.actionable_point(id, text, at.center(), selector)?))
     }
 
     fn actionable_point(
@@ -2236,25 +2182,16 @@ impl Agent {
         fallback: Point<Points>,
         selector: &str,
     ) -> Result<Point<Points>, String> {
-        self.actionable_point_with_target(id, native_owner, fallback, selector, None)
-    }
-
-    fn actionable_point_with_target(
-        &self,
-        id: NodeId,
-        native_owner: NodeId,
-        fallback: Point<Points>,
-        selector: &str,
-        target_override: Option<&SemanticNode>,
-    ) -> Result<Point<Points>, String> {
         if !self.require_hit_test {
             return Ok(fallback);
         }
         let nodes = self.scene.semantic_tree()?;
         let by_id: std::collections::HashMap<NodeId, &SemanticNode> =
             nodes.iter().map(|node| (node.id, node)).collect();
-        let target = target_override
-            .or_else(|| by_id.get(&id).or_else(|| by_id.get(&native_owner)).copied())
+        let target = by_id
+            .get(&id)
+            .or_else(|| by_id.get(&native_owner))
+            .copied()
             .ok_or_else(|| format!("`{selector}` is offscreen (node {id} is unavailable)"))?;
         if !target.enabled {
             return Err(format!("`{selector}` is disabled"));
@@ -2952,7 +2889,7 @@ mod tests {
             canvas
                 .scene_query(nsh_dev::protocol::SceneQuery::Bounds { id: 10 })
                 .unwrap(),
-            serde_json::json!([70.0, 30.0, 10.0, 10.0])
+            serde_json::Value::Null
         );
         canvas.press_node(10).unwrap();
         assert_eq!(*hits.lock().unwrap(), vec![expected_canvas.center()]);
@@ -2995,7 +2932,7 @@ mod tests {
         assert_eq!(
             span.scene_query(nsh_dev::protocol::SceneQuery::Bounds { id: 11 })
                 .unwrap(),
-            serde_json::json!([40.0, 25.0, 20.0, 10.0])
+            serde_json::Value::Null
         );
         span.press_node(11).unwrap();
         assert_eq!(*hits.lock().unwrap(), vec![span_bounds.center()]);
@@ -3356,8 +3293,11 @@ mod tests {
             ],
         });
         let remote_model = model.clone();
-        let remote = Arc::new(RemoteScene::new(move |step| {
-            answer(&remote_model, &step).unwrap()
+        let remote = Arc::new(RemoteScene::new(move |step| match step {
+            TestStep::Scene {
+                query: nsh_dev::protocol::SceneQuery::SemanticTree,
+            } => Err("semantic tree is unsupported".into()),
+            step => answer(&remote_model, &step).unwrap(),
         }));
         let (engine, _batches) = crate::start(EngineConfig::new(Root::of::<Tally>())).unwrap();
         for scene in [model as Arc<dyn Scene>, remote as Arc<dyn Scene>] {
@@ -3374,6 +3314,7 @@ mod tests {
                 agent.find("id:cell", "pressable view", PickTarget::Pressable),
                 Ok((4, point(px(151.5), px(20.0))))
             );
+            agent.press("id:cell").unwrap();
         }
     }
 
