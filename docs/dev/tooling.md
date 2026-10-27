@@ -581,6 +581,27 @@ These hosts are also how a change to a platform is checked by hand: `nsh test <e
 on standard input (`app.screenshot("a.png")`, `app.press(…)`) opens the app in the platform's window, takes them and
 closes it.
 
+#### Android GPUI-agent development
+
+Build the development host, opt in with a token exported once in the same shell, then forward its loopback port from
+the emulator:
+
+```sh
+cargo xtask android --dev --abi x86_64
+export GPUI_AGENT_TOKEN="$(openssl rand -hex 32)"
+GPUI_AGENT=1 nsh run --target android examples/gallery &
+adb forward tcp:17421 tcp:17421
+gpui-agent hello
+gpui-agent snapshot --pretty
+gpui-agent screenshot --out gallery.png
+```
+
+Keep `nsh run` in the background while using the GPUI-agent CLI in the same shell. It passes the opt-in and token as
+intent extras to the debuggable development host; no process environment is mutated, and release apps do not start an
+agent. The server binds to `127.0.0.1:17421` by default. A requested viewport resizes only the `NshView` content and
+must fit the device window; it does not change the device resolution. Screenshot names are relative `.png` files in
+the app's cache on the device, not host paths.
+
 The web (`--target web`, `nsh-cli/src/test_web.rs`): the agent runs in the CLI, the app in a page of a headless
 Chromium browser (Chrome, Edge or Chromium; `--browser <PATH>`, else the one installed where `cdp.rs` looks; nsh never
 fetches one and fails saying so when there is none). One browser serves the run; each `open` gets a page in a browser
