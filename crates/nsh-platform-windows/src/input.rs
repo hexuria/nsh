@@ -1051,6 +1051,12 @@ fn pick(root: &NshView, x: f32, y: f32, items: bool) -> Option<Hit> {
     pick_in(root, x, y, items)
 }
 
+/// Picks the native target at root coordinates.
+#[cfg(any(feature = "dev", test))]
+pub(crate) fn pick_node(root: &NshView, x: f32, y: f32) -> Option<NodeId> {
+    pick(root, x, y, true).map(|hit| hit.view.id())
+}
+
 fn pick_in(view: &NshView, x: f32, y: f32, items: bool) -> Option<Hit> {
     let s = view.state();
     // Views animating out after their removal are gone for the pointer.
@@ -2300,7 +2306,7 @@ mod tests {
     }
 
     fn at(root: &NshView, x: f32, y: f32) -> Option<NodeId> {
-        pick(root, x, y, true).map(|h| h.view.id())
+        pick_node(root, x, y)
     }
 
     use crate::geom::rect;
