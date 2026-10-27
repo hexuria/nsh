@@ -291,3 +291,70 @@ test("Return presses a focused pressable, not a focused stop that takes no press
   assert.equal(key(chart), false);
   assert.deepEqual(pressed, [button]);
 });
+
+/** A view element as the mounter makes one, for `testPage`. */
+function view(id, extra = {}) {
+  return { _id: id, isConnected: true, parentElement: null, ...extra };
+}
+
+test("a GPUI agent's page never answers a masked input's text", () => {
+  const { player } = fakePlayer();
+  const secret = view(2, { _field: { type: "password", value: "hunter2" } });
+  const plain = view(3, { _field: { type: "text", value: "hello" } });
+  player.views = new Map([[2, secret], [3, plain]]);
+  // A test session reads what the test typed.
+  assert.equal(player.testPage({ query: "input_text", id: 2 }), "hunter2");
+  player.agent = true;
+  assert.equal(player.testPage({ query: "input_text", id: 2 }), "•••••••");
+  assert.equal(player.testPage({ query: "input_text", id: 3 }), "hello");
+});
+
+test("a hit is the view around the element the browser finds", () => {
+  const { player } = fakePlayer();
+  const root = view(1);
+  const button = view(4, { parentElement: root });
+  // A view's border overlay, and a deleted view still leaving the page.
+  const border = { parentElement: button };
+  const leaving = view(6, { parentElement: root });
+  player.views = new Map([[1, root], [4, button]]);
+  let found = border;
+  globalThis.document = { elementFromPoint: (x, y) => (x === 5 && y === 6 ? found : null) };
+  try {
+    assert.equal(player.testPage({ query: "hit_at", x: 5, y: 6 }), 4);
+    found = leaving;
+    assert.equal(player.testPage({ query: "hit_at", x: 5, y: 6 }), 1);
+    assert.equal(player.testPage({ query: "hit_at", x: 0, y: 0 }), null);
+  } finally {
+    delete globalThis.document;
+  }
+});
+
+test("text bounds count the characters a run's line break left out", () => {
+  const { player } = fakePlayer();
+  const runs = [
+    { firstChild: { length: 5 }, _after: " " },
+    { firstChild: { length: 3 } },
+  ];
+  const text = view(9, { querySelectorAll: () => runs });
+  player.views = new Map([[9, text]]);
+  const ranges = [];
+  globalThis.document = {
+    createRange() {
+      const range = {
+        setStart: (node, at) => Object.assign(range, { node, start: at }),
+        setEnd: (_, at) => Object.assign(range, { end: at }),
+        getClientRects: () => [{ left: range.start * 10, top: runs.indexOf(runs.find((r) => r.firstChild === range.node)) * 20, width: (range.end - range.start) * 10, height: 18 }],
+      };
+      ranges.push(range);
+      return range;
+    },
+  };
+  try {
+    // "hello world": `w` is the second run's first character.
+    assert.deepEqual(player.testPage({ query: "text_bounds", id: 9, start: 6, end: 8 }), [0, 20, 20, 18]);
+    assert.deepEqual(player.testPage({ query: "text_bounds", id: 9, start: 1, end: 3 }), [10, 0, 20, 18]);
+    assert.equal(player.testPage({ query: "text_bounds", id: 9, start: 20, end: 21 }), null);
+  } finally {
+    delete globalThis.document;
+  }
+});

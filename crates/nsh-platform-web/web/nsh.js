@@ -817,6 +817,16 @@ class Player {
   }
 
   /**
+   * A GPUI agent attached to `nsh run --target web` drives this page: the
+   * module keeps the model of each app it starts, as an observer, and the
+   * page answers a masked input's text with bullets (`testPage`).
+   */
+  agentStart() {
+    this.agent = true;
+    this.wasm.nsh_agent_start?.();
+  }
+
+  /**
    * What the test sets the app up with (`ServerMessage::TestSetup`): the
    * storage it starts with, whether it traces the app, and what it fixes of
    * the environment and the clipboard. Its requests,
@@ -864,6 +874,31 @@ class Player {
     }
   }
 
+  /**
+   * Where the characters `start..end` (UTF-16 units) of text view `id` are,
+   * on their first line: `[x, y, width, height]` in CSS pixels from the
+   * viewport's top left, or `null`. Each run holds its characters; what a
+   * wrap or a break left out of it (`_after`) counts after it.
+   */
+  textBounds(id, start, end) {
+    const el = this.views.get(id);
+    if (!el?.isConnected || end <= start) return null;
+    let at = 0;
+    for (const span of el.querySelectorAll(":scope > .nsh-run")) {
+      const node = span.firstChild;
+      const length = node?.length ?? 0;
+      if (node && start < at + length && end > at) {
+        const range = document.createRange();
+        range.setStart(node, Math.max(0, start - at));
+        range.setEnd(node, Math.min(length, end - at));
+        const r = [...range.getClientRects()].find((r) => r.width > 0 && r.height > 0);
+        return r ? [r.left, r.top, r.width, r.height] : null;
+      }
+      at += length + (span._after?.length ?? 0);
+    }
+    return null;
+  }
+
   /** Whether a finite CSS or Web Animations animation of the app runs. */
   pageAnimating() {
     return this.root.getAnimations({ subtree: true }).some((a) => {
@@ -889,8 +924,31 @@ class Player {
         return [window.innerWidth, window.innerHeight];
       case "input_text": {
         const field = this.views.get(query.id)?._field;
+        // An agent's page shows a masked input as it is drawn: a bullet a
+        // character, never the text.
+        if (field && this.agent && field.type === "password") return "\u2022".repeat(field.value.length);
         return field ? field.value : null;
       }
+      case "hit_at": {
+        // The browser's own hit testing: what `pointer-events: none` and
+        // `inert` leave out it passes over, a canvas, image, frame or field
+        // belongs to the view around it.
+        for (let el = document.elementFromPoint(query.x, query.y); el; el = el.parentElement) {
+          if (el._id != null && this.views.get(el._id) === el) return el._id;
+        }
+        return null;
+      }
+      case "focus": {
+        const el = this.views.get(query.id);
+        const target = el?._field ?? (el?.tabIndex >= 0 ? el : null);
+        if (!target?.isConnected) return false;
+        target.focus({ preventScroll: true });
+        return document.activeElement === target;
+      }
+      case "app_focused":
+        return document.hasFocus() && document.visibilityState === "visible";
+      case "text_bounds":
+        return this.textBounds(query.id, query.start, query.end);
       case "dialog_point": {
         const backdrops = this.root.querySelectorAll(".nsh-dialog-backdrop");
         const backdrop = backdrops[backdrops.length - 1];
