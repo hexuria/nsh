@@ -587,6 +587,24 @@ fn run_android(
     trace: bool,
 ) -> anyhow::Result<()> {
     use crate::android;
+    let agent = if matches!(std::env::var("GPUI_AGENT").as_deref(), Ok("1" | "true")) {
+        let token = std::env::var("GPUI_AGENT_TOKEN")
+            .context("GPUI_AGENT_TOKEN is required when GPUI_AGENT=1")?;
+        if token.trim().is_empty() {
+            anyhow::bail!("GPUI_AGENT_TOKEN must not be empty");
+        }
+        let address =
+            std::env::var("GPUI_AGENT_ADDR").unwrap_or_else(|_| "127.0.0.1:17421".to_owned());
+        let socket = address
+            .parse::<std::net::SocketAddr>()
+            .context("GPUI_AGENT_ADDR must be a loopback socket address")?;
+        if !socket.ip().is_loopback() {
+            anyhow::bail!("GPUI_AGENT_ADDR must be a loopback socket address");
+        }
+        Some((address, token))
+    } else {
+        None
+    };
     let sdk = android::Sdk::find()?;
     let serial = android::device(&sdk)?;
     // As on iOS: the host of a previous session must not connect first.
@@ -608,15 +626,55 @@ fn run_android(
         "url",
         &url,
     ];
+    if let Some((address, token)) = &agent {
+        start.extend([
+            "--es",
+            "GPUI_AGENT",
+            "1",
+            "--es",
+            "GPUI_AGENT_ADDR",
+            address,
+            "--es",
+            "GPUI_AGENT_TOKEN",
+            token,
+        ]);
+    }
     if trace {
         start.extend(["--ez", "trace", "true"]);
     }
     let step = ui::Step::start("launching the development host");
-    android::adb(&sdk, &serial, &start)?;
+    start_android_activity(
+        &sdk,
+        &serial,
+        &start,
+        agent.as_ref().map(|(_, token)| token.as_str()),
+    )?;
     step.finish();
     let result = session.watch(|| Ok(false));
     let _ = android::adb(&sdk, &serial, &["shell", "am", "force-stop", BUNDLE_ID]);
     result
+}
+
+fn start_android_activity(
+    sdk: &crate::android::Sdk,
+    serial: &str,
+    args: &[&str],
+    secret: Option<&str>,
+) -> anyhow::Result<()> {
+    let output = Command::new(sdk.adb())
+        .args(["-s", serial])
+        .args(args)
+        .output()
+        .context("start Android development host")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = secret.map_or_else(
+            || stderr.to_string(),
+            |value| stderr.replace(value, "<redacted>"),
+        );
+        anyhow::bail!("Android development-host launch failed: {}", stderr.trim());
+    }
+    Ok(())
 }
 
 /// Builds the Android development host (when its runtime changed) into
