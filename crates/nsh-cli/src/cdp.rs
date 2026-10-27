@@ -128,6 +128,12 @@ pub(crate) struct Browser {
 impl Browser {
     /// Starts `exe` headless on a fresh profile and connects to it.
     pub(crate) fn launch(exe: &Path) -> Result<Browser, String> {
+        Browser::launch_with(exe, false)
+    }
+
+    /// Starts `exe` on a fresh profile, `headed` in a window of its own
+    /// (to watch what an agent does), else headless, and connects to it.
+    pub(crate) fn launch_with(exe: &Path, headed: bool) -> Result<Browser, String> {
         let profile = std::env::temp_dir().join(format!(
             "nsh-test-browser-{}-{}",
             std::process::id(),
@@ -137,8 +143,10 @@ impl Browser {
         std::fs::create_dir_all(&profile)
             .map_err(|e| format!("cannot make {}: {e}", profile.display()))?;
         let mut command = Command::new(exe);
+        if !headed {
+            command.arg("--headless");
+        }
         command
-            .arg("--headless")
             // The port it picks goes into the profile's DevToolsActivePort.
             .arg("--remote-debugging-port=0")
             .arg(format!("--user-data-dir={}", profile.display()))
@@ -367,6 +375,11 @@ impl Page {
     /// Calls `method` with `params` on this page.
     pub(crate) fn call(&self, method: &str, params: Value) -> Result<Value, String> {
         self.browser.call(Some(&self.session), method, params)
+    }
+
+    /// Whether it was closed ([`Page::close`]).
+    pub(crate) fn closed(&self) -> bool {
+        self.closed.load(Ordering::Relaxed)
     }
 
     /// The browser it is in.
