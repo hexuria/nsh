@@ -43,6 +43,7 @@ nsh-platform-macos = { version = "0.3.0", path = "crates/nsh-platform-macos", de
 nsh-platform-windows = { version = "0.3.0", path = "crates/nsh-platform-windows", default-features = false }
 nsh-dev = { version = "0.3.0", path = "crates/nsh-dev" }
 nsh-testing = { version = "0.3.0", path = "crates/nsh-testing", default-features = false }
+gpui-agent = "=0.1.0"
 
 anyhow = "1"
 thiserror = "2"
@@ -53,8 +54,6 @@ log = "0.4"
 ordered-float = { version = "5", default-features = false }
 env_logger = "0.11"
 libc = "0.2"
-# The gpui-agent wire protocol (`nsh-platform-macos` feature `gpui-agent`).
-gpui-agent = "0.1.0"
 imagesize = "0.15"
 # SVG images on the native backends (`nsh-core` feature `svg`): no text,
 # system fonts or raster images, so an SVG never reads files or fonts.
