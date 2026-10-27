@@ -951,7 +951,16 @@ impl Screen {
                 continue;
             }
             let role = semantic_role(view.role, view.kind, view.events.contains(EventKind::Press));
-            let input_value = view.input.as_ref().map(|input| input.text.clone());
+            let masked = view.input.as_ref().is_some_and(|input| input.config.secure);
+            // A masked input's text never leaves: a bullet per character,
+            // as platform secure fields show it.
+            let input_value = view.input.as_ref().map(|input| {
+                if masked {
+                    "\u{2022}".repeat(input.text.chars().count())
+                } else {
+                    input.text.clone()
+                }
+            });
             let value = input_value.or_else(|| {
                 view.accessibility_value.as_ref().and_then(|value| {
                     value
@@ -968,6 +977,9 @@ impl Screen {
             }
             if view.selected {
                 states.push("selected".to_owned());
+            }
+            if masked {
+                states.push("masked".to_owned());
             }
             if let Some(checked) = state.checked {
                 states.push(
@@ -2522,6 +2534,33 @@ mod tests {
         // Left out, the hidden views still link to the node they are under.
         assert_eq!(nodes[0].hidden_descendants, [12, 13]);
         assert!(nodes[1].hidden_descendants.is_empty());
+    }
+
+    #[cfg(feature = "agent")]
+    #[test]
+    fn semantic_tree_masks_a_masked_input_value() {
+        let mut screen = Screen::default();
+        for (id, secure) in [(2, true), (3, false)] {
+            let config = nsh_core::InputConfig {
+                secure,
+                ..Default::default()
+            };
+            screen.apply(&batch(vec![
+                create(id, ViewKind::Input),
+                MountItem::Input {
+                    id,
+                    config: Box::new(config),
+                },
+                insert(1, id),
+            ]));
+            screen.input_mut(id).unwrap().text = "hunter2é".into();
+        }
+        let nodes = screen.semantic_nodes();
+        let node = |id| nodes.iter().find(|node| node.id == id).unwrap();
+        assert_eq!(node(2).value.as_deref(), Some("••••••••"));
+        assert!(node(2).states.iter().any(|state| state == "masked"));
+        assert_eq!(node(3).value.as_deref(), Some("hunter2é"));
+        assert!(!node(3).states.iter().any(|state| state == "masked"));
     }
 
     #[cfg(feature = "agent")]
