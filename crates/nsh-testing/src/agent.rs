@@ -161,9 +161,12 @@ impl Model {
         self.changed.notify_all();
     }
 
-    /// The app requested a JavaScript animation frame.
+    /// The app requested a JavaScript animation frame. A frame alone is
+    /// not activity: the app is quiet once its batches stop, as on hosts
+    /// that report no frames ([`Agent::settled`]). An animation that
+    /// renders each frame keeps sending batches, and a step waits
+    /// [`SETTLE`] at most for it, as there.
     pub fn frame(&self) {
-        self.lock().last = Some(Instant::now());
         self.changed.notify_all();
     }
 
@@ -2986,6 +2989,40 @@ mod tests {
                 assert_eq!(*pressed_at.lock().unwrap(), vec![label_bounds.center()]);
             }
         }
+    }
+
+    #[test]
+    fn a_model_that_frames_continuously_still_settles() {
+        use nsh_core::{ViewKind, geometry::Size};
+
+        let model = gate_scene(ViewKind::View, false, false);
+        let agent = gate_agent(
+            model.clone(),
+            Ok(Some(2)),
+            &[],
+            Size::new(px(100.0), px(100.0)),
+            Arc::new(Mutex::new(Vec::new())),
+            Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        );
+        // A spinner: a frame every display frame, for longer than a step
+        // may wait.
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let framing = {
+            let (model, stop) = (model.clone(), stop.clone());
+            std::thread::spawn(move || {
+                while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                    model.frame();
+                    std::thread::sleep(FRAME);
+                }
+            })
+        };
+        let start = Instant::now();
+        agent.settle().unwrap();
+        let took = start.elapsed();
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        framing.join().unwrap();
+        assert!(took < SETTLE / 2, "settling took {took:?}");
     }
 
     #[test]
