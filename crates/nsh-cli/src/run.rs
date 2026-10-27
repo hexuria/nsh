@@ -161,6 +161,7 @@ pub(crate) fn run(
         );
     }
     window.check(target, crate::rust_app::is_root(entry))?;
+    let agent_token = agent_token()?;
     let work = dunce::canonicalize(entry)?
         .parent()
         .context("entry has no directory")?
@@ -169,7 +170,7 @@ pub(crate) fn run(
         return run_rust_app(entry, port, target, device, &work);
     }
     if target == Target::Android {
-        return run_android(entry, port, release, limits, &work, trace);
+        return run_android(entry, port, release, limits, &work, trace, agent_token);
     }
     if target == Target::Web {
         return run_web(entry, port, release, limits);
@@ -599,14 +600,10 @@ fn run_android(
     limits: Option<HostLimits>,
     work: &Path,
     trace: bool,
+    agent_token: Option<String>,
 ) -> anyhow::Result<()> {
     use crate::android;
-    let agent = if matches!(std::env::var("GPUI_AGENT").as_deref(), Ok("1" | "true")) {
-        let token = std::env::var("GPUI_AGENT_TOKEN")
-            .context("GPUI_AGENT_TOKEN is required when GPUI_AGENT=1")?;
-        if token.trim().is_empty() {
-            anyhow::bail!("GPUI_AGENT_TOKEN must not be empty");
-        }
+    let agent = if let Some(token) = agent_token {
         let address =
             std::env::var("GPUI_AGENT_ADDR").unwrap_or_else(|_| "127.0.0.1:17421".to_owned());
         let socket = address
@@ -675,6 +672,31 @@ fn run_android(
         let _ = android::adb(&sdk, &serial, &["shell", &remove]);
     }
     result
+}
+
+/// `GPUI_AGENT_TOKEN`, when `GPUI_AGENT` turns the GPUI agent on (`None`
+/// when it does not), checked for every target.
+fn agent_token() -> anyhow::Result<Option<String>> {
+    if !matches!(std::env::var("GPUI_AGENT").as_deref(), Ok("1" | "true")) {
+        return Ok(None);
+    }
+    let token = std::env::var("GPUI_AGENT_TOKEN")
+        .context("GPUI_AGENT_TOKEN is required when GPUI_AGENT=1")?;
+    check_agent_token(&token)?;
+    Ok(Some(token))
+}
+
+/// A GPUI-agent token is compared byte for byte, and whitespace around it
+/// does not survive every way to a host (a file a host trims, a shell), so
+/// a token with any is refused rather than changed.
+fn check_agent_token(token: &str) -> anyhow::Result<()> {
+    if token.trim().is_empty() {
+        bail!("GPUI_AGENT_TOKEN must not be empty");
+    }
+    if token.trim() != token {
+        bail!("GPUI_AGENT_TOKEN must not begin or end with whitespace");
+    }
+    Ok(())
 }
 
 /// Where the Android development host reads its GPUI-agent token from, in
@@ -982,7 +1004,7 @@ fn info_plist(target: Target) -> String {
 mod tests {
     use clap::ValueEnum as _;
 
-    use super::{HostWindow, Target};
+    use super::{HostWindow, Target, check_agent_token};
 
     /// `--window-size` reaches every desktop host; GPUI runs no app of
     /// Rust only.
@@ -1048,6 +1070,25 @@ mod tests {
             "com.example.notes"
         );
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A token with whitespace around it is refused, not trimmed: hosts
+    /// compare it byte for byte.
+    #[test]
+    fn agent_tokens_with_whitespace_around_them_are_refused() {
+        assert!(check_agent_token("0123abcd").is_ok());
+        assert!(check_agent_token("01 23").is_ok());
+        for token in ["", " ", "\n", " 0123", "0123\n", "\t0123", "0123\r\n"] {
+            let error = check_agent_token(token).unwrap_err().to_string();
+            assert!(
+                error.starts_with("GPUI_AGENT_TOKEN must not"),
+                "{token:?}: {error}"
+            );
+            assert!(
+                !error.contains("0123"),
+                "the error shows the token: {error}"
+            );
+        }
     }
 
     #[test]
