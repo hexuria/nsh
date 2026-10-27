@@ -64,6 +64,17 @@ final class TestAgent {
         });
     }
 
+    /** {@link #hitAt}: nothing takes a touch there. */
+    static final int HIT_NONE = -1;
+    /** {@link #hitAt}: a view outside the app's nodes takes it. */
+    static final int HIT_FOREIGN = -2;
+    /** {@link #hitAt}: the main thread did not answer, or the walk threw. */
+    static final int HIT_FAILED = Integer.MIN_VALUE;
+
+    /**
+     * The node whose view takes a touch at ({@code x}, {@code y}), or
+     * {@link #HIT_NONE}, {@link #HIT_FOREIGN} or {@link #HIT_FAILED}.
+     */
     static int hitAt(NshView host, float x, float y) {
         return onMain(() -> {
             View root = target(host);
@@ -77,8 +88,8 @@ final class TestAgent {
                     }
                 }
             }
-            return hit == null ? -1 : Integer.MIN_VALUE;
-        }, Integer.MIN_VALUE);
+            return hit == null ? HIT_NONE : HIT_FOREIGN;
+        }, HIT_FAILED);
     }
 
     private static View deepest(View view, float x, float y) {
