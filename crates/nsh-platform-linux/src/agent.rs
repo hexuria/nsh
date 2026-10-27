@@ -132,7 +132,7 @@ fn synthesized(stroke: nsh_core::keymap::Keystroke) -> Option<Synthesized> {
         K::Enter if plain => Synthesized::Enter,
         K::Backspace if plain => Synthesized::Backspace,
         K::Char('a') if m.ctrl && !m.alt && !m.cmd => Synthesized::SelectAll,
-        K::Char(c) if plain => Synthesized::Char(if m.shift { c.to_ascii_uppercase() } else { c }),
+        K::Char(c) if plain => Synthesized::Char(if m.shift { shifted(c) } else { c }),
         K::Escape => Synthesized::Back(gdk::Key::Escape),
         K::Left => Synthesized::Back(gdk::Key::Left),
         _ => return None,

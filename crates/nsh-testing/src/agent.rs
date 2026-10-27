@@ -876,8 +876,7 @@ pub fn answer(model: &Model, step: &TestStep) -> Option<Result<serde_json::Value
             | SceneQuery::DialogPoint { .. }
             | SceneQuery::HitAt { .. }
             | SceneQuery::Focus { .. }
-            | SceneQuery::AppFocused
-            | SceneQuery::TextBounds { .. } => return None,
+            | SceneQuery::AppFocused => return None,
         },
         _ => return None,
     })
@@ -1472,6 +1471,7 @@ impl Agent {
             native,
             require_hit_test: true,
             viewport: Mutex::new(None),
+            held: Mutex::new(None),
         }
     }
 
@@ -2158,11 +2158,6 @@ impl Agent {
                 .map(|hit| hit.map_or(Value::Null, Value::from)),
             SceneQuery::Focus { id } => Ok(Value::from(self.native.focus_node(id).is_ok())),
             SceneQuery::AppFocused => Ok(Value::from(self.native.app_focused())),
-            SceneQuery::TextBounds { id, start, end } => {
-                json(to_value(self.native.text_bounds(id, start, end).map(|b| {
-                    [b.origin.x.0, b.origin.y.0, b.size.width.0, b.size.height.0]
-                })))
-            }
         }
     }
 
