@@ -77,7 +77,7 @@ final class TestAgent {
      */
     static int hitAt(NshView host, float x, float y) {
         return onMain(() -> {
-            View hit = TouchTracker.deepest(target(host), x, y, true);
+            View hit = topmost(target(host), x, y);
             for (View view = hit; view != null; view = view.getParent() instanceof View
                     ? (View) view.getParent() : null) {
                 for (int i = 0; i < host.mounter().views.size(); i++) {
@@ -88,6 +88,48 @@ final class TestAgent {
             }
             return hit == null ? HIT_NONE : HIT_FOREIGN;
         }, HIT_FAILED);
+    }
+
+    /**
+     * The innermost view that takes a touch at ({@code x}, {@code y}) of
+     * {@code v}, node or not: {@link TouchTracker#deepest} with foreign
+     * views, but visiting a group's children as Android dispatches a touch
+     * to them and draws them, the highest Z ({@link View#getZ}: elevation
+     * and translation) first and, of equal Z, the last one first. A raised
+     * view covers a later sibling it is drawn over.
+     */
+    private static View topmost(View v, float x, float y) {
+        int pointerEvents = v instanceof Box ? ((Box) v).pointerEvents : 0;
+        if (pointerEvents == 1 || v.getVisibility() != View.VISIBLE) return null;
+        if (v instanceof ViewGroup && pointerEvents != 3) {
+            ViewGroup g = (ViewGroup) v;
+            View[] children = new View[g.getChildCount()];
+            for (int i = 0; i < children.length; i++) children[i] = g.getChildAt(i);
+            // Stable: of equal Z, the children stay in their order.
+            java.util.Arrays.sort(children, (a, b) -> Float.compare(a.getZ(), b.getZ()));
+            float[] pt = new float[2];
+            for (int i = children.length - 1; i >= 0; i--) {
+                View c = children[i];
+                pt[0] = x + g.getScrollX() - c.getLeft();
+                pt[1] = y + g.getScrollY() - c.getTop();
+                android.graphics.Matrix m = c.getMatrix();
+                if (!m.isIdentity()) {
+                    android.graphics.Matrix inverse = new android.graphics.Matrix();
+                    if (m.invert(inverse)) inverse.mapPoints(pt);
+                }
+                boolean inside = pt[0] >= 0 && pt[1] >= 0 && pt[0] < c.getWidth() && pt[1] < c.getHeight();
+                // Outside the child, a descendant placed outside it may
+                // still be there (`MountItem::Overflow`).
+                if (!inside && !(c instanceof Box && ((Box) c).overflow != null && !((Box) c).clip
+                        && ((Box) c).overflow.contains(pt[0], pt[1]))) continue;
+                View hit = topmost(c, pt[0], pt[1]);
+                if (hit != null) return hit;
+            }
+        }
+        if (pointerEvents == 2) return null;
+        // Reached through its overflow area: only its descendants count.
+        if (x < 0 || y < 0 || x >= v.getWidth() || y >= v.getHeight()) return null;
+        return v;
     }
 
     /**
