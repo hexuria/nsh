@@ -296,9 +296,18 @@ impl Native for WindowsNative {
                 .get(id)
                 .ok_or_else(|| format!("node {id} is missing"))?;
             crate::text_input::focus(&view);
-            (crate::text_input::focused(surface).as_ref() == Some(&view))
-                .then_some(())
-                .ok_or_else(|| format!("node {id} cannot receive native focus"))
+            // Keys and text go to a web view's page while it holds the
+            // Win32 focus, so the field needs the window's focus back.
+            if synth::focused_child(surface).is_some() {
+                // SAFETY: focusing the surface's own window on its thread.
+                let _ = unsafe {
+                    windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(Some(surface.hwnd()))
+                };
+            }
+            (crate::text_input::focused(surface).as_ref() == Some(&view)
+                && synth::focused_child(surface).is_none())
+            .then_some(())
+            .ok_or_else(|| format!("node {id} cannot receive native focus"))
         })
         .unwrap_or_else(|| Err("the window is gone".to_owned()))
     }
