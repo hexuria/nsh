@@ -1192,6 +1192,12 @@ pub trait Native: Send + Sync {
     fn answer_dialog(&self, button: Option<&str>) -> Result<(), String>;
     /// Whether a native animation runs now.
     fn animating(&self) -> bool;
+    /// Whether the window shows the app laid out at its current size: an
+    /// error while it has no size (minimized) or a resize is still being
+    /// laid out.
+    fn laid_out(&self) -> Result<(), String> {
+        Ok(())
+    }
     /// A picture of the window, as a PNG.
     fn screenshot(&self) -> Result<Vec<u8>, String>;
     /// Makes the window `size` points.
@@ -1516,6 +1522,12 @@ impl Agent {
     /// Current native viewport.
     pub fn native_viewport(&self) -> Size<Points> {
         self.native.viewport()
+    }
+
+    /// Whether the window shows the app laid out at its current size
+    /// ([`Native::laid_out`]).
+    pub fn native_laid_out(&self) -> Result<(), String> {
+        self.native.laid_out()
     }
 
     /// Whether the native app window currently has focus.
@@ -2745,6 +2757,7 @@ impl Agent {
             }
             self.scene.wait_for_batch(activity.batches, POLL);
         }
+        self.native.laid_out()?;
         self.check()
     }
 
