@@ -1129,31 +1129,6 @@ class Player {
     }
   }
 
-  /**
-   * Where the characters `start..end` (UTF-16 units) of text view `id` are,
-   * on their first line: `[x, y, width, height]` in CSS pixels from the
-   * viewport's top left, or `null`. Each run holds its characters; what a
-   * wrap or a break left out of it (`_after`) counts after it.
-   */
-  textBounds(id, start, end) {
-    const el = this.views.get(id);
-    if (!el?.isConnected || end <= start) return null;
-    let at = 0;
-    for (const span of el.querySelectorAll(":scope > .nsh-run")) {
-      const node = span.firstChild;
-      const length = node?.length ?? 0;
-      if (node && start < at + length && end > at) {
-        const range = document.createRange();
-        range.setStart(node, Math.max(0, start - at));
-        range.setEnd(node, Math.min(length, end - at));
-        const r = [...range.getClientRects()].find((r) => r.width > 0 && r.height > 0);
-        return r ? [r.left, r.top, r.width, r.height] : null;
-      }
-      at += length + (span._after?.length ?? 0);
-    }
-    return null;
-  }
-
   /** Whether a finite CSS or Web Animations animation of the app runs. */
   pageAnimating() {
     return this.root.getAnimations({ subtree: true }).some((a) => {
@@ -1220,8 +1195,6 @@ class Player {
       }
       case "app_focused":
         return document.hasFocus() && document.visibilityState === "visible";
-      case "text_bounds":
-        return this.textBounds(query.id, query.start, query.end);
       case "dialog_point": {
         const backdrops = this.root.querySelectorAll(".nsh-dialog-backdrop");
         const backdrop = backdrops[backdrops.length - 1];
