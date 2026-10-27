@@ -1464,7 +1464,9 @@ impl Agent {
         self.settled()
     }
 
-    /// Current native bounds for `id`.
+    /// Current native bounds for `id`. Builds the semantic tree: to look
+    /// up many nodes, take it once ([`Agent::semantic_nodes`]) and use
+    /// [`Agent::node_native_bounds`].
     pub fn native_bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
         let Ok(nodes) = self.scene.semantic_tree() else {
             return self.native.bounds(id);
@@ -1472,6 +1474,13 @@ impl Agent {
         let Some(node) = nodes.iter().find(|node| node.id == id) else {
             return self.native.bounds(id);
         };
+        self.node_native_bounds(node)
+    }
+
+    /// Current native bounds for `node`, a node of a semantic tree the
+    /// caller already has: a canvas or text target's own part of its
+    /// owner's view.
+    pub fn node_native_bounds(&self, node: &SemanticNode) -> Option<Bounds<Points>> {
         self.target_geometry(node).map(|geometry| geometry.bounds)
     }
 

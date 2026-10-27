@@ -155,17 +155,14 @@ impl AgentHost for NshAgentHost {
                 rev: None,
             };
         };
-        let ids = stable_ids(&nodes);
-        let known: HashMap<NodeId, &SemanticNode> =
-            nodes.iter().map(|node| (node.id, node)).collect();
-        let viewport = self.agent.native_viewport();
+        let index = SnapshotIndex::new(&nodes, self.agent.as_ref());
         let roots = nodes
             .iter()
             .filter(|node| {
                 node.parent
-                    .is_none_or(|parent| !known.contains_key(&parent))
+                    .is_none_or(|parent| !index.known.contains_key(&parent))
             })
-            .map(|node| ui_node(node, &nodes, &known, &ids, viewport, self.agent.as_ref()))
+            .map(|node| ui_node(node, &index, self.agent.as_ref()))
             .collect();
         if !self.agent.native_available() {
             return UiTree {
@@ -392,17 +389,20 @@ fn stable_ids(nodes: &[SemanticNode]) -> HashMap<NodeId, String> {
     for base in &bases {
         *counts.entry(base.clone()).or_insert(0usize) += 1;
     }
+    // The `base#id` form of every node: a base equal to another node's
+    // gets the form too. (Never a node's own: `base#id` is longer than
+    // `base`, so the other node's base differs as well.)
+    let generated: HashSet<String> = nodes
+        .iter()
+        .zip(&bases)
+        .map(|(node, base)| format!("{base}#{}", node.id))
+        .collect();
     let mut used = HashSet::new();
     nodes
         .iter()
-        .enumerate()
         .zip(bases.iter().cloned())
-        .map(|((index, node), base)| {
-            let generated_by_other = nodes.iter().enumerate().any(|(other, candidate)| {
-                other != index
-                    && bases[other] != base
-                    && format!("{}#{}", bases[other], candidate.id) == base
-            });
+        .map(|(node, base)| {
+            let generated_by_other = generated.contains(&base);
             let mut id = if counts[&base] == 1 && !generated_by_other {
                 base.clone()
             } else {
@@ -421,14 +421,39 @@ fn stable_ids(nodes: &[SemanticNode]) -> HashMap<NodeId, String> {
         .collect()
 }
 
-fn ui_node(
-    node: &SemanticNode,
-    all: &[SemanticNode],
-    known: &HashMap<NodeId, &SemanticNode>,
-    ids: &HashMap<NodeId, String>,
+/// One semantic tree's lookups for a snapshot, built once: nodes,
+/// children and native bounds by id, so that the snapshot neither asks the
+/// scene for the tree again nor searches it per node.
+struct SnapshotIndex<'a> {
+    known: HashMap<NodeId, &'a SemanticNode>,
+    children: HashMap<NodeId, Vec<&'a SemanticNode>>,
+    bounds: HashMap<NodeId, nsh_core::geometry::Bounds<Points>>,
+    ids: HashMap<NodeId, String>,
     viewport: nsh_core::geometry::Size<Points>,
-    agent: &Agent,
-) -> UiNode {
+}
+
+impl<'a> SnapshotIndex<'a> {
+    fn new(nodes: &'a [SemanticNode], agent: &Agent) -> Self {
+        let mut children: HashMap<NodeId, Vec<&SemanticNode>> = HashMap::new();
+        for node in nodes {
+            if let Some(parent) = node.parent {
+                children.entry(parent).or_default().push(node);
+            }
+        }
+        Self {
+            known: nodes.iter().map(|node| (node.id, node)).collect(),
+            children,
+            bounds: nodes
+                .iter()
+                .filter_map(|node| Some((node.id, agent.node_native_bounds(node)?)))
+                .collect(),
+            ids: stable_ids(nodes),
+            viewport: agent.native_viewport(),
+        }
+    }
+}
+
+fn ui_node(node: &SemanticNode, index: &SnapshotIndex<'_>, agent: &Agent) -> UiNode {
     let mut name = node
         .label
         .clone()
@@ -453,7 +478,9 @@ fn ui_node(
         _ => node.role.as_str(),
     };
     let mut result = UiNode::new(
-        ids.get(&node.id)
+        index
+            .ids
+            .get(&node.id)
             .cloned()
             .unwrap_or_else(|| format!("n{}", node.id)),
         role,
@@ -463,7 +490,7 @@ fn ui_node(
     result.value = agent
         .native_input_text(node.id)
         .or_else(|| node.value.clone());
-    if let Some(bounds) = agent.native_bounds(node.id) {
+    if let Some(bounds) = index.bounds.get(&node.id) {
         result.bounds = gpui_agent::Bounds {
             x: bounds.origin.x.0,
             y: bounds.origin.y.0,
@@ -471,7 +498,7 @@ fn ui_node(
             h: bounds.size.height.0,
         };
     }
-    result.visible = visible_in_viewport(node, known, viewport, agent);
+    result.visible = visible_in_viewport(node, index);
     result.states.clone_from(&node.states);
     if let Some(hint) = &node.hint {
         result.states.push(format!("hint: {hint}"));
@@ -485,31 +512,29 @@ fn ui_node(
     if node.selected && !result.states.iter().any(|state| state == "selected") {
         result.states.push("selected".into());
     }
-    result.children = all
-        .iter()
-        .filter(|child| child.parent == Some(node.id))
-        .map(|child| ui_node(child, all, known, ids, viewport, agent))
+    result.children = index
+        .children
+        .get(&node.id)
+        .into_iter()
+        .flatten()
+        .map(|child| ui_node(child, index, agent))
         .collect();
     result
 }
 
-fn visible_in_viewport(
-    node: &SemanticNode,
-    known: &HashMap<NodeId, &SemanticNode>,
-    viewport: nsh_core::geometry::Size<Points>,
-    agent: &Agent,
-) -> bool {
-    let Some(bounds) = agent.native_bounds(node.id) else {
+fn visible_in_viewport(node: &SemanticNode, index: &SnapshotIndex<'_>) -> bool {
+    let Some(bounds) = index.bounds.get(&node.id) else {
         return false;
     };
+    let viewport = index.viewport;
     let (mut x0, mut y0, mut x1, mut y1) = (0.0_f32, 0.0_f32, viewport.width.0, viewport.height.0);
     let mut parent = node.parent;
     while let Some(id) = parent {
-        let Some(ancestor) = known.get(&id) else {
+        let Some(ancestor) = index.known.get(&id) else {
             return false;
         };
         if ancestor.clipping {
-            let Some(clip) = agent.native_bounds(id) else {
+            let Some(clip) = index.bounds.get(&id) else {
                 return false;
             };
             x0 = x0.max(clip.origin.x.0);
@@ -634,7 +659,12 @@ mod tests {
 
     use super::*;
 
-    struct SnapshotScene(Result<Vec<SemanticNode>, String>, u64);
+    struct SnapshotScene(
+        Result<Vec<SemanticNode>, String>,
+        u64,
+        /// How many times the semantic tree was built.
+        Arc<std::sync::atomic::AtomicUsize>,
+    );
 
     impl Scene for SnapshotScene {
         fn activity(&self) -> Result<nsh_testing::agent::Activity, String> {
@@ -645,6 +675,7 @@ mod tests {
         }
 
         fn semantic_tree(&self) -> Result<Vec<SemanticNode>, String> {
+            self.2.fetch_add(1, Ordering::Relaxed);
             self.0.clone()
         }
 
@@ -836,7 +867,7 @@ mod tests {
 
     #[test]
     fn snapshot_preserves_offscreen_metadata_and_clipped_visibility() {
-        let host = snapshot_host(SnapshotScene(Ok(sample_nodes()), 1));
+        let host = snapshot_host(SnapshotScene(Ok(sample_nodes()), 1, Default::default()));
         let snapshot = host.snapshot();
         assert!(snapshot.ready);
         assert!(snapshot.nodes[0].visible);
@@ -851,8 +882,22 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_builds_the_semantic_tree_once() {
+        let builds = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let host = snapshot_host(SnapshotScene(Ok(sample_nodes()), 1, builds.clone()));
+        let snapshot = host.snapshot();
+        assert!(snapshot.ready);
+        assert_eq!(snapshot.nodes[0].children.len(), 2);
+        assert_eq!(builds.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
     fn scene_failure_is_not_a_healthy_empty_snapshot() {
-        let host = snapshot_host(SnapshotScene(Err("model unavailable".into()), 1));
+        let host = snapshot_host(SnapshotScene(
+            Err("model unavailable".into()),
+            1,
+            Default::default(),
+        ));
         let snapshot = host.snapshot();
         assert!(!snapshot.ready);
         assert!(snapshot.nodes.is_empty());
@@ -860,7 +905,7 @@ mod tests {
 
     #[test]
     fn snapshot_is_not_ready_before_the_first_batch() {
-        let host = snapshot_host(SnapshotScene(Ok(sample_nodes()), 0));
+        let host = snapshot_host(SnapshotScene(Ok(sample_nodes()), 0, Default::default()));
         let snapshot = host.snapshot();
         assert!(!snapshot.ready);
         assert!(snapshot.nodes.is_empty());
@@ -868,7 +913,10 @@ mod tests {
 
     #[test]
     fn detached_surface_reports_unavailable() {
-        let mut host = snapshot_host_with_availability(SnapshotScene(Ok(sample_nodes()), 1), false);
+        let mut host = snapshot_host_with_availability(
+            SnapshotScene(Ok(sample_nodes()), 1, Default::default()),
+            false,
+        );
         assert!(!host.hello().ready);
         assert!(!host.snapshot().ready);
         let error = host
