@@ -66,7 +66,7 @@ pub(crate) fn clear(surface: &Surface) {
 /// application's monitors do not see because the window is handed them
 /// directly): whether a binding consumed it (then the window must not get
 /// it; a binding passing it through is reported and the window gets it).
-#[cfg(feature = "dev")]
+#[cfg(any(feature = "dev", feature = "gpui-agent"))]
 pub(crate) fn fires(surface: &Rc<Surface>, event: &NSEvent) -> bool {
     pressed(surface, event)
 }
