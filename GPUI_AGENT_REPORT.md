@@ -321,6 +321,33 @@ The Android clippy allowance is limited to the existing `nsh-core` `missing_cons
 
 The outstanding `Default` convention question remains unresolved by design: do not invent `Default` implementations for `NshAgentHost` or `WorkerHandle`, since valid construction requires real resources. This still needs an owner decision or an explicit convention exception.
 
+## Button-label press owner correction
+
+This follow-up starts from the reviewed feature-branch head `9cc82ae5b41684582247708d341ddffcda00ffc1`; the preceding report snapshot was `80a59fe7afa831fe96dfc0393b0326663a3e9888`. Commit `3d8d9f8071cfa4ddd6fd67c5e43fa800710b2eaf` fixes strict `press_node` owner selection: ordinary native views use their resolved pressable ancestor for hit verification, while synthetic canvas/text regions retain their precise native owner. This lets a button-label press accept a native hit on the button or its descendant, but still rejects a foreign hit before dispatching a press. The regression `button_label_press_accepts_its_parent_or_descendant_but_not_foreign_hits` covers parent, descendant, and foreign hits, including no press side effect on rejection. No protocol or public API changed.
+
+Latest shared checks for this correction:
+
+```text
+cargo test -p nsh-testing --features agent --lib button_label_press_accepts_its_parent_or_descendant_but_not_foreign_hits
+  1 passed, 0 failed, 36 filtered out
+cargo test -p nsh-testing --features agent --lib
+  37 passed, 0 failed, 0 ignored
+cargo test -p nsh-gpui-agent --features dev-agent
+  7 passed, 0 failed; 0 doc tests
+cargo clippy -p nsh-testing --features agent --all-targets -- -D warnings
+  Finished dev profile successfully
+cargo clippy -p nsh-gpui-agent --features dev-agent --all-targets -- -D warnings
+  Finished dev profile successfully
+cargo +nightly fmt --all
+  passed
+cargo +nightly fmt --all --check
+  passed
+git diff --check
+  passed
+```
+
+The GTK and Android builds/clippy plus live runtime evidence above cover the pre-correction revision at `9cc82ae5`; they were not rerun for this shared `nsh-testing` owner-selection fix. No runtime or app processes were changed.
+
 ## Limitations and unverified behavior
 
 - The raw Android clippy command encounters pre-existing `nsh-core` `missing_const_for_thread_local` warnings. The final checks above distinguish that baseline failure from the lint-allowed result; no unrelated core lint rewrite is included.
@@ -351,9 +378,11 @@ The outstanding `Default` convention question remains unresolved by design: do n
 | `d5fdcfe5` | CI: include adapter changes in Linux and Rust-app workflow filters. |
 | `746960da12eab1c48324e618c79a63b7c11edda6` | Testing: restore legacy ordinary selector queries and add a semantic-tree-independent find/press regression. |
 | `fabbf035ee3e5c2cd03aad9026a265aec6afab43` | Merge: merge updated `origin/main` without rewriting history. |
-| This final report commit | Report: record post-merge validation and compatibility/API changes. |
+| `80a59fe7afa831fe96dfc0393b0326663a3e9888` | Report: prior post-merge validation snapshot. |
+| `3d8d9f8071cfa4ddd6fd67c5e43fa800710b2eaf` | Testing: preserve the pressable ancestor for strict native button-label presses. |
+| This final report commit | Report: record the button-label correction and latest shared checks. |
 
-Earlier report snapshot: `deb15fabc110e01e52fc8c11de7cb393dc57fd1d`. Final report marker: this separate report-only commit, made last before pushing the feature branch. The report commit records the final validation results; no additional implementation changes are included in it.
+Earlier report snapshot: `deb15fabc110e01e52fc8c11de7cb393dc57fd1d`; subsequent report snapshot: `80a59fe7afa831fe96dfc0393b0326663a3e9888`; this follow-up began at branch head `9cc82ae5b41684582247708d341ddffcda00ffc1`. Final report marker: this separate report-only commit, made last before pushing the feature branch. The report commit records the latest shared validation; no additional implementation changes are included in it.
 
 The feature branch is `devin/gpui-agent-adapter`; it includes `origin/main` at `1849776f68ee41d73c08970fe530cf952451af13`. Only this feature branch was pushed. The report is committed last so it can be dropped before proposing the implementation upstream.
 
