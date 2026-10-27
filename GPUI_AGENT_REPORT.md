@@ -379,11 +379,18 @@ Linux live verification under Xvfb at `5db96ef3`: the previous revision returned
 
 Maximized/fullscreen rejection was untested because Xvfb had no window manager; the accessibility-hidden icon case is also untested. Android and the full safety matrix were not rerun at `5db96ef3`. Android launch, the mode-0600 private token file, and safety evidence remain from `0ae4dc9c` plus the token-flow recheck.
 
-Recorded local checks: CLI tests 85 passed / 1 ignored; `nsh-testing` agent library 43 passed; `nsh-gpui-agent` 9 passed; viewport arithmetic regression, GTK clippy, Linux-host build, wasm check, and nightly format check passed. Android clippy had baseline `redundant_closure` and `chunks_exact_to_as_chunks` warnings in `host.rs`, matching `origin/main`.
+Recorded checks at `9e9fa892`: nightly format passed; `nsh-testing` agent library 45 passed; `nsh-gpui-agent` 9 passed; CLI tests 86 passed / 1 ignored; clippy passed for all three; Android x86_64 dev build and Java runtime compilation passed; wasm check passed. Android clippy still shows only the two expected baseline warnings in `host.rs` (`redundant_closure`, `chunks_exact_to_as_chunks`), matching `origin/main`.
 
 Hosted checks on `5db96ef3` reported only Devin Review (passed); no hosted build or test job ran.
 
-Devin Review on `5db96ef3` remains open for owner decision: Android hit walk ignores elevation Z order; Android `trim()` token mismatch with the CLI; strict coordinate press rejects linked text; a hidden pressable child could take a parent press; exported `DevActivity` may reuse a stale token file (recommend deleting it after reading). Dismissed: GTK `default_size` staleness (GTK updates it on resize; repeated/shrink/restore passed live) and Linux unsupported keys as a no-op (intentional per owner finding 5; strict path uses `validate_keys`).
+The five Devin Review findings on `5db96ef3` were fixed by the owner:
+- `69221a26` — linked-text coordinate presses are accepted by their pressable owner.
+- `5827a14f` — a hidden pressable child cannot take a parent press.
+- `ad89753f` — CLI token whitespace is rejected to avoid the Android token mismatch.
+- `8695c693` — Android deletes the private token file after reading it.
+- `9e9fa892` — Android hit testing uses `TestAgent.topmost` to honor elevation Z order.
+
+The Android Z-order hit test and token-file deletion were build-verified, but were not live-tested on the emulator. Dismissed: GTK `default_size` staleness (GTK updates it on resize; repeated/shrink/restore passed live) and Linux unsupported keys as a no-op (intentional per owner finding 5; strict path uses `validate_keys`).
 
 ## Limitations and unverified behavior
 
@@ -420,8 +427,13 @@ Devin Review on `5db96ef3` remains open for owner decision: Android hit walk ign
 | `497ae5a3bcc20e1394aa1082b4562835f9d9932a` | Testing: restrict label hits to the target ancestry and reject sibling controls. |
 | `4065f4e9` | Owner: web runtime keybinding catalog; remove the wasm cfg. |
 | `5db96ef3` | Linux: attached-agent viewport compensates for window chrome; rejects maximized/fullscreen and unallocated windows. |
+| `69221a26` | Testing: accept linked-text coordinate presses through the pressable owner. |
+| `5827a14f` | Testing: prevent hidden pressable children from taking a parent press. |
+| `ad89753f` | CLI: reject whitespace around agent tokens. |
+| `8695c693` | Android: delete the private token file after reading it. |
+| `9e9fa892` | Android: use `TestAgent.topmost` for elevation-aware hit testing. |
 | `97f29e87` | Report: record the ancestry restriction and shared checks (previous report-only commit). |
-| This final report commit | Report: refresh GPUI-agent verification. |
+| This final report commit | Report: record the owner's review fixes. |
 
 Earlier report snapshot: `deb15fabc110e01e52fc8c11de7cb393dc57fd1d`; subsequent report snapshot: `80a59fe7afa831fe96dfc0393b0326663a3e9888`. The previous label-owner follow-up began at branch head `9cc82ae5b41684582247708d341ddffcda00ffc1`; this ancestry-restriction follow-up began at `98ebc9f3ed85378af350c3baf54e0a7baed69936`. Final report marker: this separate report-only commit, made last before pushing the feature branch. The report commit records the latest shared validation; no additional implementation changes are included in it.
 
