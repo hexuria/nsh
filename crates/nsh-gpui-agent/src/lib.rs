@@ -487,8 +487,18 @@ fn ui_node(node: &SemanticNode, index: &SnapshotIndex<'_>, agent: &Agent) -> UiN
         name,
     );
     result.enabled = node.enabled;
+    // The scene already masks a masked input's value; the native text is
+    // masked the same way: a bullet per character, never the text.
+    let masked = node.states.iter().any(|state| state == "masked");
     result.value = agent
         .native_input_text(node.id)
+        .map(|text| {
+            if masked {
+                "\u{2022}".repeat(text.chars().count())
+            } else {
+                text
+            }
+        })
         .or_else(|| node.value.clone());
     if let Some(bounds) = index.bounds.get(&node.id) {
         result.bounds = gpui_agent::Bounds {
@@ -772,7 +782,8 @@ mod tests {
         }
     }
 
-    struct SnapshotNative(bool);
+    /// Available, and node 3's native input text.
+    struct SnapshotNative(bool, Option<String>);
 
     impl Native for SnapshotNative {
         fn available(&self) -> bool {
@@ -802,8 +813,8 @@ mod tests {
         fn drag(&self, _: Point<Points>, _: Point<Points>) {}
         fn type_text(&self, _: &str) {}
         fn key(&self, _: nsh_testing::agent::Key) {}
-        fn input_text(&self, _: NodeId) -> Option<String> {
-            None
+        fn input_text(&self, id: NodeId) -> Option<String> {
+            (id == 3).then(|| self.1.clone()).flatten()
         }
         fn back(&self) -> Result<(), String> {
             Ok(())
@@ -827,9 +838,13 @@ mod tests {
     }
 
     fn snapshot_host_with_availability(scene: SnapshotScene, available: bool) -> NshAgentHost {
+        snapshot_host_with_native(scene, SnapshotNative(available, None))
+    }
+
+    fn snapshot_host_with_native(scene: SnapshotScene, native: SnapshotNative) -> NshAgentHost {
         let agent = Arc::new(Agent::requiring_native_hit_test(
             Arc::new(scene),
-            Box::new(SnapshotNative(available)),
+            Box::new(native),
         ));
         NshAgentHost::new("test", PlatformKind::Desktop, agent).unwrap()
     }
@@ -889,6 +904,45 @@ mod tests {
         assert!(snapshot.ready);
         assert_eq!(snapshot.nodes[0].children.len(), 2);
         assert_eq!(builds.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn snapshot_never_shows_a_masked_input_text() {
+        let secret = "hunter2";
+        for masked in [true, false] {
+            let mut nodes = sample_nodes();
+            nodes[2].role = "textbox".into();
+            nodes[2].input = true;
+            if masked {
+                nodes[2].states.push("masked".into());
+                nodes[2].value = Some("\u{2022}".repeat(secret.len()));
+            }
+            let mut host = snapshot_host_with_native(
+                SnapshotScene(Ok(nodes), 1, Default::default()),
+                SnapshotNative(true, Some(secret.into())),
+            );
+            let snapshot = host.snapshot();
+            let input = &snapshot.nodes[0].children[1];
+            let lines = gpui_agent::compact_lines(&snapshot);
+            if masked {
+                assert_eq!(input.value.as_deref(), Some("•••••••"));
+                assert!(input.states.iter().any(|state| state == "masked"));
+                assert!(!lines.contains(secret), "{lines}");
+                for op in [
+                    Op::type_text("visible", secret),
+                    Op::SetValue {
+                        target: "visible".into(),
+                        value: secret.into(),
+                        expect_fingerprint: None,
+                    },
+                ] {
+                    let reply = format!("{:?}", host.dispatch(&op));
+                    assert!(!reply.contains(secret), "{reply}");
+                }
+            } else {
+                assert_eq!(input.value.as_deref(), Some(secret));
+            }
+        }
     }
 
     #[test]
