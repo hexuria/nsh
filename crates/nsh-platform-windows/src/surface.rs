@@ -217,6 +217,13 @@ pub(crate) struct Surface {
     /// The model of a test session's app (`nsh test --target windows`).
     #[cfg(feature = "dev")]
     test_model: RefCell<Option<std::sync::Arc<nsh_testing::agent::Model>>>,
+    /// The GPUI-agent model; independent of an `nsh test` model.
+    #[cfg(feature = "dev-agent")]
+    agent_model: Arc<nsh_testing::agent::Model>,
+    #[cfg(feature = "dev-agent")]
+    agent_alive: Arc<AtomicBool>,
+    #[cfg(feature = "dev-agent")]
+    agent_worker: RefCell<Option<nsh_gpui_agent::WorkerHandle>>,
     /// The time of the current (last) frame (seconds since the surface was
     /// made).
     now: Cell<f64>,
@@ -314,6 +321,12 @@ impl Surface {
             keeper: Cell::new(None),
             #[cfg(feature = "dev")]
             test_model: RefCell::default(),
+            #[cfg(feature = "dev-agent")]
+            agent_model: Arc::default(),
+            #[cfg(feature = "dev-agent")]
+            agent_alive: Arc::new(AtomicBool::new(true)),
+            #[cfg(feature = "dev-agent")]
+            agent_worker: RefCell::default(),
             now: Cell::new(0.0),
             epoch: std::time::Instant::now(),
             on_error: RefCell::new(None),
@@ -339,6 +352,8 @@ impl Surface {
             main_opening_mode: Cell::new(None),
         });
         SURFACES.with(|s| s.borrow_mut().insert(key, Rc::downgrade(&surface)));
+        #[cfg(feature = "dev-agent")]
+        surface.start_agent();
         let weak = Rc::downgrade(&surface);
         root.set_invalidate(Rc::new(move |view| {
             if let Some(surface) = weak.upgrade() {
@@ -374,6 +389,33 @@ impl Surface {
     /// The UI thread it lives on ([`crate::window::UiThread::invoke`] runs closures there).
     pub(crate) fn ui_thread(&self) -> crate::window::UiThread {
         self.ui_thread
+    }
+
+    #[cfg(feature = "dev-agent")]
+    fn start_agent(&self) {
+        let agent = Arc::new(nsh_testing::agent::Agent::requiring_native_hit_test(
+            self.agent_model.clone(),
+            Box::new(crate::agent::WindowsNative::attached(
+                self.key,
+                self.ui_thread(),
+                self.agent_alive.clone(),
+            )),
+        ));
+        let host = match nsh_gpui_agent::NshAgentHost::new(
+            "Native Shell",
+            nsh_gpui_agent::PlatformKind::Desktop,
+            agent,
+        ) {
+            Ok(host) => host,
+            Err(_) => {
+                log::error!("cannot construct the GPUI-agent development host");
+                return;
+            }
+        };
+        match nsh_gpui_agent::start_from_env(host) {
+            Ok(worker) => *self.agent_worker.borrow_mut() = worker,
+            Err(_) => log::error!("invalid GPUI_AGENT development configuration"),
+        }
     }
 
     /// Its key ([`Surface::by_key`]).
@@ -513,6 +555,8 @@ impl Surface {
         self.engine.borrow_mut().take();
         self.rx.borrow_mut().take();
         self.mounter.borrow_mut().clear();
+        #[cfg(feature = "dev-agent")]
+        self.agent_model.reset();
         self.native.clear();
         crate::system::clear(self);
         *self.anim.borrow_mut() = UiAnimation::default();
@@ -817,11 +861,17 @@ impl Surface {
                 if let Some(model) = &*self.test_model.borrow() {
                     model.error(message.to_string());
                 }
+                #[cfg(feature = "dev-agent")]
+                self.agent_model.error(message.clone());
                 if let Some(f) = &*self.on_error.borrow() {
                     f(&message);
                 }
             }
-            Message::Frame => self.js_frame.set(true),
+            Message::Frame => {
+                self.js_frame.set(true);
+                #[cfg(feature = "dev-agent")]
+                self.agent_model.frame();
+            }
             Message::HotUpdateFailed => {
                 if let Some(f) = &*self.on_hot_update_failed.borrow() {
                     f();
@@ -862,6 +912,8 @@ impl Surface {
         if let Some(model) = &*self.test_model.borrow() {
             model.apply(batch);
         }
+        #[cfg(feature = "dev-agent")]
+        self.agent_model.apply(batch);
         crate::access::batch_applied(self);
         crate::input::batch_applied(self);
     }
@@ -1087,6 +1139,11 @@ impl Surface {
 
 impl Drop for Surface {
     fn drop(&mut self) {
+        #[cfg(feature = "dev-agent")]
+        {
+            self.agent_alive.store(false, Ordering::Release);
+            drop(self.agent_worker.get_mut().take());
+        }
         let key = self.key;
         let _ = SURFACES.try_with(|s| s.borrow_mut().remove(&key));
     }

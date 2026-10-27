@@ -9,10 +9,10 @@ use std::{
     rc::Rc,
     sync::{
         Arc,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use nsh_core::{
@@ -61,6 +61,9 @@ pub(crate) struct WindowsNative {
     target: Arc<AtomicU64>,
     /// The UI thread the surface lives on.
     ui: UiThread,
+    /// Whether the GPUI agent's surface is still there (`None`: `nsh test`'s).
+    #[cfg(feature = "dev-agent")]
+    available: Option<Arc<AtomicBool>>,
 }
 
 impl WindowsNative {
@@ -69,6 +72,25 @@ impl WindowsNative {
             key,
             target: Arc::new(AtomicU64::new(ROOT_ID as u64)),
             ui,
+            #[cfg(feature = "dev-agent")]
+            available: None,
+        }
+    }
+
+    #[cfg(feature = "dev-agent")]
+    pub(crate) fn attached(key: u64, ui: UiThread, available: Arc<AtomicBool>) -> Self {
+        WindowsNative {
+            key,
+            target: Arc::new(AtomicU64::new(ROOT_ID as u64)),
+            ui,
+            available: Some(available),
+        }
+    }
+
+    #[cfg(feature = "dev-agent")]
+    fn unavailable(&self) {
+        if let Some(available) = &self.available {
+            available.store(false, Ordering::Release);
         }
     }
 
@@ -113,10 +135,35 @@ impl WindowsNative {
     ) -> Option<R> {
         let (tx, rx) = mpsc::channel();
         let key = self.key;
+        #[cfg(feature = "dev-agent")]
+        let deadline = Instant::now() + MAIN;
+        #[cfg(feature = "dev-agent")]
+        let callback_available = self.available.clone();
         self.ui.invoke(move || {
+            #[cfg(feature = "dev-agent")]
+            if let Some(available) = &callback_available {
+                if !dispatch_is_live(available, deadline) {
+                    let _ = tx.send(None);
+                    return;
+                }
+                let Some(surface) = Surface::by_key(key) else {
+                    available.store(false, Ordering::Release);
+                    let _ = tx.send(None);
+                    return;
+                };
+                let _ = tx.send(Some(f(&surface)));
+                return;
+            }
             let _ = tx.send(Surface::by_key(key).map(|surface| f(&surface)));
         });
-        rx.recv_timeout(MAIN).ok().flatten()
+        let result = rx.recv_timeout(MAIN).ok().flatten();
+        #[cfg(feature = "dev-agent")]
+        if result.is_none() && self.available.is_some() {
+            // A dispatch timeout makes the attached connection unavailable
+            // until its host is restarted.
+            self.unavailable();
+        }
+        result
     }
 
     fn click(&self, at: Point<Points>, hold: Duration, button: u8) {
@@ -135,6 +182,13 @@ impl WindowsNative {
 }
 
 impl Native for WindowsNative {
+    #[cfg(feature = "dev-agent")]
+    fn available(&self) -> bool {
+        self.available
+            .as_ref()
+            .is_none_or(|available| available.load(Ordering::Acquire))
+    }
+
     fn bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
         self.on_main(move |surface| {
             let view = surface.mounter.borrow().views.get(id)?;
@@ -146,6 +200,12 @@ impl Native for WindowsNative {
             )
         })
         .flatten()
+    }
+
+    fn hit_at(&self, at: Point<Points>) -> Result<Option<NodeId>, String> {
+        let (x, y) = (at.x.0, at.y.0);
+        self.on_main(move |surface| crate::input::pick_node(&surface.root, x, y))
+            .ok_or_else(|| "the window is gone".to_owned())
     }
 
     fn text_bounds(&self, text: NodeId, start: u32, end: u32) -> Option<Bounds<Points>> {
@@ -265,21 +325,48 @@ impl Native for WindowsNative {
     }
 
     fn press_keys(&self, keys: &str) -> Result<(), String> {
-        let stroke = nsh_core::keymap::Keystroke::parse(keys, nsh_core::platform::Os::Windows)
-            .map_err(|e| e.to_string())?;
-        let vk = stroke
-            .key
-            .virtual_key()
-            .ok_or_else(|| format!("{keys:?} has no key on a Windows keyboard"))?;
-        let m = stroke.modifiers;
-        let modifiers = Modifiers {
-            shift: m.shift,
-            ctrl: m.ctrl,
-            alt: m.alt,
-            meta: m.cmd,
-        };
+        let (vk, modifiers) = windows_key(keys)?;
         self.in_focused(move |s| synth::press(s, vk, modifiers))
             .ok_or_else(|| "the window is gone".to_owned())
+    }
+
+    fn validate_keys(&self, keys: &str) -> Result<(), String> {
+        windows_key(keys).map(|_| ())
+    }
+
+    fn focus_node(&self, id: NodeId) -> Result<(), String> {
+        self.on_main(move |surface| {
+            let view = surface
+                .mounter
+                .borrow()
+                .views
+                .get(id)
+                .ok_or_else(|| format!("node {id} is missing"))?;
+            crate::text_input::focus(&view);
+            (crate::text_input::focused(surface).as_ref() == Some(&view))
+                .then_some(())
+                .ok_or_else(|| format!("node {id} cannot receive native focus"))
+        })
+        .unwrap_or_else(|| Err("the window is gone".to_owned()))
+    }
+
+    fn fire_menu_keybinding(
+        &self,
+        binding: &nsh_testing::agent::SemanticKeybinding,
+    ) -> Result<(), String> {
+        let binding = binding.clone();
+        self.on_main(move |surface| crate::chrome::fire_menu_keybinding(surface, &binding))
+            .unwrap_or_else(|| Err("the window is gone".into()))
+    }
+
+    fn app_focused(&self) -> bool {
+        self.on_main(|surface| {
+            // SAFETY: `GetForegroundWindow` is a read-only query.
+            unsafe {
+                windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow() == surface.hwnd()
+            }
+        })
+        .unwrap_or(false)
     }
 
     fn input_text(&self, id: NodeId) -> Option<String> {
@@ -324,7 +411,7 @@ impl Native for WindowsNative {
 
     fn resize(&self, width: Points, height: Points) -> Result<(), String> {
         self.on_main(move |s| synth::resize(s, width.0, height.0))
-            .ok_or_else(|| "the window is gone".to_owned())
+            .ok_or_else(|| "the window is gone".to_owned())?
     }
 
     fn set_dark(&self, dark: bool) -> Result<(), String> {
@@ -402,6 +489,35 @@ fn activate(surface: &Surface, window: NodeId) {
     }
 }
 
+fn windows_key(keys: &str) -> Result<(u16, Modifiers), String> {
+    let stroke = nsh_core::keymap::Keystroke::parse(keys, nsh_core::platform::Os::Windows)
+        .map_err(|e| e.to_string())?;
+    let vk = stroke
+        .key
+        .virtual_key()
+        .ok_or_else(|| format!("{keys:?} has no key on a Windows keyboard"))?;
+    let m = stroke.modifiers;
+    Ok((
+        vk,
+        Modifiers {
+            shift: m.shift,
+            ctrl: m.ctrl,
+            alt: m.alt,
+            meta: m.cmd,
+        },
+    ))
+}
+
+#[cfg(feature = "dev-agent")]
+fn dispatch_is_live(available: &AtomicBool, deadline: Instant) -> bool {
+    if !available.load(Ordering::Acquire) || Instant::now() >= deadline {
+        available.store(false, Ordering::Release);
+        false
+    } else {
+        true
+    }
+}
+
 /// The box `(x, y, width, height)` of a view (in its coordinates) in the
 /// root's, through `map`, the view's transform to the root: the box
 /// around its mapped corners.
@@ -429,4 +545,34 @@ fn mapped_bounds(
         point(Points(x0), Points(y0)),
         Size::new(Points(x1 - x0), Points(y1 - y0)),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_windows_key_chords() {
+        let (vk, modifiers) = windows_key("ctrl+a").expect("Windows key chord");
+        assert_eq!(vk, VK_A);
+        assert!(modifiers.ctrl);
+        assert!(!modifiers.alt);
+    }
+
+    #[test]
+    fn rejects_unsupported_windows_keys() {
+        assert!(windows_key("not-a-windows-key").is_err());
+    }
+
+    #[cfg(feature = "dev-agent")]
+    #[test]
+    fn expired_attached_dispatch_skips_callback_and_disables_connection() {
+        let available = AtomicBool::new(true);
+        let mut called = false;
+        if dispatch_is_live(&available, Instant::now() - Duration::from_millis(1)) {
+            called = true;
+        }
+        assert!(!called);
+        assert!(!available.load(Ordering::Acquire));
+    }
 }
