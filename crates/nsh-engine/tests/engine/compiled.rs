@@ -1242,6 +1242,47 @@ mount(() => (
 ));
 "#;
 
+const CHANGE_TEXT: &str = r#"import { mount, signal, Text, View } from "nsh";
+import { Input } from "nsh/base";
+
+const log = signal("log");
+
+mount(() => (
+  <View style={{ flex: 1 }}>
+    <Text>{log()}</Text>
+    <Input testID="rn" onChangeText={(text) => log.set(`text ${typeof text} ${text}`)} />
+  </View>
+));
+"#;
+
+/// React Native's `onChangeText` gets the text itself, not `onChange`'s
+/// `{ value }`: apps and generated widgets written for it keep working.
+#[test]
+fn on_change_text_gets_the_text() {
+    let (engine, rx) = start_app(CHANGE_TEXT);
+    let control = engine.control();
+    let first = rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("first frame");
+    let input = first
+        .items
+        .iter()
+        .find_map(|i| match i {
+            MountItem::Input { id, .. } => Some(*id),
+            _ => None,
+        })
+        .expect("an input");
+    control.dispatch_event(
+        input,
+        EventKind::ChangeText,
+        EventPayload::Text {
+            text: "hi".into(),
+            count: 1,
+        },
+    );
+    next(&rx, |b| text_id(b, "text string hi").is_some());
+}
+
 /// An input reports edits with `onChange` and the return key with
 /// `onSubmit`; a list renders its `header`, `empty` and `separator`.
 #[test]
