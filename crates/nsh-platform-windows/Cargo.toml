@@ -50,6 +50,7 @@ emoji-picker = ["nsh-base/emoji-picker"]
 zlib = ["js", "nsh-engine/zlib"]
 # The standard JS module `crypto` and the globals of Web Crypto.
 crypto = ["js", "nsh-engine/crypto"]
+dev-agent = ["dev", "dep:nsh-gpui-agent", "nsh-gpui-agent/dev-agent"]
 
 # The native WebSocket client (tokio-tungstenite, rustls). Without it
 # `connect` of `websocket` rejects with ERR_FEATURE_UNAVAILABLE_ON_PLATFORM.
@@ -85,3 +86,4 @@ ttf-parser.workspace = true
 crossbeam-channel.workspace = true
 nsh-dev = { workspace = true, features = ["client"], optional = true }
 nsh-testing = { workspace = true, features = ["agent"], optional = true }
+nsh-gpui-agent = { workspace = true, optional = true }
