@@ -464,10 +464,6 @@ impl Surface {
                 }
                 Message::Frame => {
                     self.js_frame.set(true);
-                    #[cfg(feature = "dev")]
-                    if let Some(model) = &*self.test_model.borrow() {
-                        model.frame();
-                    }
                     #[cfg(feature = "dev-agent")]
                     self.agent_model.frame();
                 }
