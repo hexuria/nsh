@@ -149,6 +149,7 @@ impl DevClient {
             platform: Some(host.platform),
             ui_sets: Some(host.ui_sets),
             tests: host.tests,
+            agent: None,
         };
         thread::Builder::new()
             .name("nsh-dev-client".into())
