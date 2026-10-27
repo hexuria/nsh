@@ -158,7 +158,8 @@ pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) -> Result<(), String
         let (mut outer_w, mut outer_h) = (rect.right - rect.left, rect.bottom - rect.top);
         // A hidden title bar or a wrapped menu bar gives a client area other
         // than the style's, so the frame is corrected by what it measures.
-        for _ in 0..2 {
+        let mut last = (0, 0);
+        for _ in 0..3 {
             SetWindowPos(
                 hwnd,
                 None,
@@ -178,9 +179,13 @@ pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) -> Result<(), String
             }
             outer_w += dw;
             outer_h += dh;
+            last = (client.right, client.bottom);
         }
+        Err(format!(
+            "the client area is {}x{} px after resizing, not {want_w}x{want_h} px",
+            last.0, last.1
+        ))
     }
-    Ok(())
 }
 
 /// A picture of what the window shows, as a PNG: captured as DWM composes
