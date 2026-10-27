@@ -263,8 +263,19 @@ impl Native for AndroidNative {
     }
 
     fn viewport(&self) -> Size<Points> {
+        // The GPUI agent resizes the NshView only (`resize`), which the
+        // development host shows from the window's top left: its viewport
+        // is the view's size, in the same window coordinates.
+        #[cfg(feature = "dev-agent")]
+        let method = if self.agent_attached {
+            "contentSize"
+        } else {
+            "viewport"
+        };
+        #[cfg(not(feature = "dev-agent"))]
+        let method = "viewport";
         let v = self
-            .floats("viewport", "(Lcom/longbridge/nsh/NshView;)[F", None)
+            .floats(method, "(Lcom/longbridge/nsh/NshView;)[F", None)
             .unwrap_or_else(|| vec![0.0, 0.0]);
         Size::new(Points(v[0] / self.density), Points(v[1] / self.density))
     }
