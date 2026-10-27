@@ -132,19 +132,20 @@ pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) -> Result<(), String
         UI::{
             HiDpi::AdjustWindowRectExForDpi,
             WindowsAndMessaging::{
-                GWL_EXSTYLE, GWL_STYLE, GetMenu, GetWindowLongW, SWP_NOACTIVATE, SWP_NOMOVE,
-                SWP_NOZORDER, SetWindowPos, WINDOW_EX_STYLE, WINDOW_STYLE,
+                GWL_EXSTYLE, GWL_STYLE, GetClientRect, GetMenu, GetWindowLongW, SWP_NOACTIVATE,
+                SWP_NOMOVE, SWP_NOZORDER, SetWindowPos, WINDOW_EX_STYLE, WINDOW_STYLE,
             },
         },
     };
     let hwnd = surface.hwnd();
     let dpi = crate::window::dpi(hwnd);
     let s = dpi as f32 / 96.0;
+    let (want_w, want_h) = ((w * s).round() as i32, (h * s).round() as i32);
     let mut rect = RECT {
         left: 0,
         top: 0,
-        right: (w * s).round() as i32,
-        bottom: (h * s).round() as i32,
+        right: want_w,
+        bottom: want_h,
     };
     // SAFETY: plain calls on the surface's window.
     unsafe {
@@ -154,16 +155,30 @@ pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) -> Result<(), String
         let menu = !GetMenu(hwnd).is_invalid();
         AdjustWindowRectExForDpi(&mut rect, style, menu, ex, dpi)
             .map_err(|error| format!("AdjustWindowRectExForDpi failed: {error}"))?;
-        SetWindowPos(
-            hwnd,
-            None,
-            0,
-            0,
-            rect.right - rect.left,
-            rect.bottom - rect.top,
-            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
-        )
-        .map_err(|error| format!("SetWindowPos failed: {error}"))?;
+        let (mut outer_w, mut outer_h) = (rect.right - rect.left, rect.bottom - rect.top);
+        // A hidden title bar or a wrapped menu bar gives a client area other
+        // than the style's, so the frame is corrected by what it measures.
+        for _ in 0..2 {
+            SetWindowPos(
+                hwnd,
+                None,
+                0,
+                0,
+                outer_w,
+                outer_h,
+                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
+            )
+            .map_err(|error| format!("SetWindowPos failed: {error}"))?;
+            let mut client = RECT::default();
+            GetClientRect(hwnd, &mut client)
+                .map_err(|error| format!("GetClientRect failed: {error}"))?;
+            let (dw, dh) = (want_w - client.right, want_h - client.bottom);
+            if dw == 0 && dh == 0 {
+                return Ok(());
+            }
+            outer_w += dw;
+            outer_h += dh;
+        }
     }
     Ok(())
 }
