@@ -121,11 +121,19 @@ pub(crate) struct Browser {
     /// Its profile, removed after it.
     profile: PathBuf,
     output: ui::Tail,
+    /// It was closed ([`Browser::close`]).
+    closed: AtomicBool,
 }
 
 impl Browser {
     /// Starts `exe` headless on a fresh profile and connects to it.
     pub(crate) fn launch(exe: &Path) -> Result<Browser, String> {
+        Browser::launch_with(exe, false)
+    }
+
+    /// Starts `exe` on a fresh profile, `headed` in a window of its own
+    /// (to watch what an agent does), else headless, and connects to it.
+    pub(crate) fn launch_with(exe: &Path, headed: bool) -> Result<Browser, String> {
         let profile = std::env::temp_dir().join(format!(
             "nsh-test-browser-{}-{}",
             std::process::id(),
@@ -135,8 +143,10 @@ impl Browser {
         std::fs::create_dir_all(&profile)
             .map_err(|e| format!("cannot make {}: {e}", profile.display()))?;
         let mut command = Command::new(exe);
+        if !headed {
+            command.arg("--headless");
+        }
         command
-            .arg("--headless")
             // The port it picks goes into the profile's DevToolsActivePort.
             .arg("--remote-debugging-port=0")
             .arg(format!("--user-data-dir={}", profile.display()))
@@ -209,6 +219,7 @@ impl Browser {
             next: AtomicU64::new(1),
             profile,
             output,
+            closed: AtomicBool::new(false),
         })
     }
 
@@ -313,8 +324,13 @@ impl Browser {
     }
 }
 
-impl Drop for Browser {
-    fn drop(&mut self) {
+impl Browser {
+    /// Closes it and removes its profile (once; dropping it does too): for
+    /// an owner that ends while others still hold it (an agent's thread).
+    pub(crate) fn close(&self) {
+        if self.closed.swap(true, Ordering::SeqCst) {
+            return;
+        }
         // Closed as a user closes it, so its helper processes go with it.
         let _ = self.call(None, "Browser.close", json!({}));
         let mut child = self.lock_child();
@@ -329,6 +345,12 @@ impl Drop for Browser {
         let _ = child.wait();
         drop(child);
         let _ = std::fs::remove_dir_all(&self.profile);
+    }
+}
+
+impl Drop for Browser {
+    fn drop(&mut self) {
+        self.close();
     }
 }
 
@@ -348,6 +370,11 @@ impl Page {
     /// Calls `method` with `params` on this page.
     pub(crate) fn call(&self, method: &str, params: Value) -> Result<Value, String> {
         self.browser.call(Some(&self.session), method, params)
+    }
+
+    /// Whether it was closed ([`Page::close`]).
+    pub(crate) fn closed(&self) -> bool {
+        self.closed.load(Ordering::Relaxed)
     }
 
     /// The browser it is in.
