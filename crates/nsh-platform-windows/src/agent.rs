@@ -5,14 +5,14 @@
 //! of its own; each call does its work on the main thread
 //! ([`crate::window::invoke`]) and returns once it is done.
 
-use std::{rc::Rc, sync::mpsc, time::Duration};
-#[cfg(feature = "dev-agent")]
 use std::{
+    rc::Rc,
     sync::{
-        Arc,
+        Arc, Mutex, PoisonError,
         atomic::{AtomicBool, Ordering},
+        mpsc,
     },
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use nsh_core::{
@@ -57,6 +57,9 @@ pub(crate) struct WindowsNative {
     key: u64,
     #[cfg(feature = "dev-agent")]
     available: Option<Arc<AtomicBool>>,
+    /// Why a call had no answer, until the step takes it
+    /// ([`Native::take_failure`]).
+    failure: Arc<Mutex<Option<String>>>,
 }
 
 impl WindowsNative {
@@ -65,6 +68,7 @@ impl WindowsNative {
             key,
             #[cfg(feature = "dev-agent")]
             available: None,
+            failure: Arc::default(),
         }
     }
 
@@ -73,6 +77,7 @@ impl WindowsNative {
         WindowsNative {
             key,
             available: Some(available),
+            failure: Arc::default(),
         }
     }
 
@@ -84,28 +89,29 @@ impl WindowsNative {
     ) -> Option<R> {
         let (tx, rx) = mpsc::channel();
         let key = self.key;
-        #[cfg(feature = "dev-agent")]
         let deadline = Instant::now() + MAIN;
         #[cfg(feature = "dev-agent")]
-        let callback_available = self.available.clone();
+        let available = self.available.clone();
         crate::window::invoke(move || {
             #[cfg(feature = "dev-agent")]
-            if let Some(available) = &callback_available {
-                let _ = tx.send(dispatch(
-                    available,
-                    deadline,
-                    || Surface::by_key(key),
-                    |surface| f(&surface),
-                ));
-                return;
-            }
-            let _ = tx.send(Surface::by_key(key).map(|surface| f(&surface)));
+            let available = available.as_deref();
+            #[cfg(not(feature = "dev-agent"))]
+            let available = None;
+            let _ = tx.send(dispatch(
+                available,
+                deadline,
+                || Surface::by_key(key),
+                |surface| f(&surface),
+            ));
         });
         match rx.recv_timeout(MAIN) {
             Ok(result) => result,
-            Err(_) => {
-                // This call fails; a later one may still be answered.
-                log::warn!("the main thread did not answer in {} s", MAIN.as_secs());
+            Err(error) => {
+                // This call fails, and its step with it; a later one may
+                // still be answered.
+                let failure = main_failure(error);
+                log::warn!("{failure}");
+                *self.failure.lock().unwrap_or_else(PoisonError::into_inner) = Some(failure);
                 None
             }
         }
@@ -129,6 +135,13 @@ impl Native for WindowsNative {
         self.available
             .as_ref()
             .is_none_or(|available| available.load(Ordering::Acquire))
+    }
+
+    fn take_failure(&self) -> Option<String> {
+        self.failure
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
     }
 
     fn bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
@@ -332,6 +345,11 @@ impl Native for WindowsNative {
         // The mouse's back button goes back from wherever the focus is
         // ([`crate::input`]), as in browsers.
         let middle = self.viewport();
+        if middle.width.0 <= 0.0 || middle.height.0 <= 0.0 {
+            return Err(self
+                .take_failure()
+                .unwrap_or_else(|| "the viewport is not laid out yet".into()));
+        }
         let at = point(Points(middle.width.0 / 2.0), Points(middle.height.0 / 2.0));
         self.click(at, CLICK, 3);
         Ok(())
@@ -351,23 +369,18 @@ impl Native for WindowsNative {
     }
 
     fn laid_out(&self) -> Result<(), String> {
-        // Waits for the layout a resize started, not for a size to come.
-        const LAYOUT: Duration = Duration::from_secs(3);
-        let deadline = std::time::Instant::now() + LAYOUT;
-        loop {
-            let (pixels, pending) = self
-                .on_main(|s| (s.pixel_size(), s.layout_pending()))
-                .ok_or("the window is gone")?;
-            if !pending || pixels.0 == 0 || pixels.1 == 0 || std::time::Instant::now() >= deadline {
-                return layout_state(pixels, pending);
-            }
-            std::thread::sleep(Duration::from_millis(16));
-        }
+        // At once: settling waits for a pending layout as for an animation
+        // ([`Surface::animating`]), and the host is locked meanwhile.
+        self.on_main(|s| layout_state(s.pixel_size(), s.layout_pending()))
+            .unwrap_or_else(|| Err("the window is gone".into()))
     }
 
     fn screenshot(&self) -> Result<Vec<u8>, String> {
-        self.on_main(synth::screenshot)
-            .unwrap_or_else(|| Err("the window is gone".into()))
+        self.on_main(|s| {
+            layout_state(s.pixel_size(), s.layout_pending())?;
+            synth::screenshot(s)
+        })
+        .unwrap_or_else(|| Err("the window is gone".into()))
     }
 
     fn resize(&self, width: Points, height: Points) -> Result<(), String> {
@@ -423,22 +436,38 @@ fn layout_state(pixels: (u32, u32), pending: bool) -> Result<(), String> {
 
 /// `f` with the surface `surface` finds, unless the call's `deadline`
 /// passed (its caller stopped waiting) or the attachment is unavailable; a
-/// surface that is gone makes the attachment unavailable.
-#[cfg(feature = "dev-agent")]
+/// surface that is gone makes the attachment unavailable. Without an
+/// attachment (`nsh test`), only the deadline counts.
 fn dispatch<S, R>(
-    available: &AtomicBool,
+    available: Option<&AtomicBool>,
     deadline: Instant,
     surface: impl FnOnce() -> Option<S>,
     f: impl FnOnce(S) -> R,
 ) -> Option<R> {
-    if !available.load(Ordering::Acquire) || Instant::now() >= deadline {
+    if available.is_some_and(|available| !available.load(Ordering::Acquire))
+        || Instant::now() >= deadline
+    {
         return None;
     }
     let Some(surface) = surface() else {
-        available.store(false, Ordering::Release);
+        if let Some(available) = available {
+            available.store(false, Ordering::Release);
+        }
         return None;
     };
     Some(f(surface))
+}
+
+/// Why a main-thread call has no answer: late, or never to come.
+fn main_failure(error: mpsc::RecvTimeoutError) -> String {
+    match error {
+        mpsc::RecvTimeoutError::Timeout => {
+            format!("the main thread did not answer in {} s", MAIN.as_secs())
+        }
+        mpsc::RecvTimeoutError::Disconnected => {
+            "the main thread dropped the call: its message loop has ended".into()
+        }
+    }
 }
 
 /// The box `(x, y, width, height)` of a view (in its coordinates) in the
@@ -475,6 +504,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_late_and_a_lost_call_fail_differently() {
+        let late = main_failure(mpsc::RecvTimeoutError::Timeout);
+        let lost = main_failure(mpsc::RecvTimeoutError::Disconnected);
+        assert!(late.contains("did not answer"), "{late}");
+        assert!(lost.contains("message loop has ended"), "{lost}");
+    }
+
+    #[test]
+    fn without_an_attachment_a_late_call_is_skipped() {
+        let mut called = false;
+        let answer = dispatch(None, Instant::now(), || Some(()), |()| called = true);
+        assert!(answer.is_none() && !called);
+    }
+
+    #[test]
     fn parses_windows_key_chords() {
         let (vk, modifiers) = windows_key("ctrl+a").expect("Windows key chord");
         assert_eq!(vk, VK_A);
@@ -501,7 +545,7 @@ mod tests {
         let available = AtomicBool::new(true);
         let mut called = false;
         let result = dispatch(
-            &available,
+            Some(&available),
             Instant::now() - Duration::from_millis(1),
             || Some(()),
             |()| called = true,
@@ -517,7 +561,7 @@ mod tests {
         let available = AtomicBool::new(true);
         let mut called = false;
         let result = dispatch(
-            &available,
+            Some(&available),
             Instant::now() + MAIN,
             || None::<()>,
             |()| called = true,
@@ -531,7 +575,12 @@ mod tests {
     #[test]
     fn a_live_dispatch_runs_the_call() {
         let available = AtomicBool::new(true);
-        let result = dispatch(&available, Instant::now() + MAIN, || Some(2), |n| n * 3);
+        let result = dispatch(
+            Some(&available),
+            Instant::now() + MAIN,
+            || Some(2),
+            |n| n * 3,
+        );
         assert_eq!(result, Some(6));
         assert!(available.load(Ordering::Acquire));
     }
