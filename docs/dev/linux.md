@@ -68,6 +68,33 @@ works and its runner only needs GTK.
   serves the UI sets beside the runtime's modules (`nsh/base` by default; an app with Rust components of its own passes
   `nsh_base::registry()` and its sets).
 
+## GPUI-agent development tooling
+
+The Linux development host includes the `nsh-gpui-agent` adapter behind
+`nsh-platform-linux/dev-agent`; release apps do not link it. To opt in, start
+the gallery with a fresh token and a loopback address:
+
+```sh
+export GPUI_AGENT=1
+export GPUI_AGENT_ADDR=127.0.0.1:17421
+export GPUI_AGENT_TOKEN="$(openssl rand -hex 32)"
+nsh run --target linux examples/gallery
+```
+
+Use the same token and address in the environment of the GPUI-agent CLI:
+
+```sh
+gpui-agent hello
+gpui-agent snapshot --pretty
+TARGET='<node-id-from-snapshot>'
+gpui-agent click "$TARGET"
+gpui-agent snapshot --pretty
+gpui-agent screenshot --out gallery.png
+```
+
+Do not put the token in shell history, logs, or checked-in files. The agent
+server binds only to loopback and requires a non-empty token.
+
 ## How each area maps to GTK
 
 | Area | Module | GTK |
