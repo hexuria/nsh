@@ -15,6 +15,12 @@ public final class DevActivity extends Activity {
     private NshView view;
     private NshTrust trust;
 
+    /**
+     * The GPUI-agent token this process read (and deleted), for this
+     * activity when the system recreates it: by then the file is gone.
+     */
+    private static String agentToken;
+
     /** Created by the system from the manifest. */
     public DevActivity() {}
 
@@ -41,8 +47,16 @@ public final class DevActivity extends Activity {
             String address = getIntent().getStringExtra("GPUI_AGENT_ADDR");
             // Only from this app's own files (`nsh run` writes it with
             // `run-as`), never from the intent: any app can start this
-            // activity, but cannot choose the token.
-            String token = agentToken();
+            // activity, but cannot choose the token. Read once: a later
+            // launch (another app's) finds no file, and only the system's
+            // recreation of this activity (with its saved state) takes
+            // the token this process read.
+            String token = takeAgentToken();
+            if (token != null) {
+                agentToken = token;
+            } else if (state != null) {
+                token = agentToken;
+            }
             if (token == null) {
                 android.util.Log.w("nsh", "GPUI-agent not started: no token in files/gpui-agent-token");
             } else if (!view.startAgent(address != null ? address : "127.0.0.1:17421", token)) {
@@ -135,14 +149,15 @@ public final class DevActivity extends Activity {
     }
 
     /**
-     * The GPUI-agent token `nsh run` stored in this app's files; null when
-     * there is none. As it is: `nsh run` writes the token's bytes alone
-     * and refuses one with whitespace around it.
+     * The GPUI-agent token `nsh run` stored in this app's files, deleted
+     * once read; null when there is none. As it is: `nsh run` writes the
+     * token's bytes alone and refuses one with whitespace around it.
      */
-    private String agentToken() {
+    private String takeAgentToken() {
+        java.io.File file = new java.io.File(getFilesDir(), "gpui-agent-token");
         try {
-            byte[] bytes = java.nio.file.Files.readAllBytes(
-                    new java.io.File(getFilesDir(), "gpui-agent-token").toPath());
+            byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+            if (!file.delete()) android.util.Log.w("nsh", "cannot delete files/gpui-agent-token");
             String token = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
             return token.isEmpty() ? null : token;
         } catch (java.io.IOException e) {
