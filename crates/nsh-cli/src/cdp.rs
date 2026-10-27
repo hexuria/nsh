@@ -142,35 +142,7 @@ impl Browser {
         let _ = std::fs::remove_dir_all(&profile);
         std::fs::create_dir_all(&profile)
             .map_err(|e| format!("cannot make {}: {e}", profile.display()))?;
-        let mut command = Command::new(exe);
-        if !headed {
-            command.arg("--headless");
-        }
-        command
-            // The port it picks goes into the profile's DevToolsActivePort.
-            .arg("--remote-debugging-port=0")
-            .arg(format!("--user-data-dir={}", profile.display()))
-            .args([
-                "--no-first-run",
-                "--no-default-browser-check",
-                "--disable-extensions",
-                "--disable-sync",
-                "--mute-audio",
-                // Pages in the background keep their timers and frames: a
-                // test's page is never in front.
-                "--disable-background-timer-throttling",
-                "--disable-backgrounding-occluded-windows",
-                "--disable-renderer-backgrounding",
-                // Headless, the browser finds no input device and reports no
-                // pointer (`pointer: none`, `hover: none`), so pages measure
-                // as touch screens; the test drives a mouse: a fine pointer
-                // that hovers (Blink's `PointerType` / `HoverType`, as
-                // Playwright launches it).
-                "--blink-settings=primaryPointerType=4,availablePointerTypes=4,\
-                 primaryHoverType=2,availableHoverTypes=2",
-                "about:blank",
-            ])
-            .stdin(Stdio::null());
+        let mut command = command(exe, headed, &profile);
         let (mut child, output) =
             ui::quiet(&mut command).map_err(|e| format!("cannot start {}: {e}", exe.display()))?;
         let port_file = profile.join("DevToolsActivePort");
@@ -354,6 +326,44 @@ impl Drop for Browser {
     }
 }
 
+/// The command that starts `exe` on `profile`, `headed` in a window of its
+/// own, else headless.
+fn command(exe: &Path, headed: bool, profile: &Path) -> Command {
+    let mut command = Command::new(exe);
+    if !headed {
+        command.arg("--headless");
+    }
+    command
+        // The port it picks goes into the profile's DevToolsActivePort.
+        .arg("--remote-debugging-port=0")
+        .arg(format!("--user-data-dir={}", profile.display()))
+        .args([
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-extensions",
+            "--disable-sync",
+            "--mute-audio",
+            // Pages in the background keep their timers and frames: a
+            // test's page is never in front.
+            "--disable-background-timer-throttling",
+            "--disable-backgrounding-occluded-windows",
+            "--disable-renderer-backgrounding",
+            // Headless, the browser finds no input device and reports no
+            // pointer (`pointer: none`, `hover: none`), so pages measure
+            // as touch screens; the test drives a mouse: a fine pointer
+            // that hovers (Blink's `PointerType` / `HoverType`, as
+            // Playwright launches it).
+            "--blink-settings=primaryPointerType=4,availablePointerTypes=4,\
+             primaryHoverType=2,availableHoverTypes=2",
+            "about:blank",
+        ])
+        .stdin(Stdio::null())
+        // A GPUI agent's token (`nsh run`'s environment) is the agent
+        // server's alone: the browser and its pages never hold it.
+        .env_remove("GPUI_AGENT_TOKEN");
+    command
+}
+
 /// The profiles started so far: each browser gets one of its own.
 static NEXT_PROFILE: AtomicU64 = AtomicU64::new(0);
 
@@ -418,5 +428,19 @@ mod tests {
         let missing = Path::new("/no/such/browser");
         let err = find(Some(missing)).unwrap_err().to_string();
         assert!(err.contains("--browser"), "{err}");
+    }
+
+    #[test]
+    fn the_browser_never_holds_a_gpui_agent_token() {
+        for headed in [false, true] {
+            let command = command(Path::new("chrome"), headed, Path::new("/tmp/profile"));
+            assert!(
+                command
+                    .get_envs()
+                    .any(|(name, value)| name == "GPUI_AGENT_TOKEN" && value.is_none()),
+                "the browser inherits no token (headed: {headed})"
+            );
+            assert_eq!(command.get_args().any(|arg| arg == "--headless"), !headed);
+        }
     }
 }
