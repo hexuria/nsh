@@ -465,6 +465,11 @@ pub struct SemanticNode {
     /// is a hit inside this node.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hidden_descendants: Vec<NodeId>,
+    /// Those of [`SemanticNode::hidden_descendants`] a press goes to a
+    /// hidden view of their own: each with that view (itself, or the
+    /// innermost hidden view around it that takes presses).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hidden_press_owners: Vec<(NodeId, NodeId)>,
 }
 
 /// A keyboard shortcut the host can fire through its native input path.
@@ -1842,8 +1847,18 @@ impl Agent {
         if !node.enabled {
             return Err(format!("node {id} is disabled"));
         }
+        // A text view nothing pressable owns may still take the press in
+        // one of its spans (a link): the platform's press handler finds it
+        // from the character under the finger.
+        let mut target = id;
         if pressable && press_owner(&nodes, node).is_none() {
-            return Err(format!("node {id} is not pressable"));
+            let link = self
+                .pressable_span_at(&nodes, id, at)
+                .ok_or_else(|| format!("node {id} is not pressable"))?;
+            if !link.enabled {
+                return Err(format!("node {} is disabled", link.id));
+            }
+            target = link.id;
         }
         let bounds = self
             .native
@@ -1856,7 +1871,26 @@ impl Agent {
         {
             return Err(format!("offscreen: coordinate is outside node {id}"));
         }
-        self.explicit_actionable_point(id, id, at, &format!("node {id}"))
+        self.explicit_actionable_point(target, id, at, &format!("node {target}"))
+    }
+
+    /// The pressable span of text view `text` whose characters are at
+    /// `at` (on their first line, as [`Native::text_bounds`] gives them).
+    fn pressable_span_at<'a>(
+        &self,
+        nodes: &'a [SemanticNode],
+        text: NodeId,
+        at: Point<Points>,
+    ) -> Option<&'a SemanticNode> {
+        nodes.iter().find(|node| {
+            node.pressable
+                && matches!(node.native_target, SemanticTarget::Text { owner, start, end }
+                    if owner == text
+                        && self
+                            .native
+                            .text_bounds(owner, start, end)
+                            .is_some_and(|bounds| bounds.contains(&at)))
+        })
     }
 
     fn node_point_without_reveal(
@@ -2267,9 +2301,25 @@ impl Agent {
             visible.center()
         };
         let parents = mounted_parents(&nodes);
+        // A press on a hidden view that takes presses itself goes to it,
+        // not to the target.
+        let hidden_press_owners: std::collections::HashMap<NodeId, NodeId> = nodes
+            .iter()
+            .flat_map(|node| node.hidden_press_owners.iter().copied())
+            .collect();
         let deadline = Instant::now() + Duration::from_millis(100);
         loop {
             match self.native.hit_at(at) {
+                Ok(Some(hit))
+                    if press_owner.is_some()
+                        && let Some(&receiver) = hidden_press_owners.get(&hit) =>
+                {
+                    return Err(format!(
+                        "`{selector}`: a press at ({}, {}) goes to node {receiver}, an \
+                         accessibility-hidden view that takes presses itself",
+                        at.x.0, at.y.0
+                    ));
+                }
                 Ok(Some(hit))
                     if is_descendant_or_same(hit, native_owner, &parents)
                         || press_owner.is_some_and(|owner| {
@@ -2997,6 +3047,79 @@ mod tests {
         }
     }
 
+    /// A press on a button whose point lands on an accessibility-hidden
+    /// child (or a view inside it) that takes presses itself is refused:
+    /// the child would get it.
+    #[test]
+    fn a_press_refuses_a_hidden_child_that_takes_presses_itself() {
+        use nsh_core::{EventMask, MountItem, ViewKind, ViewProps, geometry::Size};
+
+        let bounds = [(
+            2,
+            Bounds::new(point(px(20.0), px(0.0)), size(px(60.0), px(100.0))),
+        )];
+        for hit in [3, 5] {
+            let model = gate_scene(ViewKind::View, false, false);
+            let mut hidden = ViewProps::default();
+            hidden.accessibility.hidden = true;
+            let mut events = EventMask::default();
+            events.set(EventKind::Press, true);
+            model.apply(&MountBatch {
+                items: vec![
+                    // A hidden child of the button with its own press
+                    // handler, and a view inside it.
+                    MountItem::Create {
+                        id: 3,
+                        kind: ViewKind::View,
+                    },
+                    MountItem::ViewProps {
+                        id: 3,
+                        props: Box::new(hidden),
+                    },
+                    MountItem::Events { id: 3, events },
+                    MountItem::Insert {
+                        parent: 2,
+                        child: 3,
+                        before: None,
+                    },
+                    MountItem::Create {
+                        id: 5,
+                        kind: ViewKind::View,
+                    },
+                    MountItem::Insert {
+                        parent: 3,
+                        child: 5,
+                        before: None,
+                    },
+                ],
+            });
+            let target = model
+                .semantic_tree()
+                .unwrap()
+                .into_iter()
+                .find(|node| node.id == 2)
+                .unwrap();
+            assert_eq!(target.hidden_descendants, [3, 5]);
+            assert_eq!(target.hidden_press_owners, [(3, 3), (5, 3)]);
+            let presses = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let agent = gate_agent(
+                model,
+                Ok(Some(hit)),
+                &bounds,
+                Size::new(px(100.0), px(100.0)),
+                Arc::new(Mutex::new(Vec::new())),
+                presses.clone(),
+                Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            );
+            let error = agent.press_node(2).unwrap_err();
+            assert!(
+                error.contains("goes to node 3") && error.contains("accessibility-hidden"),
+                "{error}"
+            );
+            assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 0);
+        }
+    }
+
     #[test]
     fn press_at_rejects_a_label_nothing_pressable_owns() {
         let label_bounds = Bounds::new(point(px(20.0), px(10.0)), size(px(40.0), px(20.0)));
@@ -3031,6 +3154,70 @@ mod tests {
             } else {
                 assert_eq!(result.unwrap_err(), "node 3 is not pressable");
                 assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 0);
+            }
+        }
+    }
+
+    /// A coordinate press on a link in a text nothing pressable owns goes
+    /// to the link; elsewhere in the text it is refused.
+    #[test]
+    fn press_at_takes_a_link_in_text_nothing_pressable_owns() {
+        let text_bounds = Bounds::new(point(px(10.0), px(10.0)), size(px(200.0), px(40.0)));
+        let link_bounds = Bounds::new(point(px(40.0), px(15.0)), size(px(30.0), px(10.0)));
+        let link_at = link_bounds.center();
+        let plain_at = point(px(150.0), px(30.0));
+        for (hit, at, enabled, expected) in [
+            (4, link_at, true, Ok(())),
+            (4, plain_at, true, Err("node 4 is not pressable")),
+            (4, link_at, false, Err("node 11 is disabled")),
+            (
+                9,
+                link_at,
+                true,
+                Err("target_gone: coordinate has no semantic target"),
+            ),
+        ] {
+            let mut link = semantic_node(
+                11,
+                Some(4),
+                true,
+                SemanticTarget::Text {
+                    owner: 4,
+                    start: 6,
+                    end: 10,
+                },
+            );
+            link.enabled = enabled;
+            let nodes = vec![
+                semantic_node(1, None, false, SemanticTarget::View),
+                semantic_node(4, Some(1), false, SemanticTarget::View),
+                link,
+            ];
+            let presses = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let pressed_at = Arc::new(Mutex::new(Vec::new()));
+            let agent = Agent::requiring_native_hit_test(
+                target_scene(nodes),
+                Box::new(GateNative {
+                    bounds: [(4, text_bounds)].into(),
+                    text_bounds: [((4, 6, 10), link_bounds)].into(),
+                    hit: Ok(Some(hit)),
+                    hits: Arc::new(Mutex::new(Vec::new())),
+                    presses: presses.clone(),
+                    pressed_at: pressed_at.clone(),
+                    typed: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                    viewport: size(px(300.0), px(200.0)),
+                }),
+            );
+            let result = agent.press_at(at);
+            match expected {
+                Ok(()) => {
+                    result.unwrap();
+                    assert_eq!(*pressed_at.lock().unwrap(), vec![link_at]);
+                }
+                Err(message) => {
+                    assert_eq!(result.unwrap_err(), message);
+                    assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 0);
+                }
             }
         }
     }

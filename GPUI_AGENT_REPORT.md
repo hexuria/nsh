@@ -371,6 +371,27 @@ cargo +nightly fmt --all --check
 
 The GTK and Android builds/clippy and live runtime evidence above remain pre-correction evidence from the `9cc82ae5` revision. They were not rerun for either button-label owner correction. No runtime or app processes were changed.
 
+## Linux viewport correction and latest review
+
+Commit `4065f4e9` removes the wasm cfg from the web runtime keybinding catalog. Commit `5db96ef3` makes attached Linux-agent viewport sizing compensate for GTK window chrome and reject maximized, fullscreen, or unallocated windows.
+
+Linux live verification under Xvfb at `5db96ef3`: the previous revision returned 990×970 for a 1000×980 request. Initial and repeated 1000×980, shrink to 390×844, and restore to 1000×980 each matched exactly in the CLI result, following snapshot root, and PNG size. An icon-descendant click toggled the sidebar; coordinate press plus typing produced `ViewportAgent`.
+
+Maximized/fullscreen rejection was untested because Xvfb had no window manager; the accessibility-hidden icon case is also untested. Android and the full safety matrix were not rerun at `5db96ef3`. Android launch, the mode-0600 private token file, and safety evidence remain from `0ae4dc9c` plus the token-flow recheck.
+
+Recorded checks at `9e9fa892`: nightly format passed; `nsh-testing` agent library 45 passed; `nsh-gpui-agent` 9 passed; CLI tests 86 passed / 1 ignored; clippy passed for all three; Android x86_64 dev build and Java runtime compilation passed; wasm check passed. Android clippy still shows only the two expected baseline warnings in `host.rs` (`redundant_closure`, `chunks_exact_to_as_chunks`), matching `origin/main`.
+
+Hosted checks on `5db96ef3` reported only Devin Review (passed); no hosted build or test job ran.
+
+The five Devin Review findings on `5db96ef3` were fixed by the owner:
+- `69221a26` — linked-text coordinate presses are accepted by their pressable owner.
+- `5827a14f` — a hidden pressable child cannot take a parent press.
+- `ad89753f` — CLI token whitespace is rejected to avoid the Android token mismatch.
+- `8695c693` — Android deletes the private token file after reading it.
+- `9e9fa892` — Android hit testing uses `TestAgent.topmost` to honor elevation Z order.
+
+The Android Z-order hit test and token-file deletion were build-verified, but were not live-tested on the emulator. Dismissed: GTK `default_size` staleness (GTK updates it on resize; repeated/shrink/restore passed live) and Linux unsupported keys as a no-op (intentional per owner finding 5; strict path uses `validate_keys`).
+
 ## Limitations and unverified behavior
 
 - The raw Android clippy command encounters pre-existing `nsh-core` `missing_const_for_thread_local` warnings. The final checks above distinguish that baseline failure from the lint-allowed result; no unrelated core lint rewrite is included.
@@ -404,7 +425,15 @@ The GTK and Android builds/clippy and live runtime evidence above remain pre-cor
 | `80a59fe7afa831fe96dfc0393b0326663a3e9888` | Report: prior post-merge validation snapshot. |
 | `3d8d9f8071cfa4ddd6fd67c5e43fa800710b2eaf` | Testing: initial label-owner correction; its broad sibling acceptance was superseded by the following fix. |
 | `497ae5a3bcc20e1394aa1082b4562835f9d9932a` | Testing: restrict label hits to the target ancestry and reject sibling controls. |
-| This final report commit | Report: record the ancestry restriction and latest shared checks. |
+| `4065f4e9` | Owner: web runtime keybinding catalog; remove the wasm cfg. |
+| `5db96ef3` | Linux: attached-agent viewport compensates for window chrome; rejects maximized/fullscreen and unallocated windows. |
+| `69221a26` | Testing: accept linked-text coordinate presses through the pressable owner. |
+| `5827a14f` | Testing: prevent hidden pressable children from taking a parent press. |
+| `ad89753f` | CLI: reject whitespace around agent tokens. |
+| `8695c693` | Android: delete the private token file after reading it. |
+| `9e9fa892` | Android: use `TestAgent.topmost` for elevation-aware hit testing. |
+| `97f29e87` | Report: record the ancestry restriction and shared checks (previous report-only commit). |
+| This final report commit | Report: record the owner's review fixes. |
 
 Earlier report snapshot: `deb15fabc110e01e52fc8c11de7cb393dc57fd1d`; subsequent report snapshot: `80a59fe7afa831fe96dfc0393b0326663a3e9888`. The previous label-owner follow-up began at branch head `9cc82ae5b41684582247708d341ddffcda00ffc1`; this ancestry-restriction follow-up began at `98ebc9f3ed85378af350c3baf54e0a7baed69936`. Final report marker: this separate report-only commit, made last before pushing the feature branch. The report commit records the latest shared validation; no additional implementation changes are included in it.
 
