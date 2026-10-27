@@ -1816,12 +1816,11 @@ impl Screen {
     }
 
     /// The app's keyboard shortcuts (`nsh/keymap`).
-    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn keymap(&self) -> Option<&nsh_core::keymap::Keymap> {
         self.keymap.as_deref()
     }
 
-    #[cfg(all(not(target_arch = "wasm32"), feature = "agent"))]
+    #[cfg(feature = "agent")]
     pub(crate) fn semantic_keybindings(&self) -> Vec<crate::agent::SemanticKeybinding> {
         use crate::agent::SemanticKeybinding;
         let mut bindings = Vec::new();
@@ -1996,7 +1995,7 @@ impl Screen {
     }
 }
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "agent"))]
+#[cfg(feature = "agent")]
 fn menu_keybindings(
     items: &[nsh_core::desktop::MenuItem],
     path: &mut Vec<String>,
