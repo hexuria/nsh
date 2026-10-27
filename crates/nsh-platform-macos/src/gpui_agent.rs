@@ -171,7 +171,7 @@ fn schedule(key: u64, mailbox: AgentMailbox, mut jobs: VecDeque<Job>) {
         };
         for request in mailbox.take() {
             match start(&surface, &request.request) {
-                Start::Done(response) => request.reply(response),
+                Start::Done(response) => request.reply(*response),
                 Start::Act(action) => jobs.push_back(Job {
                     request,
                     action: Some(action),
@@ -203,7 +203,7 @@ fn schedule(key: u64, mailbox: AgentMailbox, mut jobs: VecDeque<Job>) {
 /// What a request starts: an answer now, an action to step, or a wait
 /// for the app to settle.
 enum Start {
-    Done(Response),
+    Done(Box<Response>),
     Act(Action),
     Settle(Duration, Reply),
 }
@@ -226,7 +226,7 @@ fn start(surface: &Rc<Surface>, request: &Request) -> Start {
         Op::Hello => {
             let mut resp = Response::ok(id);
             resp.hello = Some(hello());
-            return Start::Done(resp);
+            return Start::Done(Box::new(resp));
         }
         Op::Snapshot {
             since,
@@ -249,7 +249,7 @@ fn start(surface: &Rc<Surface>, request: &Request) -> Start {
                 resp.result = Some(serde_json::json!({
                     "compact": gpui_agent::compact_lines(&tree),
                 }));
-                return Start::Done(resp);
+                return Start::Done(Box::new(resp));
             }
             match since {
                 Some(rev) if *rev == revision(&tree) => {
@@ -262,12 +262,12 @@ fn start(surface: &Rc<Surface>, request: &Request) -> Start {
                 }
                 None => resp.tree = Some(tree),
             }
-            return Start::Done(resp);
+            return Start::Done(Box::new(resp));
         }
         Op::Revision => {
             let mut resp = Response::ok(id);
             resp.rev = snapshot(surface).rev;
-            return Start::Done(resp);
+            return Start::Done(Box::new(resp));
         }
         Op::Wait { timeout_ms } => {
             let timeout = timeout_ms.map_or(SETTLE, Duration::from_millis);
@@ -371,7 +371,7 @@ fn start(surface: &Rc<Surface>, request: &Request) -> Start {
         }
         Op::WaitUntil { .. } => Err("wait_until is served by the server".into()),
     };
-    Start::Done(response(id, result))
+    Start::Done(Box::new(response(id, result)))
 }
 
 /// An action on `target`, after the fingerprint gate. `delivery` is
@@ -384,7 +384,7 @@ fn act(
     gesture: Gesture,
 ) -> Start {
     if let Some(err) = stale(surface, target, expect_fingerprint) {
-        return Start::Done(Response::err(id, err));
+        return Start::Done(Box::new(Response::err(id, err)));
     }
     Start::Act(Action {
         target: Some(target.to_owned()),
@@ -1015,12 +1015,12 @@ fn step(surface: &Rc<Surface>, job: &mut Job) -> Option<Result<DispatchResult, S
                 });
             }
             match &action.gesture {
-                Gesture::Type(text) => synth::type_text(&window, text),
+                Gesture::Type(text) => synth::type_text(surface, &window, text),
                 Gesture::SetValue(value) => {
-                    synth::key(&window, "cmd+a");
-                    synth::type_text(&window, value);
+                    synth::key(surface, &window, "cmd+a");
+                    synth::type_text(surface, &window, value);
                 }
-                Gesture::Key(key) => synth::key(&window, key),
+                Gesture::Key(key) => synth::key(surface, &window, key),
                 _ => {}
             }
             job.phase = Phase::Settle(Settle::new(SETTLE, Reply::Action));
@@ -1577,7 +1577,7 @@ fn keybinding(surface: &Rc<Surface>, request: KeybindingRequest<'_>) -> Result<(
         window.makeKeyAndOrderFront(None);
     }
     match &binding.fire {
-        Fire::Keys(keys) => synth::key(&window, keys),
+        Fire::Keys(keys) => synth::key(surface, &window, keys),
         Fire::Menu(path) => {
             let mut menu = app.mainMenu().ok_or("the app has no menu")?;
             let (last, parents) = path.split_last().ok_or("an empty menu path")?;
