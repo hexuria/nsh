@@ -530,6 +530,10 @@ pub enum TestStep {
 pub enum SceneQuery {
     /// How many batches the app applied and how long ago the last was.
     Activity,
+    /// The app's portable semantic scene, including offscreen nodes.
+    SemanticTree,
+    /// Keyboard shortcuts from the app's keymap and visible menu.
+    Keybindings,
     /// The app's errors since the last time, taken.
     TakeErrors,
     /// The one view `selector` names for a step on `target`.
@@ -921,6 +925,30 @@ mod tests {
                 ..
             } if sets == ["app/native", "app/charts"]
         ));
+    }
+
+    #[test]
+    fn semantic_tree_scene_query_has_a_stable_wire_form() {
+        let message = ServerMessage::Step {
+            id: 1,
+            step: TestStep::Scene {
+                query: SceneQuery::SemanticTree,
+            },
+        };
+        assert_eq!(
+            serde_json::to_string(&message).unwrap(),
+            r#"{"type":"step","id":1,"step":{"step":"scene","query":{"query":"semantic_tree"}}}"#
+        );
+        let message = ServerMessage::Step {
+            id: 2,
+            step: TestStep::Scene {
+                query: SceneQuery::Keybindings,
+            },
+        };
+        assert_eq!(
+            serde_json::to_string(&message).unwrap(),
+            r#"{"type":"step","id":2,"step":{"step":"scene","query":{"query":"keybindings"}}}"#
+        );
     }
 
     /// The messages with float fields, each with fractions.
