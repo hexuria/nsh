@@ -190,8 +190,9 @@ implements `nsh_testing::agent::Native`, each call on the main thread (`window::
 makes at the input module's entry points, so it works while the window is in the background or covered (and goes
 through NSH's hit testing to web views, as real input does):
 
-- a press is the mouse's down and up at the view's middle (after a move there); back is the mouse's back button
-  (XBUTTON1), which goes back from wherever the focus is;
+- a press is the mouse's down and up at the view's middle (after a move there); a down outside a web view takes the
+  keyboard back from a focused page, as a real click does; back is the mouse's back button (XBUTTON1), which goes back
+  from wherever the focus is;
 - typing goes into the focused field key by key (`text_input::char_input`), or into the page of a focused web view
   (posted to its window as `WM_CHAR`s); Return, Backspace and select all (Ctrl+A) go through `input::key`, and keys
   without modifiers to a focused page;
