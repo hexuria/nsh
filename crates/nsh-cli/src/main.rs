@@ -32,6 +32,8 @@ mod test_web;
 mod ui;
 mod updater;
 mod web;
+mod web_agent;
+mod web_native;
 mod windows;
 
 use std::{
