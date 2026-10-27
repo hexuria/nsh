@@ -142,7 +142,9 @@ gpui-agent click unreachable-target
 
 Following snapshots retained `presses:0` and an empty input; the unreachable node remained `visible:false`. Rejected clicks did not activate the covered/disabled/unreachable controls.
 
-## Final checks
+## Initial implementation checks (pre-compatibility correction)
+
+These results record the initial implementation before compatibility-fix commit `746960da12eab1c48324e618c79a63b7c11edda6` and merge commit `fabbf035ee3e5c2cd03aad9026a265aec6afab43`. The post-merge checks are recorded below.
 
 ```text
 cargo test -p nsh-dev
@@ -248,6 +250,73 @@ Both galleries were left running side by side on the visible Desktop, through Ti
 
 The fork pull request is https://github.com/hexuria/nsh/pull/2. After the implementation push, PR checks and commit checks reported **0 passed, 0 failed, 0 pending, 0 skipped**. GitHub Actions queries for the branch, pull-request event, and implementation head each returned `total_count: 0`. There were no job logs to inspect or failures to repair. Hosted CI is **not verified**; repository Actions enablement should be checked by the owner before relying on CI. The local gates and live acceptance results above are the evidence for this prototype.
 
+## Post-merge compatibility correction checks
+
+Commit `746960da12eab1c48324e618c79a63b7c11edda6` restores ordinary `Agent::find` to the reviewed `deb15fab` behavior: selectors use `Pick`, `CanvasNode`, `Span`, and the existing match queries without requiring semantic-tree support. The correction removes the `Scene::canvas_target` trait method and `SceneQuery::CanvasTarget` wire query; the private `Screen::canvas_target` helper remains behind `canvas_node`. `SceneQuery::Bounds` again reports native bounds, while `Agent::native_bounds` retains synthetic target mapping for adapter snapshots. Strict node-ID actions retain synthetic geometry, clipping, and native-hit checks inside `actionable_point`. The new remote-scene regression rejects `SemanticTree` queries and exercises ordinary canvas find/press.
+
+The compatibility fix was merged with `origin/main` at `1849776f68ee41d73c08970fe530cf952451af13` by merge commit `fabbf035ee3e5c2cd03aad9026a265aec6afab43`; the merge completed without conflicts.
+
+Post-merge focused gates:
+
+```text
+cargo test -p nsh-testing --features agent --lib
+  36 passed, 0 failed, 0 ignored
+cargo test -p nsh-gpui-agent --features dev-agent
+  7 passed, 0 failed; 0 doc tests
+cargo test -p nsh-dev
+  7 unit tests and 6 integration tests passed; 0 doc tests
+cargo clippy -p nsh-testing --features agent --all-targets -- -D warnings
+  Finished dev profile successfully
+cargo clippy -p nsh-gpui-agent --features dev-agent --all-targets -- -D warnings
+  Finished dev profile successfully
+cargo check -p nsh-testing --no-default-features
+  Finished dev profile successfully
+cargo check -p nsh-testing --features agent --tests
+  Finished dev profile successfully; test code compiled, tests not run by this command
+cargo +nightly fmt --all --check
+  passed after the merge; not rerun for the report-only edit
+python3 .github/ci/paths.py
+  exited successfully after the merge; not rerun for the report-only edit
+git diff --check
+  passed after the merge
+```
+
+GTK 4.14 container checks, with `CARGO_TARGET_DIR=/target` and `CARGO_BUILD_JOBS=4`:
+
+```text
+docker exec -w /work -e PATH=/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+  -e CARGO_TARGET_DIR=/target -e CARGO_BUILD_JOBS=4 nsh-agent-gtk24 \
+  cargo clippy -p nsh-platform-linux -p nsh-linux-host --no-default-features \
+  --features nsh-platform-linux/dev --all-targets -- -D warnings
+  Finished dev profile successfully
+docker exec -w /work -e PATH=/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+  -e CARGO_TARGET_DIR=/target -e CARGO_BUILD_JOBS=4 nsh-agent-gtk24 \
+  cargo build -p nsh-linux-host --no-default-features
+  Finished dev profile successfully
+```
+
+Android x86_64 development build and clippy, using SDK `/home/ubuntu/Android/Sdk` and NDK `27.2.12479018`:
+
+```text
+ANDROID_HOME=/home/ubuntu/Android/Sdk ANDROID_SDK_ROOT=/home/ubuntu/Android/Sdk \
+ANDROID_NDK_HOME=/home/ubuntu/Android/Sdk/ndk/27.2.12479018 \
+CC_x86_64_linux_android=/home/ubuntu/Android/Sdk/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang \
+AR_x86_64_linux_android=/home/ubuntu/Android/Sdk/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar \
+CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=/home/ubuntu/Android/Sdk/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang \
+BINDGEN_EXTRA_CLANG_ARGS_x86_64_linux_android=--sysroot=/home/ubuntu/Android/Sdk/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/sysroot \
+cargo xtask android --dev --abi x86_64
+  built libnsh.so for x86_64 and compiled the Java runtime; output target/android/debug-dev
+
+ANDROID_HOME=/home/ubuntu/Android/Sdk ANDROID_SDK_ROOT=/home/ubuntu/Android/Sdk \
+ANDROID_NDK_HOME=/home/ubuntu/Android/Sdk/ndk/27.2.12479018 \
+RUSTFLAGS='-A clippy::missing_const_for_thread_local' cargo xtask clippy-android
+  all-features pass; no-default-features pass
+```
+
+The Android clippy allowance is limited to the existing `nsh-core` `missing_const_for_thread_local` warnings in `element/engine_context.rs:67`, `element/renderer.rs:72`, and `time.rs:54`; no unrelated core lint changes were made. Live two-reload acceptance was not repeated: its evidence remains pre-merge. The existing galleries, VNC, emulator, and scrcpy processes were left running.
+
+The outstanding `Default` convention question remains unresolved by design: do not invent `Default` implementations for `NshAgentHost` or `WorkerHandle`, since valid construction requires real resources. This still needs an owner decision or an explicit convention exception.
+
 ## Limitations and unverified behavior
 
 - The raw Android clippy command encounters pre-existing `nsh-core` `missing_const_for_thread_local` warnings. The final checks above distinguish that baseline failure from the lint-allowed result; no unrelated core lint rewrite is included.
@@ -271,11 +340,13 @@ The fork pull request is https://github.com/hexuria/nsh/pull/2. After the implem
 | `ecd1cec1` | Android: development attach, JNI/Java native hooks, lifecycle, and xtask feature wiring. |
 | `e7d98425` | CLI: pass Android opt-in/token extras and redact launch failures. |
 | `e196ca4d` | Fixtures: deterministic safety/hover fixture and Android launch guide. |
-| This final commit | Report: record verification evidence, limitations, and Windows follow-up. |
+| `746960da12eab1c48324e618c79a63b7c11edda6` | Testing: restore legacy ordinary selector queries and add a semantic-tree-independent find/press regression. |
+| `fabbf035ee3e5c2cd03aad9026a265aec6afab43` | Merge: merge updated `origin/main` without rewriting history. |
+| This final report commit | Report: record post-merge validation and compatibility/API changes. |
 
-All implementation commits are on `devin/gpui-agent-adapter`; no upstream branch was pushed. `origin/main` was refreshed before committing and had not diverged. No active pre-commit hook was configured.
+Earlier report snapshot: `deb15fabc110e01e52fc8c11de7cb393dc57fd1d`. Final report marker: this separate report-only commit, made last before pushing the feature branch. The report commit records the final validation results; no additional implementation changes are included in it.
 
-This report is committed last so it can be dropped before proposing the implementation upstream.
+The feature branch is `devin/gpui-agent-adapter`; it was based on `origin/main` at `1849776f68ee41d73c08970fe530cf952451af13`. The single branch push follows this report-only commit. No CI checks are awaited in this handoff.
 
 ## What Windows needs
 
