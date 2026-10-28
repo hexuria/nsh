@@ -287,6 +287,15 @@ impl AppView {
         self.options.borrow().host.clone()
     }
 
+    /// Hears the errors of the apps this view runs, on the main thread
+    /// after they are logged: an uncaught exception or rejection, a load
+    /// that failed, a budget the app ran over ([`AppOptions::limits`]). An
+    /// embedding app shows them in its own UI. One handler; setting another
+    /// replaces it (in development, the error panel's).
+    pub fn set_error_handler(&self, handler: impl Fn(&str) + 'static) {
+        self.surface.set_error_handler(Box::new(handler));
+    }
+
     /// The VM limits ([`AppOptions::limits`]) of the apps loaded from now
     /// on: the JS heap, the stack, the time budgets of loading and of every
     /// other call into JS, and the quotas (nodes, ops). The running app
