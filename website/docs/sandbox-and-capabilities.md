@@ -117,6 +117,8 @@ An app declares what it may reach outside its VM in `nsh.json`:
     "statusBar": true,
     "clipboard": true,
     "picker": true,
+    "window": true,
+    "homeDir": true,
     "host": ["getUserInfo", "bridge.*"],
     "openUrl": { "schemes": ["https", "mailto"] }
   }
@@ -184,6 +186,18 @@ allows them without allowing any remote page.
 
 `"picker": true` lets the app show the system's picker for photos ([`Picker`](../modules/nsh.md#picker)): the user
 picks what reaches the app.
+
+### `window`
+
+`"window": true` lets the app control its window and set the application menu ([`nsh/desktop`](../modules/nsh-desktop.md)):
+`Window`'s functions (the title, the title bar, minimizing, maximizing, full screen, the frame, the level, bringing it
+to the front, closing it) and `Menu.setApplicationMenu`. Without it they do nothing. Context menus (`Menu.popup`) show
+in the app's own view and need no capability.
+
+### `homeDir`
+
+`"homeDir": true` lets [`os.homedir()`](../modules/standard-modules.md) tell the user's home directory; without it the
+call throws a `TypeError`. The path is only a name: reading or writing there still needs `fs` grants.
 
 ### `openUrl`
 
