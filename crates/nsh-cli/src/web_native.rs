@@ -323,6 +323,72 @@ impl Native for WebNative {
         true
     }
 
+    fn focused(&self) -> Option<NodeId> {
+        // A field is a child of its view, which holds the view's id.
+        let found = self
+            .page
+            .call(
+                "Runtime.evaluate",
+                json!({
+                    "expression": "(() => { let n = document.activeElement; \
+                        while (n && n._id === undefined) n = n.parentElement; \
+                        return n ? n._id : null })()",
+                    "returnByValue": true,
+                }),
+            )
+            .ok()?;
+        found["result"]["value"]
+            .as_u64()
+            .and_then(|id| NodeId::try_from(id).ok())
+    }
+
+    fn paste(&self, content: &nsh_core::PasteEvent) -> Result<(), String> {
+        use base64::Engine as _;
+        let files: Vec<Value> = content
+            .files
+            .iter()
+            .map(|f| {
+                json!({
+                    "name": f.name,
+                    "type": f.mime,
+                    "data": base64::engine::general_purpose::STANDARD.encode(&f.data),
+                })
+            })
+            .collect();
+        let content_json = json!({
+            "text": content.text,
+            "html": content.html,
+            "uris": content.uris,
+            "files": files,
+        });
+        // The content on the paste's own clipboard data, as the browser
+        // gives a user's paste (the system's clipboard stays as it was).
+        let expression = format!(
+            "(() => {{ const c = {content_json}; const data = new DataTransfer(); \
+             if (c.text) data.setData('text/plain', c.text); \
+             if (c.html) data.setData('text/html', c.html); \
+             if (c.uris.length) data.setData('text/uri-list', c.uris.join('\\r\\n')); \
+             for (const f of c.files) data.items.add(new File(\
+               [Uint8Array.from(atob(f.data), (ch) => ch.charCodeAt(0))], f.name, {{ type: f.type }})); \
+             const target = document.activeElement ?? document.body; \
+             return target.dispatchEvent(new ClipboardEvent('paste', \
+               {{ clipboardData: data, bubbles: true, cancelable: true }})); }})()"
+        );
+        let result = self.page.call(
+            "Runtime.evaluate",
+            json!({ "expression": expression, "returnByValue": true }),
+        )?;
+        if let Some(error) = result.get("exceptionDetails") {
+            return Err(format!("the page refused the paste: {error}"));
+        }
+        // A page's event has no default action: what the browser's paste
+        // would insert where nothing prevented it, with its trusted input.
+        if result["result"]["value"].as_bool() == Some(true) && !content.text.is_empty() {
+            self.call("Input.insertText", json!({ "text": content.text }));
+        }
+        Ok(())
+    }
+
     fn right_click(&self, at: Point<Points>) -> Result<(), String> {
         self.mouse("mouseMoved", at, 0);
         for kind in ["mousePressed", "mouseReleased"] {
