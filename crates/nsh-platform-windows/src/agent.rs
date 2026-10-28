@@ -117,6 +117,13 @@ impl WindowsNative {
         }
     }
 
+    /// Why a call had no answer: the main thread's failure, taken so a
+    /// later step doesn't report it, or else the window being gone.
+    fn gone(&self) -> String {
+        self.take_failure()
+            .unwrap_or_else(|| "the window is gone".to_owned())
+    }
+
     fn click(&self, at: Point<Points>, hold: Duration, button: u8) {
         let (x, y) = (at.x.0, at.y.0);
         // A real pointer arrives before it presses (hover state).
@@ -160,7 +167,7 @@ impl Native for WindowsNative {
     fn hit_at(&self, at: Point<Points>) -> Result<Option<NodeId>, String> {
         let (x, y) = (at.x.0, at.y.0);
         self.on_main(move |surface| crate::input::pick_node(&surface.root, x, y))
-            .ok_or_else(|| "the window is gone".to_owned())
+            .ok_or_else(|| self.gone())
     }
 
     fn text_bounds(&self, text: NodeId, start: u32, end: u32) -> Option<Bounds<Points>> {
@@ -265,24 +272,24 @@ impl Native for WindowsNative {
     fn choose_menu_item(&self, path: &[String]) -> Result<(), String> {
         let path = path.to_vec();
         self.on_main(move |s| crate::chrome::choose_open_menu(s, &path))
-            .unwrap_or_else(|| Err("the window is gone".to_owned()))
+            .unwrap_or_else(|| Err(self.gone()))
     }
 
     fn close_menu(&self) -> Result<(), String> {
         self.on_main(|s| crate::chrome::close_open_menu(s))
-            .unwrap_or_else(|| Err("the window is gone".to_owned()))
+            .unwrap_or_else(|| Err(self.gone()))
     }
 
     fn hover(&self, at: Point<Points>) -> Result<(), String> {
         let (x, y) = (at.x.0, at.y.0);
         self.on_main(move |s| synth::pointer(s, PointerKind::Move, x, y, 0, 0))
-            .ok_or_else(|| "the window is gone".to_owned())
+            .ok_or_else(|| self.gone())
     }
 
     fn press_keys(&self, keys: &str) -> Result<(), String> {
         let (vk, modifiers) = windows_key(keys)?;
         self.on_main(move |s| synth::press(s, vk, modifiers))
-            .ok_or_else(|| "the window is gone".to_owned())
+            .ok_or_else(|| self.gone())
     }
 
     fn validate_keys(&self, keys: &str) -> Result<(), String> {
@@ -311,7 +318,7 @@ impl Native for WindowsNative {
             .then_some(())
             .ok_or_else(|| format!("node {id} cannot receive native focus"))
         })
-        .unwrap_or_else(|| Err("the window is gone".to_owned()))
+        .unwrap_or_else(|| Err(self.gone()))
     }
 
     fn fire_menu_keybinding(
@@ -320,7 +327,7 @@ impl Native for WindowsNative {
     ) -> Result<(), String> {
         let binding = binding.clone();
         self.on_main(move |surface| crate::chrome::fire_menu_keybinding(surface, &binding))
-            .unwrap_or_else(|| Err("the window is gone".into()))
+            .unwrap_or_else(|| Err(self.gone()))
     }
 
     fn app_focused(&self) -> bool {
@@ -359,7 +366,7 @@ impl Native for WindowsNative {
         let button = button.map(str::to_owned);
         let (x, y) = self
             .on_main(move |s| crate::system::dialog_point(s, button.as_deref()))
-            .unwrap_or_else(|| Err("the window is gone".into()))?;
+            .unwrap_or_else(|| Err(self.gone()))?;
         self.click(point(Points(x), Points(y)), CLICK, 0);
         Ok(())
     }
@@ -372,7 +379,7 @@ impl Native for WindowsNative {
         // At once: settling waits for a pending layout as for an animation
         // ([`Surface::animating`]), and the host is locked meanwhile.
         self.on_main(|s| layout_state(s.pixel_size(), s.layout_pending()))
-            .unwrap_or_else(|| Err("the window is gone".into()))
+            .unwrap_or_else(|| Err(self.gone()))
     }
 
     fn screenshot(&self) -> Result<Vec<u8>, String> {
@@ -380,12 +387,12 @@ impl Native for WindowsNative {
             layout_state(s.pixel_size(), s.layout_pending())?;
             synth::screenshot(s)
         })
-        .unwrap_or_else(|| Err("the window is gone".into()))
+        .unwrap_or_else(|| Err(self.gone()))
     }
 
     fn resize(&self, width: Points, height: Points) -> Result<(), String> {
         self.on_main(move |s| synth::resize(s, width.0, height.0))
-            .ok_or_else(|| "the window is gone".to_owned())?
+            .ok_or_else(|| self.gone())?
     }
 
     fn set_dark(&self, dark: bool) -> Result<(), String> {
@@ -393,7 +400,7 @@ impl Native for WindowsNative {
             crate::system::simulate_system_scheme(dark);
             crate::system::settings_changed(s);
         })
-        .ok_or_else(|| "the window is gone".to_owned())
+        .ok_or_else(|| self.gone())
     }
 
     fn quit(&self) {
@@ -502,6 +509,15 @@ fn mapped_bounds(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_unanswered_call_reports_why_once() {
+        let native = WindowsNative::new(0);
+        *native.failure.lock().unwrap() = Some(main_failure(mpsc::RecvTimeoutError::Timeout));
+        assert!(native.gone().contains("did not answer"));
+        assert_eq!(native.gone(), "the window is gone");
+        assert!(native.take_failure().is_none());
+    }
 
     #[test]
     fn a_late_and_a_lost_call_fail_differently() {
