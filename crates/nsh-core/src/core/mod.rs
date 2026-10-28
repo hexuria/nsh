@@ -2140,6 +2140,15 @@ impl<M: TextEngine> Core<M> {
                     self.deny("the status bar is not granted: add `\"statusBar\": true` to capabilities in nsh.json".into());
                     continue;
                 }
+                // A context menu shows in the app's own view and needs no
+                // grant; the window and the application menu do.
+                Command::Desktop(desktop)
+                    if !matches!(**desktop, crate::desktop::DesktopCommand::PopupMenu { .. })
+                        && !self.access.allows_window() =>
+                {
+                    self.deny("the window and the application menu are not granted: add `\"window\": true` to capabilities in nsh.json".into());
+                    continue;
+                }
                 _ => {}
             }
             let node = &self.nodes[key as usize];
