@@ -45,12 +45,14 @@ trusted: every limit and check is enforced in Rust, never in JS.
   never granted without it, also in apps without a declaration (`Capabilities::all` leaves it empty), and the bundler
   warns of an app importing `host` from `nsh` without it (`bundle.rs` `ungranted_host`); the host's events need none, the
   host sends them), `openUrl`
-  (`openUrl` of `nsh`: `true`, or `{ "schemes": [...] }` for the schemes listed). `nsh`'s `Storage`
+  (`openUrl` of `nsh`: `true`, or `{ "schemes": [...] }` for the schemes listed), `window` (`nsh/desktop`'s `Window`
+  and `Menu.setApplicationMenu`: the app's window and the application menu; context menus show in the app's own view
+  and need none), `homeDir` (`os.homedir()`, which throws a `TypeError` without it). `nsh`'s `Storage`
   is no capability: an app's storage holds only its own data, and the host decides where it is kept. Everything not listed is denied and unknown keys
   are build errors (`Capabilities::from_json`); a signed package's declaration is read with `from_json_lenient`, as a
   newer signer may have written it: an unknown capability is not granted, an unknown key inside one drops that
   capability or `http` grant (it may be a restriction), so unknown keys never widen access; an app without the key
-  retains unrestricted network, webview, status bar, clipboard, picker and URL opening access. Process execution, filesystem access and
+  retains unrestricted network, webview, status bar, clipboard, picker, URL opening, window and home directory access. Process execution, filesystem access and
   the host's functions always require explicit declarations, including standalone apps. The embedding app
   may grant less (`NshAppView.grantCapabilities` / `NshView.setGrantedCapabilities`, the same JSON): a request must be
   allowed by both (`Access`). The declaration travels with the bundle (`capabilities.json` next to it, written by
@@ -59,7 +61,8 @@ trusted: every limit and check is enforced in Rust, never in JS.
 - Enforced in Rust: `fetch` in the engine (`access.rs`; refused requests never reach the network, and redirects are
   followed by the engine with `follow_redirects` off for the platform, so every hop is checked — hops are issued on the
   engine thread when a hop's head arrives; a streamed request body is not sent again, so a 307 / 308 then fails); remote images, placeholders, canvas images, `Image.getSize` / `prefetch`, video sources, web view
-  sources, the status bar, the clipboard and host calls in the core (`Core::check_prop`, the commit's commands; a refused image fails with `onError`, clipboard reads resolve empty, host calls reject, the rest show nothing;
+  sources, the status bar, the clipboard, the window and the application menu (`Command::Desktop` but `PopupMenu`)
+  and host calls in the core (`Core::check_prop`, the commit's commands; a refused image fails with `onError`, clipboard reads resolve empty, host calls reject, the rest show nothing;
   each refusal is logged once, target `js`, saying which key to add); top-level web view navigations on the platforms
   (`WKNavigationDelegate decidePolicyForNavigationAction` / `WebViewClient.shouldOverrideUrlLoading` → `Native.allowsWebview`).
   `asset:` URIs are always allowed. Host checks take the host after the last `@` (`https://ok.com@evil.io` is evil.io).

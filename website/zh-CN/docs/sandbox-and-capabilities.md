@@ -107,6 +107,8 @@ release 构建（所有并非从开发服务器加载的代码）在加载时会
     "statusBar": true,
     "clipboard": true,
     "picker": true,
+    "window": true,
+    "homeDir": true,
     "host": ["getUserInfo", "bridge.*"],
     "openUrl": { "schemes": ["https", "mailto"] }
   }
@@ -168,6 +170,14 @@ web view 内的顶层导航也会在加载前由平台的导航代理检查。�
 ### `picker`
 
 `"picker": true` 允许应用显示系统的照片选择器（[`Picker`](../modules/nsh.md#picker)）：由用户决定哪些内容交给应用。
+
+### `window`
+
+`"window": true` 允许应用控制自己的窗口并设置应用菜单（[`nsh/desktop`](../modules/nsh-desktop.md)）：`Window` 的各个函数（标题、标题栏、最小化、最大化、全屏、窗口位置与大小、层级、置于最前、关闭）以及 `Menu.setApplicationMenu`。没有这项能力时它们什么也不做。右键菜单（`Menu.popup`）显示在应用自己的视图中，不需要这项能力。
+
+### `homeDir`
+
+`"homeDir": true` 允许 [`os.homedir()`](../modules/standard-modules.md) 返回用户的主目录；没有这项能力时调用会抛出 `TypeError`。这个路径只是名称：在那里读写文件仍需要 `fs` 授权。
 
 ### `openUrl`
 

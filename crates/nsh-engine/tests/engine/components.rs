@@ -1602,6 +1602,75 @@ fn menus_reach_the_platform_and_call_back() {
     )));
 }
 
+const WINDOW: &str = r#"import { mount, Text } from "nsh";
+import { Menu, Window } from "nsh/desktop";
+import os from "os";
+
+Window.setTitle("Spoofed");
+Window.minimize();
+Menu.setApplicationMenu([{ label: "File", submenu: [{ role: "quit" }] }]);
+Menu.popup([{ label: "Copy link", onSelect: () => {} }]);
+let home: string;
+try {
+  home = typeof os.homedir();
+} catch (e) {
+  home = (e as Error).name;
+}
+
+mount(() => <Text>{`home ${home}`}</Text>);
+"#;
+
+/// The window, the application menu and `os.homedir()` are granted by
+/// `window` and `homeDir`, which apps without a declaration keep; context
+/// menus, in the app's own view, need neither.
+#[test]
+fn the_window_and_the_home_directory_are_capabilities() {
+    use nsh_core::desktop::DesktopCommand;
+
+    let run = |capabilities: Option<&str>, home: &str| {
+        let environment = Environment {
+            os: nsh_engine::Os::MacOs,
+            ..Environment::default()
+        };
+        let (_engine, rx) = start_with(WINDOW, environment, capabilities, None);
+        let batches = until(&rx, |batch| shows(batch, home));
+        assert!(
+            batches.iter().any(|b| shows(b, home)),
+            "{capabilities:?}: no {home:?}"
+        );
+        batches
+            .into_iter()
+            .flat_map(|b| b.items)
+            .filter_map(|item| match item {
+                MountItem::Command {
+                    id: ROOT_ID,
+                    command: Command::Desktop(command),
+                } => Some(match *command {
+                    DesktopCommand::SetTitle(_) => "title",
+                    DesktopCommand::Minimize => "minimize",
+                    DesktopCommand::SetMenu(_) => "menu",
+                    DesktopCommand::PopupMenu { .. } => "popup",
+                    _ => "other",
+                }),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let all = ["title", "minimize", "menu", "popup"];
+    // Declared without them: refused (`os.homedir()` throws a TypeError).
+    assert_eq!(run(Some("{}"), "home TypeError"), ["popup"]);
+    // Declared with them.
+    assert_eq!(
+        run(
+            Some(r#"{ "window": true, "homeDir": true }"#),
+            "home string"
+        ),
+        all
+    );
+    // Not declared: as before.
+    assert_eq!(run(None, "home string"), all);
+}
+
 const LOCALE: &str = r#"import { mount, Text } from "nsh";
 import { fontScale, locale } from "nsh";
 

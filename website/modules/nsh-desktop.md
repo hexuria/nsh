@@ -6,7 +6,7 @@ order: 12.5
 
 # nsh/desktop
 
-`nsh/desktop` holds what only desktops have: the window and its title bar, the application menu and context menus. It works on macOS, Windows and Linux. Rust code draws a title bar of its own and closes the window with `nsh_core::element::desktop` (`set_title_bar`, `title_bar`, `close_window`) and marks draggable views with `.window_drag(true)`; TSX imports `nsh/desktop`, which holds the window's other functions and the menus too. The module can be imported on every platform, so one bundle runs everywhere: on iOS and Android its functions do nothing, and `isAvailable` tells you whether you are on a desktop.
+`nsh/desktop` holds what only desktops have: the window and its title bar, the application menu and context menus. It works on macOS, Windows and Linux. Rust code draws a title bar of its own and closes the window with `nsh_core::element::desktop` (`set_title_bar`, `title_bar`, `close_window`) and marks draggable views with `.window_drag(true)`; TSX imports `nsh/desktop`, which holds the window's other functions and the menus too. The module can be imported on every platform, so one bundle runs everywhere: on iOS and Android its functions do nothing, and `isAvailable` tells you whether you are on a desktop. An app that declares capabilities needs `"window": true` for `Window` and `Menu.setApplicationMenu` ([capabilities](../docs/sandbox-and-capabilities.md#window)); without it they do nothing. Context menus need no capability.
 
 ```rust tabs
 use nsh_core::{

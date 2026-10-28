@@ -17,6 +17,8 @@
 //!   },
 //!   "webview": { "hosts": ["*.example.com"] },
 //!   "statusBar": true,
+//!   "window": true,
+//!   "homeDir": true,
 //!   "host": ["getUserInfo", "bridge.*"],
 //!   "openUrl": { "schemes": ["https", "mailto"] }
 //! }
@@ -37,10 +39,14 @@
 //! the functions of the embedding app `nsh/host` may call: names (1 to 128
 //! of `[A-Za-z0-9_.:-]`, without `..`; the core refuses calls of any other
 //! name), or prefixes of them ending in `*` (`true`: all of them); the
-//! host's events need no grant, the host sends them. An app without
-//! `"capabilities"` (a standalone app, its developer's own) retains
-//! unrestricted HTTP, web views, the status bar, the clipboard, the picker
-//! and opening URLs; raw sockets, processes, the filesystem and the host's
+//! host's events need no grant, the host sends them. `window` lets the app
+//! control its window and set the application menu (`nsh/desktop`'s
+//! `Window` and `Menu.setApplicationMenu`; context menus, shown in the
+//! app's own view, need none); `homeDir` lets `os.homedir()` tell the
+//! user's home directory. An app without `"capabilities"` (a standalone
+//! app, its developer's own) retains unrestricted HTTP, web views, the
+//! status bar, the clipboard, the picker, opening URLs, the window and the
+//! home directory; raw sockets, processes, the filesystem and the host's
 //! functions always require an explicit declaration.
 
 //! A `network.http` rule names a `host` (a pattern, as in `hosts`); every
@@ -361,6 +367,11 @@ pub struct Capabilities {
     /// The app may show the system's picker (`nsh/picker`): the files the
     /// user picks in it reach the app.
     pub picker: bool,
+    /// The app may control its window and set the application menu
+    /// (`nsh/desktop`'s `Window`, `Menu.setApplicationMenu`).
+    pub window: bool,
+    /// `os.homedir()` may tell the user's home directory.
+    pub home_dir: bool,
     /// The functions of the embedding app `nsh/host` may call: names, or
     /// prefixes ending in `*` (`"*"`: all); empty: none, also for apps
     /// without a declaration ([`Capabilities::all`]).
@@ -460,6 +471,8 @@ impl Capabilities {
             status_bar: true,
             clipboard: true,
             picker: true,
+            window: true,
+            home_dir: true,
             open_url: Some(OpenUrlGrant::default()),
             // The host's functions are never granted without a declaration.
             ..Self::default()
@@ -487,12 +500,14 @@ impl Capabilities {
     /// `dropped`: lenient, recording what unknown keys dropped; `None`:
     /// strict.
     fn parse(value: &Value, mut dropped: Option<&mut Vec<String>>) -> Result<Self, String> {
-        const KNOWN: [&str; 9] = [
+        const KNOWN: [&str; 11] = [
             "network",
             "webview",
             "statusBar",
             "clipboard",
             "picker",
+            "window",
+            "homeDir",
             "openUrl",
             "process",
             "fs",
@@ -598,6 +613,16 @@ impl Capabilities {
             caps.picker = picker
                 .as_bool()
                 .ok_or("capabilities.picker must be a boolean")?;
+        }
+        if let Some(window) = obj.get("window") {
+            caps.window = window
+                .as_bool()
+                .ok_or("capabilities.window must be a boolean")?;
+        }
+        if let Some(home_dir) = obj.get("homeDir") {
+            caps.home_dir = home_dir
+                .as_bool()
+                .ok_or("capabilities.homeDir must be a boolean")?;
         }
         if let Some(open_url) = obj.get("openUrl") {
             match open_url {
@@ -774,6 +799,12 @@ impl Capabilities {
         obj.insert("clipboard".into(), self.clipboard.into());
         obj.insert("picker".into(), self.picker.into());
         // Only when granted: older runtimes read what newer signers write.
+        if self.window {
+            obj.insert("window".into(), true.into());
+        }
+        if self.home_dir {
+            obj.insert("homeDir".into(), true.into());
+        }
         if !self.host.is_empty() {
             obj.insert("host".into(), self.host.clone().into());
         }
@@ -1284,6 +1315,17 @@ impl Access {
     /// Whether the app may show the system's picker (`nsh/picker`).
     pub fn allows_picker(&self) -> bool {
         self.each(|c| c.picker)
+    }
+
+    /// Whether the app may control its window and set the application
+    /// menu (`nsh/desktop`).
+    pub fn allows_window(&self) -> bool {
+        self.each(|c| c.window)
+    }
+
+    /// Whether `os.homedir()` may tell the user's home directory.
+    pub fn allows_home_dir(&self) -> bool {
+        self.each(|c| c.home_dir)
     }
 
     /// Whether `nsh/host` may call the embedding app's function `name`.
@@ -1800,8 +1842,39 @@ mod tests {
         assert!(!access.allows_status_bar());
         assert!(!access.allows_clipboard());
         assert!(!access.allows_picker());
+        assert!(!access.allows_window());
+        assert!(!access.allows_home_dir());
         assert!(!access.allows_host("getUserInfo"));
         assert!(Access::all().is_unrestricted());
+    }
+
+    #[test]
+    fn the_window_and_the_home_directory_are_capabilities() {
+        // Undeclared: granted, as they always were.
+        let all = Access::all();
+        assert!(all.allows_window() && all.allows_home_dir());
+        // Declared: only when listed, and the embedder may take them away.
+        let access = |declared: &str, granted: Option<&str>| Access {
+            declared: caps(declared),
+            granted: granted.map(caps),
+        };
+        let listed = access(r#"{ "window": true, "homeDir": true }"#, None);
+        assert!(listed.allows_window() && listed.allows_home_dir());
+        let window = access(r#"{ "window": true }"#, None);
+        assert!(window.allows_window() && !window.allows_home_dir());
+        let narrowed = access(
+            r#"{ "window": true, "homeDir": true }"#,
+            Some(r#"{ "homeDir": true }"#),
+        );
+        assert!(!narrowed.allows_window() && narrowed.allows_home_dir());
+        assert!(!access(r#"{ "window": false }"#, None).allows_window());
+        assert!(Capabilities::from_json(&serde_json::json!({ "window": "yes" })).is_err());
+        assert!(Capabilities::from_json(&serde_json::json!({ "homeDir": 1 })).is_err());
+        // Written only when granted, read back the same.
+        let both = caps(r#"{ "window": true, "homeDir": true }"#);
+        assert_eq!(Capabilities::from_json(&both.to_json()).unwrap(), both);
+        let none = Capabilities::default().to_json();
+        assert!(none.get("window").is_none() && none.get("homeDir").is_none());
     }
 
     #[test]

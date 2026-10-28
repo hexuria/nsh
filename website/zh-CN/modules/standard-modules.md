@@ -58,7 +58,7 @@ Rust 代码用 Rust 标准库和 crates.io 完成同样的工作，作为应用�
 
 ## 系统元数据与日志
 
-`os.platform(): string` 和 `os.arch(): string` 返回实际原生宿主的系统与架构，`process.platform` 和 `process.arch` 的值与之相同。它们是 Rust 的 `std::env::consts::OS` 和 `ARCH` 的名称，与 gpui-shell 一致：系统为 `"macos"`、`"windows"`、`"linux"`、`"ios"`、`"android"`，架构为 `"aarch64"`、`"x86_64"`，应用直接与它们比较（`process.platform === "macos"`）。`os.EOL: string` 是宿主的换行符。`os.homedir(): string` 返回配置为绝对路径的宿主主目录，在缺少此配置时抛出错误。返回目录路径只是元数据，文件操作仍需要 `fs.read` / `fs.write` 授权。
+`os.platform(): string` 和 `os.arch(): string` 返回实际原生宿主的系统与架构，`process.platform` 和 `process.arch` 的值与之相同。它们是 Rust 的 `std::env::consts::OS` 和 `ARCH` 的名称，与 gpui-shell 一致：系统为 `"macos"`、`"windows"`、`"linux"`、`"ios"`、`"android"`，架构为 `"aarch64"`、`"x86_64"`，应用直接与它们比较（`process.platform === "macos"`）。`os.EOL: string` 是宿主的换行符。`os.homedir(): string` 返回配置为绝对路径的宿主主目录，在缺少此配置时抛出错误；声明了能力的应用需要 `"homeDir": true`（[能力](../docs/sandbox-and-capabilities.md#homedir)），否则会得到 `TypeError`。返回目录路径只是元数据，文件操作仍需要 `fs.read` / `fs.write` 授权。
 
 浏览器应用读取的 `process.env` 是空对象，调用 `os.homedir()` 会收到错误；主目录路径与环境变量属于原生宿主。
 
