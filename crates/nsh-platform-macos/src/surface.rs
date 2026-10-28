@@ -167,7 +167,8 @@ define_class!(
     }
 );
 
-/// Called when the app reports a fatal error (development hosts show it).
+/// Called when the app reports an error (the development panel or the
+/// embedding app shows it).
 pub(crate) type ErrorHandler = Box<dyn Fn(&str)>;
 
 /// One engine and its views.
@@ -407,8 +408,8 @@ impl Surface {
         self.control(|c| c.dispatch_event(id, kind, payload));
     }
 
-    /// Shows fatal app errors with `f` (development hosts).
-    #[cfg(feature = "dev")]
+    /// Hands the app's errors to `f` (the development panel, or the
+    /// embedding app through [`crate::AppView::set_error_handler`]).
     pub(crate) fn set_error_handler(&self, f: ErrorHandler) {
         *self.on_error.borrow_mut() = Some(f);
     }
