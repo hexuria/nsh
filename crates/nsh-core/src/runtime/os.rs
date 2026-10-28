@@ -1,8 +1,9 @@
-//! Pure OS metadata. Returned directory paths confer no filesystem access.
+//! OS metadata. Returned directory paths confer no filesystem access; the
+//! home directory is told only to apps granted `capabilities.homeDir`.
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
 
-use crate::element::{JsError, codes, module};
+use crate::element::{JsError, System, codes, module};
 
 /// Native OS metadata. Returned paths confer no filesystem access.
 #[module]
@@ -29,10 +30,16 @@ impl Os {
         std::env::consts::ARCH.to_owned()
     }
 
-    /// The configured absolute native home directory. This grants no file
-    /// access. Throws `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM` where the
-    /// platform has none.
-    pub(crate) fn homedir() -> Result<String, JsError> {
+    /// The configured absolute native home directory (capabilities.homeDir;
+    /// throws without it). This grants no file access. Throws
+    /// `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM` where the platform has none.
+    pub(crate) fn homedir(sys: System) -> Result<String, JsError> {
+        if !sys.access.allows_home_dir() {
+            return Err(JsError::Type(
+                "os.homedir() is not granted; set capabilities.homeDir to true in the manifest"
+                    .into(),
+            ));
+        }
         let none = || {
             JsError::Error("os.homedir(): no absolute native home directory is configured".into())
                 .with_code(codes::UNAVAILABLE)
@@ -59,16 +66,43 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
+    use crate::access::{Access, Capabilities};
+
+    fn sys(declared: Capabilities) -> System {
+        System::new(
+            std::sync::Arc::new(Access {
+                declared,
+                granted: None,
+            }),
+            None,
+            Default::default(),
+            Default::default(),
+        )
+    }
 
     #[test]
     fn metadata_matches_native_values_without_surface_context() {
         assert_eq!(Os::platform(), std::env::consts::OS);
         assert_eq!(Os::arch(), std::env::consts::ARCH);
         assert_eq!(Os::EOL, if cfg!(windows) { "\r\n" } else { "\n" });
-        if let Ok(home) = Os::homedir() {
+        if let Ok(home) = Os::homedir(sys(Capabilities::all())) {
             assert!(PathBuf::from(home).is_absolute());
         }
     }
+
+    #[test]
+    fn the_home_directory_is_a_capability() {
+        let Err(JsError::Type(message)) = Os::homedir(sys(Default::default())) else {
+            panic!("os.homedir() without capabilities.homeDir");
+        };
+        assert!(message.contains("capabilities.homeDir"), "{message}");
+        let granted = Capabilities {
+            home_dir: true,
+            ..Default::default()
+        };
+        assert!(!matches!(Os::homedir(sys(granted)), Err(JsError::Type(_))));
+    }
+
     #[test]
     fn registry_generates_os_signatures_from_typed_functions() {
         let registry = crate::runtime::registries()

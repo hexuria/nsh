@@ -46,6 +46,8 @@
         "https"
       ]
     },
-    "picker": true
+    "picker": true,
+    "window": true,
+    "homeDir": true
   }
 }
