@@ -12,6 +12,7 @@ use std::{sync::Arc, time::Duration};
 use nsh_core::{
     NodeId,
     geometry::{Bounds, Point, Points, Size, point},
+    keymap::shifted,
 };
 use nsh_dev::{
     DevServer,
@@ -101,7 +102,7 @@ fn dom_key(key: nsh_core::keymap::Key, shift: bool) -> Option<(String, String)> 
                 '\'' => "Quote".into(),
                 _ => return None,
             };
-            let typed = if shift { c.to_ascii_uppercase() } else { c };
+            let typed = if shift { shifted(c) } else { c };
             Some((typed.to_string(), code))
         }
     }
@@ -155,7 +156,15 @@ impl WebNative {
     /// A key's press and release. `commands` are the editing commands the
     /// key runs on macOS, where the browser leaves them to the system's
     /// key bindings (none reach it headless), as Playwright sends them.
-    fn press_key(&self, key: &str, code: &str, vk: u32, modifiers: u32, commands: &[&str]) {
+    fn press_key(
+        &self,
+        key: &str,
+        code: &str,
+        vk: u32,
+        modifiers: u32,
+        commands: &[&str],
+        text: Option<(&str, &str)>,
+    ) {
         let commands: &[&str] = if cfg!(target_os = "macos") {
             commands
         } else {
@@ -176,6 +185,11 @@ impl WebNative {
             down["text"] = "\r".into();
             down["unmodifiedText"] = "\r".into();
         }
+        if let Some((typed, unmodified)) = text {
+            down["type"] = "keyDown".into();
+            down["text"] = typed.into();
+            down["unmodifiedText"] = unmodified.into();
+        }
         if !commands.is_empty() {
             down["commands"] = json!(commands);
         }
@@ -185,21 +199,14 @@ impl WebNative {
 }
 
 /// `keys` (a keystroke as `nsh/keymap` names it, `mod` the browser's
-/// platform's command key) and the DOM key it is sent as: `None` for a
-/// character typed without a modifier. An error for what a browser's
-/// keyboard has no key for.
-fn browser_keys(
-    keys: &str,
-) -> Result<(nsh_core::keymap::Keystroke, Option<(String, String)>), String> {
+/// platform's command key) and the DOM key it is sent as. An error for
+/// what a browser's keyboard has no key for.
+fn browser_keys(keys: &str) -> Result<(nsh_core::keymap::Keystroke, (String, String)), String> {
     let stroke = nsh_core::keymap::Keystroke::parse_with(keys, cfg!(target_os = "macos"))
         .map_err(|e| e.to_string())?;
-    let m = stroke.modifiers;
-    if !(m.ctrl || m.alt || m.cmd) && matches!(stroke.key, nsh_core::keymap::Key::Char(_)) {
-        return Ok((stroke, None));
-    }
-    let dom = dom_key(stroke.key, m.shift)
+    let dom = dom_key(stroke.key, stroke.modifiers.shift)
         .ok_or_else(|| format!("{keys:?} has no key on a browser's keyboard"))?;
-    Ok((stroke, Some(dom)))
+    Ok((stroke, dom))
 }
 
 impl Native for WebNative {
@@ -345,16 +352,8 @@ impl Native for WebNative {
     }
 
     fn press_keys(&self, keys: &str) -> Result<(), String> {
-        let (stroke, dom) = browser_keys(keys)?;
+        let (stroke, (key, code)) = browser_keys(keys)?;
         let m = stroke.modifiers;
-        let Some((key, code)) = dom else {
-            // A character's key types it.
-            if let nsh_core::keymap::Key::Char(c) = stroke.key {
-                let typed = if m.shift { c.to_ascii_uppercase() } else { c };
-                self.type_text(&typed.to_string());
-            }
-            return Ok(());
-        };
         let vk = u32::from(stroke.key.virtual_key().unwrap_or(0));
         let mut modifiers = 0;
         for (on, bit) in [
@@ -367,7 +366,20 @@ impl Native for WebNative {
                 modifiers |= bit;
             }
         }
-        self.press_key(&key, &code, vk, modifiers, &[]);
+        // A character's key types it, with its key's code and modifiers,
+        // so a shortcut can take it before a focused input does.
+        let unmodified = match stroke.key {
+            nsh_core::keymap::Key::Char(c) if !(m.ctrl || m.alt || m.cmd) => Some(c.to_string()),
+            _ => None,
+        };
+        self.press_key(
+            &key,
+            &code,
+            vk,
+            modifiers,
+            &[],
+            unmodified.as_deref().map(|c| (key.as_str(), c)),
+        );
         Ok(())
     }
 
@@ -387,8 +399,10 @@ impl Native for WebNative {
 
     fn key(&self, key: Key) {
         match key {
-            Key::Return => self.press_key("Enter", "Enter", 13, 0, &[]),
-            Key::Backspace => self.press_key("Backspace", "Backspace", 8, 0, &["deleteBackward"]),
+            Key::Return => self.press_key("Enter", "Enter", 13, 0, &[], None),
+            Key::Backspace => {
+                self.press_key("Backspace", "Backspace", 8, 0, &["deleteBackward"], None)
+            }
             Key::SelectAll => {
                 // The platform's command key: Command on macOS, else Ctrl.
                 let (name, code, vk, bit) = if cfg!(target_os = "macos") {
@@ -406,7 +420,7 @@ impl Native for WebNative {
                     })
                 };
                 self.call("Input.dispatchKeyEvent", modifier("rawKeyDown"));
-                self.press_key("a", "KeyA", 65, bit, &["selectAll"]);
+                self.press_key("a", "KeyA", 65, bit, &["selectAll"], None);
                 self.call("Input.dispatchKeyEvent", modifier("keyUp"));
             }
         }
@@ -482,13 +496,17 @@ mod tests {
     use super::browser_keys;
 
     #[test]
-    fn keys_a_browser_has_are_sent_as_its_keys_and_characters_typed() {
+    fn keys_a_browser_has_are_sent_as_its_keys() {
         let (_, dom) = browser_keys("mod+b").unwrap();
-        assert_eq!(dom, Some(("b".into(), "KeyB".into())));
+        assert_eq!(dom, ("b".into(), "KeyB".into()));
         let (_, dom) = browser_keys("shift+enter").unwrap();
-        assert_eq!(dom, Some(("Enter".into(), "Enter".into())));
-        // A character without a modifier is typed, not pressed.
-        assert_eq!(browser_keys("x").unwrap().1, None);
+        assert_eq!(dom, ("Enter".into(), "Enter".into()));
+        // A character is pressed on its key, shifted as the US layout does.
+        assert_eq!(browser_keys("x").unwrap().1, ("x".into(), "KeyX".into()));
+        assert_eq!(
+            browser_keys("shift+8").unwrap().1,
+            ("*".into(), "Digit8".into())
+        );
         // No key of a browser's keyboard makes it.
         assert!(browser_keys("ctrl+é").is_err());
         assert!(browser_keys("nonsense+++").is_err());
