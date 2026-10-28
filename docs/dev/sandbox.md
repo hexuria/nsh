@@ -45,12 +45,14 @@ trusted: every limit and check is enforced in Rust, never in JS.
   never granted without it, also in apps without a declaration (`Capabilities::all` leaves it empty), and the bundler
   warns of an app importing `host` from `nsh` without it (`bundle.rs` `ungranted_host`); the host's events need none, the
   host sends them), `openUrl`
-  (`openUrl` of `nsh`: `true`, or `{ "schemes": [...] }` for the schemes listed). `nsh`'s `Storage`
+  (`openUrl` of `nsh`: `true`, or `{ "schemes": [...] }` for the schemes listed), `window` (`nsh/desktop`'s `Window`
+  and `Menu.setApplicationMenu`: the app's window and the application menu; context menus show in the app's own view
+  and need none), `homeDir` (`os.homedir()`, which throws a `TypeError` without it). `nsh`'s `Storage`
   is no capability: an app's storage holds only its own data, and the host decides where it is kept. Everything not listed is denied and unknown keys
   are build errors (`Capabilities::from_json`); a signed package's declaration is read with `from_json_lenient`, as a
   newer signer may have written it: an unknown capability is not granted, an unknown key inside one drops that
   capability or `http` grant (it may be a restriction), so unknown keys never widen access; an app without the key
-  retains unrestricted network, webview, status bar, clipboard, picker and URL opening access. Process execution, filesystem access and
+  retains unrestricted network, webview, status bar, clipboard, picker, URL opening, window and home directory access. Process execution, filesystem access and
   the host's functions always require explicit declarations, including standalone apps. The embedding app
   may grant less (`NshAppView.grantCapabilities` / `NshView.setGrantedCapabilities`, the same JSON): a request must be
   allowed by both (`Access`). The declaration travels with the bundle (`capabilities.json` next to it, written by
@@ -59,7 +61,8 @@ trusted: every limit and check is enforced in Rust, never in JS.
 - Enforced in Rust: `fetch` in the engine (`access.rs`; refused requests never reach the network, and redirects are
   followed by the engine with `follow_redirects` off for the platform, so every hop is checked — hops are issued on the
   engine thread when a hop's head arrives; a streamed request body is not sent again, so a 307 / 308 then fails); remote images, placeholders, canvas images, `Image.getSize` / `prefetch`, video sources, web view
-  sources, the status bar, the clipboard, the picker and host calls in the core (`Core::check_prop`, the commit's commands and actions;
+  sources, the status bar, the clipboard, the picker, the window and the application menu (`Command::Desktop` but `PopupMenu`)
+  and host calls in the core (`Core::check_prop`, the commit's commands and actions;
   each refusal is logged once, target `js`, saying which key to add); top-level web view navigations on the platforms
   (`WKNavigationDelegate decidePolicyForNavigationAction` / `WebViewClient.shouldOverrideUrlLoading` → `Native.allowsWebview`).
 - What a refusal does: every call JS makes fails with `JsError::access_denied` (`ERR_ACCESS_DENIED`, `permission` the
@@ -72,7 +75,8 @@ trusted: every limit and check is enforced in Rust, never in JS.
   carries `code`, `permission` `"network"` and `resource` the request's or the redirect's URL (`access::Refused`,
   `Host::fetch_refused`). A refused source (image, placeholder, video, web view `src` or `html`) shows nothing and
   reports `onError` with `code` `ERR_ACCESS_DENIED`, as the platforms report a refused navigation. What has no caller
-  to answer (the status bar, a canvas image) only logs. Rust components' calls keep their Rust types: the core's
+  to answer (the status bar, the window and the application menu, a canvas image) only logs. A refused `os.homedir()`
+  throws a `TypeError`. Rust components' calls keep their Rust types: the core's
   checks answer them as the system would with nothing there (an empty clipboard, no picked files, `open_url` `false`)
   and an `Err` with the message for `fetch`.
   `asset:` URIs are always allowed. Host checks take the host after the last `@` (`https://ok.com@evil.io` is evil.io).
