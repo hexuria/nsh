@@ -729,6 +729,10 @@ mod tests {
             Ok(false)
         }
 
+        fn span_style(&self, _: &str) -> Result<nsh_dev::protocol::SpanStyle, String> {
+            Err("unused test scene method".into())
+        }
+
         fn input_id(&self, _: &str) -> Result<Option<NodeId>, String> {
             Ok(None)
         }
