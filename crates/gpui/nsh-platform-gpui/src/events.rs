@@ -318,12 +318,17 @@ pub(crate) fn install(
             modifiers: crate::keys::modifiers(&e.modifiers),
             time: s.clock(),
         };
-        if precise {
-            crate::input::touchpad(&s, event, gesture_phase(e.touch_phase));
+        let took = if precise {
+            crate::input::touchpad(&s, event, gesture_phase(e.touch_phase))
         } else {
-            crate::input::wheel(&s, event);
+            crate::input::wheel(&s, event)
+        };
+        // A wheel no view here can use goes on to what is behind the
+        // surface: an app embedded in a scrolling page (an inline card in a
+        // chat) passes it to the page instead of swallowing it.
+        if took {
+            cx.stop_propagation();
         }
-        cx.stop_propagation();
         crate::rt::flush(cx);
     });
 
