@@ -159,6 +159,13 @@ pub struct AppOptions {
     /// their calls and posts ([`AppView::host`]). One for every app the view
     /// loads; a new one by default.
     pub host: nsh_engine::HostChannel,
+    /// Whether [`run_app`] brings the app to the front and
+    /// [`open_app_window`] makes its window the key window: `true` by
+    /// default. `false` starts the app in the background, leaving the
+    /// focus with the app that has it (a test instance launched while a
+    /// person works); the window still shows, and takes the focus when
+    /// clicked.
+    pub activate: bool,
 }
 
 impl Default for AppOptions {
@@ -178,6 +185,7 @@ impl Default for AppOptions {
             storage: None,
             context: Default::default(),
             host: nsh_engine::HostChannel::default(),
+            activate: true,
         }
     }
 }
@@ -814,6 +822,26 @@ fn initial_environment() -> Environment {
     }
 }
 
+/// The options of the window [`open_app_window`] opens at `bounds`.
+fn window_options(options: &AppOptions, bounds: gpui::Bounds<gpui::Pixels>) -> gpui::WindowOptions {
+    gpui::WindowOptions {
+        window_bounds: Some(gpui::WindowBounds::Windowed(bounds)),
+        titlebar: Some(crate::titlebar_options(&options.title)),
+        app_id: Some(options.app_id.clone()),
+        // Linux: the window manager's decorations until the app hides the
+        // title bar (`crate::chrome`).
+        window_decorations: Some(gpui::WindowDecorations::Server),
+        // GPUI draws unfocused windows at 30 fps by default: animations
+        // run at the display's rate wherever the keyboard is, as in the
+        // other backends.
+        inactive_frame_interval: None,
+        // Made the key window only when the app is activated: an app
+        // started in the background leaves the focus where it is.
+        focus: options.activate,
+        ..Default::default()
+    }
+}
+
 /// Opens a window showing `source` in an [`AppView`] (in a running GPUI
 /// app).
 pub fn open_app_window(
@@ -826,19 +854,7 @@ pub fn open_app_window(
         gpui::px(options.size.1 as f32),
     );
     let bounds = gpui::Bounds::centered(None, size, cx);
-    let window_options = gpui::WindowOptions {
-        window_bounds: Some(gpui::WindowBounds::Windowed(bounds)),
-        titlebar: Some(crate::titlebar_options(&options.title)),
-        app_id: Some(options.app_id.clone()),
-        // Linux: the window manager's decorations until the app hides the
-        // title bar (`crate::chrome`).
-        window_decorations: Some(gpui::WindowDecorations::Server),
-        // GPUI draws unfocused windows at 30 fps by default: animations
-        // run at the display's rate wherever the keyboard is, as in the
-        // other backends.
-        inactive_frame_interval: None,
-        ..Default::default()
-    };
+    let window_options = window_options(&options, bounds);
     let handle = cx.open_window(window_options, move |window, cx| {
         let view: Entity<AppView> = cx.new(|cx| AppView::new(options, window, cx));
         view.read(cx).own_window(window, cx);
@@ -862,6 +878,7 @@ pub fn open_app_window(
 pub fn run_app(source: AppSource, options: AppOptions) -> std::process::ExitCode {
     let ok = Rc::new(std::cell::Cell::new(true));
     let result = ok.clone();
+    let activate = options.activate;
     gpui_platform::application().run(move |cx| {
         cx.on_window_closed(|cx, _| {
             if cx.windows().is_empty() {
@@ -875,11 +892,45 @@ pub fn run_app(source: AppSource, options: AppOptions) -> std::process::ExitCode
             cx.quit();
             return;
         }
-        cx.activate(true);
+        if activate {
+            cx.activate(true);
+        }
     });
     if result.get() {
         std::process::ExitCode::SUCCESS
     } else {
         std::process::ExitCode::FAILURE
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AppOptions, window_options};
+
+    fn bounds() -> gpui::Bounds<gpui::Pixels> {
+        gpui::Bounds::new(
+            gpui::point(gpui::px(0.), gpui::px(0.)),
+            gpui::size(gpui::px(800.), gpui::px(600.)),
+        )
+    }
+
+    #[test]
+    fn activates_by_default() {
+        let options = AppOptions::default();
+        assert!(options.activate);
+        let window = window_options(&options, bounds());
+        assert!(window.focus);
+        assert!(window.show);
+    }
+
+    #[test]
+    fn opens_without_focus_when_not_activating() {
+        let options = AppOptions {
+            activate: false,
+            ..Default::default()
+        };
+        let window = window_options(&options, bounds());
+        assert!(!window.focus);
+        assert!(window.show);
     }
 }
