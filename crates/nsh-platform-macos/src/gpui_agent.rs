@@ -433,7 +433,7 @@ fn snapshot(surface: &Rc<Surface>) -> UiTree {
 }
 
 /// The roles a user operates.
-const INTERACTIVE: [&str; 13] = [
+const INTERACTIVE: [&str; 14] = [
     "button",
     "link",
     "textfield",
@@ -447,6 +447,7 @@ const INTERACTIVE: [&str; 13] = [
     "tab",
     "option",
     "spinbutton",
+    "treeitem",
 ];
 
 /// `snapshot {format: "compact"}`'s tree: the interactive nodes that
@@ -589,7 +590,8 @@ fn measure(surface: &Surface, view: &NshView, window: &NSWindow, node: &mut UiNo
 fn role_name(role: Ax) -> &'static str {
     match role {
         Ax::Generic => "generic",
-        Ax::Button => "button",
+        // A button that stays on or off: ARIA's button with `aria-pressed`.
+        Ax::Button | Ax::Toggle => "button",
         Ax::Link => "link",
         Ax::Text => "text",
         Ax::Image => "image",
@@ -618,6 +620,9 @@ fn role_name(role: Ax) -> &'static str {
         Ax::Status => "status",
         Ax::Timer => "timer",
         Ax::Option => "option",
+        Ax::Region => "region",
+        Ax::Navigation => "navigation",
+        Ax::TreeItem => "treeitem",
     }
 }
 
