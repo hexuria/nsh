@@ -96,6 +96,11 @@ const TEST_FRAME: f64 = 1.0 / 60.0;
 /// leaves the rest to input, animations and Core Animation's commit.
 const FRAME_BATCHES: std::time::Duration = std::time::Duration::from_millis(4);
 
+/// How much of a display frame's main-thread time content about to show
+/// may be drawn in ([`crate::mount::Mounter::draw_ahead`]), counting the
+/// frame's other work: half of a 120 Hz frame.
+const DRAW_AHEAD: std::time::Duration = std::time::Duration::from_millis(4);
+
 thread_local! {
     /// The surfaces of this (main) thread, by key: the sink wakes one by
     /// its key, as dispatched closures must be `Send`.
@@ -1084,6 +1089,7 @@ impl Surface {
             || !self.queued.borrow().is_empty()
             || self.anim.borrow().animating()
             || !self.frame_callbacks.borrow().is_empty()
+            || self.mounter.try_borrow().is_ok_and(|m| m.wants_ahead())
     }
 
     /// Whether a batch from the engine is waiting to reach the main thread.
@@ -1399,6 +1405,7 @@ impl Surface {
     }
 
     fn tick(self: &Rc<Self>, now: f64) {
+        let start = Instant::now();
         let applied = self.apply_queued(FRAME_BATCHES);
         if self.anim.borrow().animating() {
             self.anim.borrow_mut().tick(now);
@@ -1435,6 +1442,12 @@ impl Surface {
         // A pad hosted above its input's transforms takes the place those
         // transforms show, so it follows them this frame.
         crate::text_input::sync(self);
+        // What is left of the frame draws content about to show.
+        if let Some(left) = DRAW_AHEAD.checked_sub(start.elapsed())
+            && let Ok(mounter) = self.mounter.try_borrow()
+        {
+            mounter.draw_ahead(left);
+        }
     }
 
     /// Holds the app's frames and timers, or lets them run again
