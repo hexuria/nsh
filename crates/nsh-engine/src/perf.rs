@@ -181,6 +181,9 @@ struct Inner {
     /// line names ([`PerfMonitor::vsync`]).
     parts: Vec<(&'static str, Duration)>,
     mounted: Vec<(&'static str, u32)>,
+    /// The open frame's drawing of view contents by kind (`canvas`,
+    /// `text`, …): the time, how many views, and the slowest one.
+    paints: Vec<Paint>,
     /// What last woke the engine (an event and its view), for the engine's
     /// own jank lines ([`PerfMonitor::record_commit`]).
     cause: Option<String>,
@@ -205,6 +208,7 @@ impl Default for PerfMonitor {
                 process: ProcessSample::default(),
                 parts: Vec::new(),
                 mounted: Vec::new(),
+                paints: Vec::new(),
                 cause: None,
                 last_commit: None,
             }),
@@ -216,17 +220,29 @@ impl Default for PerfMonitor {
 /// start over at it.
 pub const RESET_MARK: &str = "---- cleared ----";
 
+/// The drawing of one kind of view content in a frame
+/// ([`PerfMonitor::record_paint`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Paint {
+    kind: &'static str,
+    total: Duration,
+    count: u32,
+    max: Duration,
+}
+
 fn ms_f(d: Duration) -> f64 {
     d.as_secs_f64() * 1000.0
 }
 
 /// One jank line: the frame's cost against its budget, the work by kind,
-/// the busiest mount item kinds, and the last engine commit and its cause.
+/// the busiest mount item kinds, the drawing of view contents (part of
+/// the work it happened in), and the last engine commit and its cause.
 fn jank_line(
     cost: Duration,
     budget: Duration,
     parts: &[(&'static str, Duration)],
     mut mounted: Vec<(&'static str, u32)>,
+    paints: &[Paint],
     commit: Option<&CommitTiming>,
     cause: Option<&str>,
 ) -> String {
@@ -243,6 +259,15 @@ fn jank_line(
             .map(|(k, n)| format!("{k}×{n}"))
             .collect();
         let _ = write!(line, " · mounted {}", list.join(" "));
+    }
+    if !paints.is_empty() {
+        line.push_str(" · paint");
+        for p in paints {
+            let _ = write!(line, " {} {:.1}ms ×{}", p.kind, ms_f(p.total), p.count);
+            if p.count > 1 {
+                let _ = write!(line, " (max {:.1}ms)", ms_f(p.max));
+            }
+        }
     }
     if let Some(c) = commit {
         let _ = write!(
@@ -291,6 +316,7 @@ impl PerfMonitor {
         inner.dirty = false;
         inner.parts.clear();
         inner.mounted.clear();
+        inner.paints.clear();
         inner.last_commit = None;
         inner.cause = None;
         log::warn!(target: "nsh::jank", "{RESET_MARK}");
@@ -328,6 +354,28 @@ impl PerfMonitor {
         }
     }
 
+    /// Main thread: drawing one view's content of `kind` (`canvas`,
+    /// `text`, …) took `cost`. It is part of the work it happened in (Core
+    /// Animation draws in the commit that ends a batch or a tick); a jank
+    /// line names it, so a slow `tick` with nothing mounted can be told to
+    /// be drawing.
+    pub fn record_paint(&self, kind: &'static str, cost: Duration) {
+        let mut inner = self.lock();
+        match inner.paints.iter_mut().find(|p| p.kind == kind) {
+            Some(p) => {
+                p.total += cost;
+                p.count += 1;
+                p.max = p.max.max(cost);
+            }
+            None => inner.paints.push(Paint {
+                kind,
+                total: cost,
+                count: 1,
+                max: cost,
+            }),
+        }
+    }
+
     /// Engine thread: what woke it (an event on a view, …), named in a
     /// slow commit's jank line.
     pub fn note_cause(&self, cause: String) {
@@ -358,11 +406,12 @@ impl PerfMonitor {
         let cost = std::mem::take(&mut inner.pending);
         let parts = std::mem::take(&mut inner.parts);
         let mounted = std::mem::take(&mut inner.mounted);
+        let paints = std::mem::take(&mut inner.paints);
         // Jank: the frame's main-thread work outran the display's period —
         // one line naming what it did, so a spike can be traced to its
         // cause (target `nsh::jank`; logged while the monitor runs).
         if interval > Duration::ZERO && cost > interval && inner.frame_warmup == 0 {
-            log::warn!(target: "nsh::jank", "{}", jank_line(cost, interval, &parts, mounted, inner.last_commit.as_ref(), inner.cause.as_deref()));
+            log::warn!(target: "nsh::jank", "{}", jank_line(cost, interval, &parts, mounted, &paints, inner.last_commit.as_ref(), inner.cause.as_deref()));
         }
         if !std::mem::take(&mut inner.dirty) {
             return;
@@ -725,6 +774,46 @@ mod tests {
             monitor.vsync(start + period * i, period);
         }
         assert_eq!(monitor.snapshot().dropped, 0.5);
+    }
+
+    #[test]
+    fn a_jank_line_names_the_drawing() {
+        let paint = |kind, total, count, max| Paint {
+            kind,
+            total: ms(total),
+            count,
+            max: ms(max),
+        };
+        let line = jank_line(
+            ms(30),
+            ms(8),
+            &[("tick", ms(30))],
+            Vec::new(),
+            &[paint("canvas", 22, 3, 20), paint("text", 4, 1, 4)],
+            None,
+            None,
+        );
+        assert_eq!(
+            line,
+            "frame 30.0ms (budget 8.0ms): tick 30.0ms · paint canvas 22.0ms ×3 (max 20.0ms) text 4.0ms ×1"
+        );
+    }
+
+    #[test]
+    fn paints_are_counted_per_frame() {
+        let monitor = PerfMonitor::new();
+        monitor.record_paint("canvas", ms(3));
+        monitor.record_paint("canvas", ms(5));
+        monitor.record_paint("text", ms(1));
+        let paints = monitor.lock().paints.clone();
+        assert_eq!(paints.len(), 2);
+        assert_eq!(
+            (paints[0].total, paints[0].count, paints[0].max),
+            (ms(8), 2, ms(5))
+        );
+        // A refresh closes the frame: the next one starts with none.
+        monitor.vsync(Instant::now(), ms(8));
+        assert!(monitor.lock().paints.is_empty());
     }
 
     #[test]
