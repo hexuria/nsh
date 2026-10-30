@@ -1065,9 +1065,23 @@ fn after(ms: u64, f: impl FnOnce() + Send + 'static) {
 /// Runs `f` with Core Animation's implicit animations off: layers change
 /// at once, as the core said (animations are explicit).
 pub(crate) fn quiet<R>(f: impl FnOnce() -> R) -> R {
+    thread_local! {
+        static DEPTH: Cell<u32> = const { Cell::new(0) };
+    }
     CATransaction::begin();
     CATransaction::setDisableActions(true);
+    let outer = DEPTH.replace(DEPTH.get() + 1) == 0;
     let r = f();
-    CATransaction::commit();
+    DEPTH.set(DEPTH.get() - 1);
+    // The outermost commit is the one that sends what changed to the
+    // render server (a display frame's runs outside any transaction):
+    // timed apart from the work that made the changes.
+    if outer && crate::fps::measuring() {
+        let start = Instant::now();
+        CATransaction::commit();
+        crate::fps::committed(start.elapsed());
+    } else {
+        CATransaction::commit();
+    }
     r
 }
