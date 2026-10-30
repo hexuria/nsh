@@ -1752,6 +1752,34 @@ impl NshView {
         changed
     }
 
+    /// Draws its content (text, canvas) now, not at Core Animation's next
+    /// commit: ahead of showing ([`crate::mount::Mounter::draw_ahead`]),
+    /// in a frame with time to spare.
+    pub(crate) fn draw_now(&self) {
+        self.redraw();
+        let layer = self
+            .ivars()
+            .content
+            .borrow()
+            .as_ref()
+            .map(|(l, _)| l.clone());
+        if let Some(layer) = layer {
+            layer.displayIfNeeded();
+        }
+    }
+
+    /// Whether what it draws only changes with a new batch: a text, or a
+    /// canvas reading no animated values. Such content is drawn ahead of
+    /// showing ([`crate::mount::Mounter::draw_ahead`]); an animated one is
+    /// not (it would be drawn again on every frame out of sight).
+    pub(crate) fn draws_static(&self) -> bool {
+        let s = self.state();
+        match &s.canvas {
+            Some(c) => c.is_static(),
+            None => s.text.is_some(),
+        }
+    }
+
     /// The layer its content is drawn in (made on first use).
     fn content_layer(&self) -> Option<Retained<CALayer>> {
         if let Some((layer, _)) = &*self.ivars().content.borrow() {
@@ -1913,6 +1941,36 @@ impl NshView {
             NSPoint::new(f64::from(x0) - origin.x, f64::from(y0) - origin.y),
             CGSize::new(f64::from(x1 - x0), f64::from(y1 - y0)),
         ))
+    }
+
+    /// Whether it is out of sight but within a viewport of showing: no
+    /// more than its innermost scroll view's width or height past any
+    /// clipping ancestor's edge (a list row a scroll brings in next).
+    /// False when no ancestor scrolls (nothing brings it in).
+    pub(crate) fn near(&self) -> bool {
+        let ns = self.ns();
+        if ns.window().is_none() || ns.isHiddenOrHasHiddenAncestor() {
+            return false;
+        }
+        let ancestors: Vec<NshView> =
+            std::iter::successors(self.parent_view(), NshView::parent_view).collect();
+        let Some(scroller) = ancestors.iter().find(|p| p.state().scroll.is_some()) else {
+            return false;
+        };
+        let size = scroller.ns().frame().size;
+        let (mx, my) = (size.width as f32, size.height as f32);
+        let grown = ancestors.iter().map(|p| {
+            let clips = p.state().clips() || p.state().id == ROOT_ID;
+            grow(
+                (
+                    crate::sight::placed(p.ns().frame()),
+                    crate::scroll::bounds_origin(p),
+                    clips,
+                ),
+                (mx, my),
+            )
+        });
+        clip_span(crate::sight::placed(ns.frame()), grown).is_some()
     }
 
     /// Its frame, transform or shift changed: places it again.
@@ -2241,6 +2299,24 @@ impl crate::sight::Tree for Planned {
     }
 }
 
+/// An ancestor as [`clip_span`] takes it, its clip grown by `margin` on
+/// every side ([`NshView::near`]): its placed frame and the origin its
+/// content shows from move out together, which leaves the step into its
+/// parent's space as it was.
+fn grow(
+    (f, (ox, oy), clips): (crate::sight::Span, (f32, f32), bool),
+    (mx, my): (f32, f32),
+) -> (crate::sight::Span, (f32, f32), bool) {
+    if !clips {
+        return (f, (ox, oy), false);
+    }
+    (
+        (f.0 - mx, f.1 - my, f.2 + mx, f.3 + my),
+        (ox - mx, oy - my),
+        true,
+    )
+}
+
 /// What of `rect` (in its parent's content space) is not clipped away by
 /// `ancestors`, innermost first: each one's placed frame (in its own
 /// parent's content space), the origin its content shows from (a scroll
@@ -2248,7 +2324,6 @@ impl crate::sight::Tree for Planned {
 /// ancestor that does not only moves `rect` into its parent's space). In
 /// the content space of the outermost ancestor's parent; `None` when
 /// nothing is left. Ancestor transforms are not applied.
-#[cfg(feature = "gpui-agent")]
 fn clip_span(
     rect: crate::sight::Span,
     ancestors: impl IntoIterator<Item = (crate::sight::Span, (f32, f32), bool)>,
@@ -2311,6 +2386,35 @@ mod tests {
         );
         let below = (0.0, 700.0, 400.0, 740.0);
         assert_eq!(clip_span(below, [list, screen]), None);
+    }
+
+    #[test]
+    fn a_row_within_a_viewport_of_the_list_is_near() {
+        let shows = |rect, ancestors: [(crate::sight::Span, (f32, f32), bool); 2]| {
+            clip_span(rect, ancestors).is_some()
+        };
+        let screen = ((0.0, 0.0, 400.0, 800.0), (0.0, 0.0), true);
+        let list = ((0.0, 0.0, 400.0, 600.0), (0.0, 0.0), true);
+        let near = |y: f32| {
+            let row = (0.0, y, 400.0, y + 40.0);
+            shows(
+                row,
+                [grow(list, (400.0, 600.0)), grow(screen, (400.0, 600.0))],
+            )
+        };
+        // Below the list's edge by less than its height: near.
+        assert!(near(700.0));
+        assert!(near(1150.0));
+        // A viewport and more away: not yet.
+        assert!(!near(1250.0));
+        // A view outside no clip is placed as before.
+        let plain = ((10.0, 20.0, 50.0, 60.0), (0.0, 0.0), false);
+        assert_eq!(grow(plain, (5.0, 5.0)), plain);
+        // A grown clip moves its content into the parent's space as it was:
+        // the next clip cuts it where it would have.
+        let row = (0.0, 100.0, 400.0, 140.0);
+        let below = ((0.0, 0.0, 400.0, 90.0), (0.0, 0.0), true);
+        assert!(!shows(row, [grow(list, (400.0, 600.0)), below]));
     }
 
     #[test]
