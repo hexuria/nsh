@@ -34,6 +34,16 @@
 //! snapshot (full or compact), revision, fingerprint, reply or error.
 //! `type` and `set_value` still type into it.
 //!
+//! **Embedded surfaces.** An app that hosts another nsh surface in a view
+//! (an [`crate::AppView`] in a native component: a mini app in a card)
+//! has its tree in the snapshot too: a `group` node `s<key>` (the
+//! embedded surface's key, which it keeps while it lives) where the
+//! hosting view's node would hold its children, and under it the embedded
+//! app's nodes, their ids prefixed `s<key>:` (`s7:n12`, `s7:save`; one
+//! nested deeper `s7:s9:n3`). Bounds are the window's; an embedded node
+//! is shown where its host shows it too. Actions find these nodes as any
+//! other and their input goes through the window to the embedded view.
+//!
 //! **Actionability.** An action acts once its target is actionable: shown
 //! (an area, not hidden, left of it by every clipping ancestor and the
 //! window; a target a scroll view has out of sight is scrolled into view),
@@ -417,8 +427,9 @@ fn snapshot(surface: &Rc<Surface>) -> UiTree {
     let mut nodes = Vec::new();
     let window = surface.root.ns().window();
     if let Some(window) = window.as_deref() {
+        let top = Scope::top(surface);
         for child in surface.root.child_views() {
-            collect(surface, &child, window, &mut nodes);
+            collect(&top, &child, window, &mut nodes);
         }
     }
     let mut tree = UiTree {
@@ -494,35 +505,54 @@ enum Place {
 }
 
 /// Adds `view`'s exposed element descendants to `nodes` under its own
-/// node, or flattens them when `view` is a pass-through box. Hidden
-/// views are pruned whole: nothing under them is ever exposed.
-fn collect(surface: &Surface, view: &NshView, window: &NSWindow, nodes: &mut Vec<UiNode>) {
-    match place(view, window) {
+/// node, or flattens them when `view` is a pass-through box, then the
+/// surfaces it hosts ([`embed`]). Hidden views are pruned whole: nothing
+/// under them is ever exposed.
+fn collect(scope: &Rc<Scope>, view: &NshView, window: &NSWindow, nodes: &mut Vec<UiNode>) {
+    match place(view, window, &scope.prefix) {
         Place::Hidden => {}
         Place::Grouped(mut node) => {
-            measure(surface, view, window, &mut node);
+            measure(scope, view, window, &mut node);
             node.children = Vec::new();
             nodes.push(node);
         }
         Place::Node(mut node) => {
-            measure(surface, view, window, &mut node);
+            measure(scope, view, window, &mut node);
             for child in view.child_views() {
-                collect(surface, &child, window, &mut node.children);
+                collect(scope, &child, window, &mut node.children);
             }
+            embed(scope, view, window, &mut node.children);
             nodes.push(node);
         }
         Place::Pass => {
             for child in view.child_views() {
-                collect(surface, &child, window, nodes);
+                collect(scope, &child, window, nodes);
             }
+            embed(scope, view, window, nodes);
         }
+    }
+}
+
+/// Adds the surfaces `host` embeds to `nodes`: each one's node
+/// ([`surface_node`]) with its tree, after `host`'s own children, as its
+/// hosted views lie above them.
+fn embed(scope: &Rc<Scope>, host: &NshView, window: &NSWindow, nodes: &mut Vec<UiNode>) {
+    for inner in embedded(scope, host) {
+        let mut children = Vec::new();
+        for child in inner.surface.root.child_views() {
+            collect(&inner, &child, window, &mut children);
+        }
+        let mut node = surface_node(&inner.id, host_name(host), children);
+        measure(&inner, &inner.surface.root, window, &mut node);
+        nodes.push(node);
     }
 }
 
 /// The semantic place of `view`: VoiceOver goes through a plain layout
 /// box to its children, and so do we. Its node has no geometry yet
-/// ([`measure`]): finding a target needs none.
-fn place(view: &NshView, window: &NSWindow) -> Place {
+/// ([`measure`]): finding a target needs none. Its id starts with
+/// `prefix`, its surface's ([`Scope::prefix`]).
+fn place(view: &NshView, window: &NSWindow, prefix: &str) -> Place {
     let spec = spec_of(view);
     let (test_id, text_input, masked) = {
         let s = view.state();
@@ -535,10 +565,10 @@ fn place(view: &NshView, window: &NSWindow) -> Place {
     if spec.role == Ax::Generic {
         return Place::Pass;
     }
-    let id = test_id
-        .as_deref()
-        .map(str::to_owned)
-        .unwrap_or_else(|| format!("n{}", view.id()));
+    let id = match test_id.as_deref() {
+        Some(test_id) => format!("{prefix}{test_id}"),
+        None => format!("{prefix}n{}", view.id()),
+    };
     let mut node = UiNode::new(
         id,
         role_name(spec.role),
@@ -575,8 +605,8 @@ fn place(view: &NshView, window: &NSWindow) -> Place {
 /// and whether it can be seen, by the rule actions follow
 /// ([`visibility`]). A node a scroll view has out of its viewport is
 /// visible, not in the viewport: scrolling brings it in.
-fn measure(surface: &Surface, view: &NshView, window: &NSWindow, node: &mut UiNode) {
-    node.visible = visibility(surface, view, window).visible();
+fn measure(scope: &Scope, view: &NshView, window: &NSWindow, node: &mut UiNode) {
+    node.visible = visibility(scope, view, window).visible();
     node.bounds = in_window(view.ns(), view.ns().bounds(), window)
         .map(|b| TreeBounds {
             x: b.origin.x.0,
@@ -647,20 +677,162 @@ fn value_text(value: &Value) -> Option<String> {
     }
 }
 
+// --- Embedded surfaces ------------------------------------------------------
+
+/// A surface as the agent walks it: the window's own, or one embedded in
+/// a view of another (an `AppView` a native component hosts, such as a
+/// mini app in a card), with where it is hosted.
+struct Scope {
+    surface: Rc<Surface>,
+    /// The view hosting it and that view's scope; `None` for the
+    /// window's surface.
+    host: Option<(NshView, Rc<Scope>)>,
+    /// Its node's id ([`surface_id`]); empty for the window's surface,
+    /// which has no node of its own.
+    id: String,
+    /// What the ids of its nodes start with: `<id>:`, nothing for the
+    /// window's surface.
+    prefix: String,
+}
+
+impl Scope {
+    /// The window's surface.
+    fn top(surface: &Rc<Surface>) -> Rc<Scope> {
+        Rc::new(Scope {
+            surface: surface.clone(),
+            host: None,
+            id: String::new(),
+            prefix: String::new(),
+        })
+    }
+
+    /// `surface`, embedded in `host`, a view of this scope.
+    fn inner(self: &Rc<Self>, host: &NshView, surface: Rc<Surface>) -> Rc<Scope> {
+        let id = surface_id(&self.prefix, surface.key());
+        Rc::new(Scope {
+            prefix: format!("{id}:"),
+            id,
+            surface,
+            host: Some((host.clone(), self.clone())),
+        })
+    }
+
+    /// Whether `surface` is this one or one it is embedded in.
+    fn holds(&self, surface: &Rc<Surface>) -> bool {
+        Rc::ptr_eq(&self.surface, surface)
+            || self
+                .host
+                .as_ref()
+                .is_some_and(|(_, outer)| outer.holds(surface))
+    }
+
+    /// The surfaces from the window's to this one.
+    fn surfaces(&self) -> Vec<Rc<Surface>> {
+        let mut out = self
+            .host
+            .as_ref()
+            .map_or_else(Vec::new, |(_, outer)| outer.surfaces());
+        out.push(self.surface.clone());
+        out
+    }
+}
+
+/// The id of the node of the surface with `key`, embedded in a surface
+/// whose ids start with `prefix`: `s<key>` after it. Surface keys are
+/// unique in the process and kept for a surface's life, so the ids under
+/// it (`s<key>:n<node>`, `s<key>:<testID>`) are unique in the tree and
+/// stable while the embedded app runs; a host that loads it again in a
+/// new surface gives it a new key.
+fn surface_id(prefix: &str, key: u64) -> String {
+    format!("{prefix}s{key}")
+}
+
+/// The id prefix of a surface embedded in the surfaces with `keys`, from
+/// the outermost (the window's own left out), as [`Scope::inner`] makes
+/// it.
+fn prefix_of_keys(keys: impl IntoIterator<Item = u64>) -> String {
+    keys.into_iter()
+        .fold(String::new(), |prefix, key| surface_id(&prefix, key) + ":")
+}
+
+/// The id prefix of the surface `view` is in: the keys of the surfaces
+/// whose roots it is in, up AppKit's views, but the window's.
+fn prefix_of(view: &NshView) -> String {
+    let mut keys = Vec::new();
+    let mut current = Some(view.ns().retain());
+    while let Some(ns) = current {
+        if let Some(surface) = NshView::from_ns(&ns).and_then(|v| v.surface()) {
+            keys.push(surface.key());
+        }
+        current = crate::view::superview(&ns);
+    }
+    keys.pop();
+    prefix_of_keys(keys.into_iter().rev())
+}
+
+/// An embedded surface's node: a group with `id` that holds its tree.
+fn surface_node(id: &str, name: String, children: Vec<UiNode>) -> UiNode {
+    let mut node = UiNode::new(id, "group", name);
+    node.children = children;
+    node
+}
+
+/// What an embedded surface's node is named: its host's label (a native
+/// component has none unless the app gives it one).
+fn host_name(host: &NshView) -> String {
+    spec_of(host).label.unwrap_or_default()
+}
+
+/// The surfaces `host` (of `scope`) embeds, in its hosted views' order:
+/// a root of another surface anywhere in a hosted AppKit view's subtree,
+/// in the window and not hidden. Surfaces of `scope`'s chain are left out,
+/// so a cycle cannot recurse.
+fn embedded(scope: &Rc<Scope>, host: &NshView) -> Vec<Rc<Scope>> {
+    fn roots(ns: &NSView, out: &mut Vec<Rc<Surface>>) {
+        if let Some(surface) = NshView::from_ns(ns).and_then(|v| v.surface()) {
+            out.push(surface);
+            return;
+        }
+        for sub in ns.subviews().iter() {
+            roots(&sub, out);
+        }
+    }
+    let natives: Vec<_> = host
+        .state()
+        .natives
+        .iter()
+        .map(|n| n.view.clone())
+        .collect();
+    let mut surfaces = Vec::new();
+    for native in &natives {
+        roots(native, &mut surfaces);
+    }
+    surfaces
+        .into_iter()
+        .filter(|s| {
+            let root = s.root.ns();
+            !scope.holds(s) && root.window().is_some() && !root.isHiddenOrHasHiddenAncestor()
+        })
+        .map(|s| scope.inner(host, s))
+        .collect()
+}
+
 // --- Targets ----------------------------------------------------------------
 
-/// A node of the snapshot: its view, its node (measured) and its parent
-/// node's id, which the node's fingerprint covers.
+/// A node of the snapshot: its surface, its view, its node (measured)
+/// and its parent node's id, which the node's fingerprint covers.
 struct Found {
+    scope: Rc<Scope>,
     view: NshView,
     node: UiNode,
     parent: Option<String>,
 }
 
-/// The view `target` names: a `testID`, a `n<node>` id, or — so agents
-/// can act without the app naming every control — a node's name.
-fn resolve(surface: &Rc<Surface>, target: &str) -> Option<NshView> {
-    find(surface, target).map(|found| found.view)
+/// The view `target` names, and its surface: a `testID`, a `n<node>` id
+/// (prefixed in an embedded surface), or — so agents can act without the
+/// app naming every control — a node's name.
+fn resolve(surface: &Rc<Surface>, target: &str) -> Option<(Rc<Scope>, NshView)> {
+    find(surface, target).map(|found| (found.scope, found.view))
 }
 
 /// The node `target` names, among exactly the nodes the snapshot shows,
@@ -669,36 +841,40 @@ fn resolve(surface: &Rc<Surface>, target: &str) -> Option<NshView> {
 /// plain box even with a `testID`) cannot be targeted.
 fn find(surface: &Rc<Surface>, target: &str) -> Option<Found> {
     let window = surface.root.ns().window()?;
+    let top = Scope::top(surface);
     let mut by_name = None;
     let found = surface
         .root
         .child_views()
         .iter()
-        .find_map(|child| find_in(child, &window, target, None, &mut by_name));
+        .find_map(|child| find_in(&top, child, &window, target, None, &mut by_name));
     let mut found = found.or(by_name)?;
-    measure(surface, &found.view, &window, &mut found.node);
+    measure(&found.scope, &found.view, &window, &mut found.node);
     Some(found)
 }
 
 fn find_in(
+    scope: &Rc<Scope>,
     view: &NshView,
     window: &NSWindow,
     target: &str,
     parent: Option<&str>,
     by_name: &mut Option<Found>,
 ) -> Option<Found> {
-    let (node, children) = match place(view, window) {
+    let (node, children) = match place(view, window, &scope.prefix) {
         Place::Hidden => return None,
         Place::Pass => {
             return view
                 .child_views()
                 .iter()
-                .find_map(|child| find_in(child, window, target, parent, by_name));
+                .find_map(|child| find_in(scope, child, window, target, parent, by_name))
+                .or_else(|| find_embedded(scope, view, window, target, parent, by_name));
         }
         Place::Grouped(node) => (node, false),
         Place::Node(node) => (node, true),
     };
     let found = |node: UiNode| Found {
+        scope: scope.clone(),
         view: view.clone(),
         node,
         parent: parent.map(str::to_owned),
@@ -715,7 +891,44 @@ fn find_in(
     }
     view.child_views()
         .iter()
-        .find_map(|child| find_in(child, window, target, Some(&id), by_name))
+        .find_map(|child| find_in(scope, child, window, target, Some(&id), by_name))
+        .or_else(|| find_embedded(scope, view, window, target, Some(&id), by_name))
+}
+
+/// [`find_in`] the surfaces `host` embeds, as [`embed`] lists them.
+fn find_embedded(
+    scope: &Rc<Scope>,
+    host: &NshView,
+    window: &NSWindow,
+    target: &str,
+    parent: Option<&str>,
+    by_name: &mut Option<Found>,
+) -> Option<Found> {
+    for inner in embedded(scope, host) {
+        let root = inner.surface.root.clone();
+        let node = surface_node(&inner.id, host_name(host), Vec::new());
+        let named = by_name.is_none() && node.name == target;
+        if node.id == target || named {
+            let found = Found {
+                scope: inner.clone(),
+                view: root.clone(),
+                node,
+                parent: parent.map(str::to_owned),
+            };
+            if found.node.id == target {
+                return Some(found);
+            }
+            *by_name = Some(found);
+        }
+        let found = root
+            .child_views()
+            .iter()
+            .find_map(|child| find_in(&inner, child, window, target, Some(&inner.id), by_name));
+        if found.is_some() {
+            return found;
+        }
+    }
+    None
 }
 
 /// Fingerprint gate: the node the client saw must still be this one. The
@@ -745,12 +958,11 @@ fn spec_of(view: &NshView) -> access::Spec {
 /// How a client names `view` in an error: its id, and its name if it has
 /// one.
 fn describe(view: &NshView) -> String {
-    let id = view
-        .state()
-        .props
-        .test_id
-        .as_deref()
-        .map_or_else(|| format!("n{}", view.id()), str::to_owned);
+    let prefix = prefix_of(view);
+    let id = match view.state().props.test_id.as_deref() {
+        Some(test_id) => format!("{prefix}{test_id}"),
+        None => format!("{prefix}n{}", view.id()),
+    };
     match spec_of(view).label {
         Some(label) if !label.is_empty() => format!("{id} {label:?}"),
         _ => id,
@@ -994,11 +1206,11 @@ fn step(surface: &Rc<Surface>, job: &mut Job) -> Option<Result<DispatchResult, S
     let target = action.target.as_deref().unwrap_or("the window");
     match &mut job.phase {
         Phase::Locate { tries, revealed } => {
-            let (x, y) = match locate(surface, &window, action) {
-                Ok(point) => point,
-                Err(Unready::Offscreen(view)) if !*revealed => {
+            let (scope, (x, y)) = match locate(surface, &window, action) {
+                Ok(at) => at,
+                Err(Unready::Offscreen(scope, view)) if !*revealed => {
                     *revealed = true;
-                    crate::scroll::reveal(surface, &view);
+                    reveal(&scope, &view);
                     return None;
                 }
                 Err(unready) => {
@@ -1006,7 +1218,7 @@ fn step(surface: &Rc<Surface>, job: &mut Job) -> Option<Result<DispatchResult, S
                     return (*tries >= ACTIONABLE_TRIES).then(|| Err(unready.error(target)));
                 }
             };
-            perform(surface, &window, &action.gesture, x, y);
+            perform(&scope, &window, &action.gesture, x, y);
             job.phase = if action.gesture.types() {
                 // The press is in the event queue: the run loop handles it
                 // before the next drain.
@@ -1021,7 +1233,7 @@ fn step(surface: &Rc<Surface>, job: &mut Job) -> Option<Result<DispatchResult, S
                 .target
                 .as_deref()
                 .and_then(|t| resolve(surface, t))
-                .is_some_and(|view| focused_in(&view, &window));
+                .is_some_and(|(_, view)| focused_in(&view, &window));
             if !focused {
                 *tries += 1;
                 return (*tries >= FOCUS_TRIES).then(|| {
@@ -1054,8 +1266,9 @@ enum Unready {
     Gone,
     /// Hidden, empty, or clipped away by an ancestor that does not scroll.
     NotVisible,
-    /// Out of a scroll view's viewport, still after scrolling it in.
-    Offscreen(NshView),
+    /// Out of a scroll view's viewport, still after scrolling it in: the
+    /// view, and its surface.
+    Offscreen(Rc<Scope>, NshView),
     /// It, or an ancestor, is disabled.
     Disabled,
     /// The press would land on another view: this one.
@@ -1070,7 +1283,7 @@ impl Unready {
             Unready::NotVisible => {
                 format!("not_visible: {target} is hidden, empty or clipped away")
             }
-            Unready::Offscreen(_) => {
+            Unready::Offscreen(..) => {
                 format!("offscreen: {target} is out of its scroll view's viewport")
             }
             Unready::Disabled => format!("disabled: {target}"),
@@ -1103,10 +1316,62 @@ impl Visibility {
     }
 }
 
-/// Where `view` can be seen: not hidden up its chain, with an area, and
-/// left of it by every clipping ancestor (scroll views at their current
-/// offset) and the window's content.
-fn visibility(surface: &Surface, view: &NshView, window: &NSWindow) -> Visibility {
+/// Where `view` of `scope` can be seen: where it shows in its surface,
+/// and in an embedded surface as much of that as its host shows
+/// ([`clip_to_host`]).
+fn visibility(scope: &Scope, view: &NshView, window: &NSWindow) -> Visibility {
+    let own = visibility_in(&scope.surface, view, window);
+    let Some((host, outer)) = &scope.host else {
+        return own;
+    };
+    let scrolls = std::iter::successors(Some(host.clone()), NshView::parent_view)
+        .any(|v| v.kind() == ViewKind::Scroll);
+    clip_to_host(own, visibility(outer, host, window), scrolls)
+}
+
+/// What of an embedded view shows (`own`, in its surface) once its host's
+/// visibility (`host`) clips it: nothing where the host is hidden; out of
+/// sight where either is scrolled away, or where they meet nowhere and a
+/// scroll view around the host (`scrolls`) can bring it in.
+fn clip_to_host(own: Visibility, host: Visibility, scrolls: bool) -> Visibility {
+    match (own, host) {
+        (Visibility::Hidden, _) | (_, Visibility::Hidden) => Visibility::Hidden,
+        (Visibility::Shown(a), Visibility::Shown(b)) => match intersect(a, b) {
+            Some(part) => Visibility::Shown(part),
+            None if scrolls => Visibility::Offscreen,
+            None => Visibility::Hidden,
+        },
+        _ => Visibility::Offscreen,
+    }
+}
+
+/// What `a` and `b` share, if it has an area.
+fn intersect(a: Bounds<Points>, b: Bounds<Points>) -> Option<Bounds<Points>> {
+    let x0 = a.origin.x.0.max(b.origin.x.0);
+    let y0 = a.origin.y.0.max(b.origin.y.0);
+    let x1 = (a.origin.x.0 + a.size.width.0).min(b.origin.x.0 + b.size.width.0);
+    let y1 = (a.origin.y.0 + a.size.height.0).min(b.origin.y.0 + b.size.height.0);
+    (x1 > x0 && y1 > y0).then(|| {
+        Bounds::new(
+            Point::new(Points(x0), Points(y0)),
+            Size::new(Points(x1 - x0), Points(y1 - y0)),
+        )
+    })
+}
+
+/// Scrolls `view` of `scope` into sight: in its surface, then its host in
+/// the surface around, out to the window's.
+fn reveal(scope: &Scope, view: &NshView) {
+    crate::scroll::reveal(&scope.surface, view);
+    if let Some((host, outer)) = &scope.host {
+        reveal(outer, host);
+    }
+}
+
+/// Where `view` can be seen in its surface: not hidden up its chain, with
+/// an area, and left of it by every clipping ancestor (scroll views at
+/// their current offset) and the window's content.
+fn visibility_in(surface: &Surface, view: &NshView, window: &NSWindow) -> Visibility {
     let chain = || std::iter::successors(Some(view.clone()), NshView::parent_view);
     let size = view.ns().frame().size;
     if size.width <= 0.0 || size.height <= 0.0 || chain().any(|v| v.state().style.hidden) {
@@ -1119,7 +1384,14 @@ fn visibility(surface: &Surface, view: &NshView, window: &NSWindow) -> Visibilit
             Visibility::Hidden
         }
     };
-    let Some(part) = view.shown_part() else {
+    // A root (an embedded surface's node) clips nothing of itself: its
+    // host clips it ([`clip_to_host`]).
+    let part = if *view == surface.root {
+        Some(view.ns().bounds())
+    } else {
+        view.shown_part()
+    };
+    let Some(part) = part else {
         return cut();
     };
     let Some(part) = in_window(surface.root.ns(), part, window) else {
@@ -1149,48 +1421,58 @@ fn within(rect: Bounds<Points>, width: f32, height: f32) -> Option<Bounds<Points
     })
 }
 
-/// The point `action` acts at, once its target is actionable.
+/// The point `action` acts at, once its target is actionable, and the
+/// surface of its target (the window's without one).
 fn locate(
     surface: &Rc<Surface>,
     window: &NSWindow,
     action: &Action,
-) -> Result<(f64, f64), Unready> {
+) -> Result<(Rc<Scope>, (f64, f64)), Unready> {
     if let Some(at) = action.at {
-        return Ok(at);
+        return Ok((Scope::top(surface), at));
     }
     let Some(target) = &action.target else {
         let b = surface.root.ns().bounds();
-        return Ok((b.size.width / 2.0, b.size.height / 2.0));
+        return Ok((
+            Scope::top(surface),
+            (b.size.width / 2.0, b.size.height / 2.0),
+        ));
     };
-    let view = resolve(surface, target).ok_or(Unready::Gone)?;
-    actionable(surface, window, &view)
+    let (scope, view) = resolve(surface, target).ok_or(Unready::Gone)?;
+    let at = actionable(&scope, window, &view)?;
+    Ok((scope, at))
 }
 
 /// The point to press `view` at — the middle of its shown part — when it
 /// is shown, enabled and the press reaches it there.
-fn actionable(
-    surface: &Rc<Surface>,
-    window: &NSWindow,
-    view: &NshView,
-) -> Result<(f64, f64), Unready> {
-    let part = match visibility(surface, view, window) {
+fn actionable(scope: &Rc<Scope>, window: &NSWindow, view: &NshView) -> Result<(f64, f64), Unready> {
+    let part = match visibility(scope, view, window) {
         Visibility::Shown(part) => part,
-        Visibility::Offscreen => return Err(Unready::Offscreen(view.clone())),
+        Visibility::Offscreen => return Err(Unready::Offscreen(scope.clone(), view.clone())),
         Visibility::Hidden => return Err(Unready::NotVisible),
     };
-    if std::iter::successors(Some(view.clone()), NshView::parent_view).any(|v| spec_of(&v).disabled)
-    {
+    if disabled(scope, view) {
         return Err(Unready::Disabled);
     }
     let (x, y) = (
         f64::from(part.origin.x.0 + part.size.width.0 / 2.0),
         f64::from(part.origin.y.0 + part.size.height.0 / 2.0),
     );
-    match receiver(surface, window, x, y) {
+    match receiver(window, x, y) {
         Receiver::View(ns) if ns.isDescendantOf(view.ns()) => Ok((x, y)),
         Receiver::View(ns) => Err(Unready::Occluded(owner(&ns))),
         Receiver::Nothing => Err(Unready::Occluded("nothing that takes the pointer".into())),
     }
+}
+
+/// `view` or an ancestor is disabled, in its surface or, for an embedded
+/// one, its host's.
+fn disabled(scope: &Scope, view: &NshView) -> bool {
+    std::iter::successors(Some(view.clone()), NshView::parent_view).any(|v| spec_of(&v).disabled)
+        || scope
+            .host
+            .as_ref()
+            .is_some_and(|(host, outer)| disabled(outer, host))
 }
 
 /// What a press at a point reaches.
@@ -1202,9 +1484,11 @@ enum Receiver {
 
 /// What a press at `(x, y)` (content points from the top left) lands
 /// on, as the window delivers it: AppKit's hit test of the content view,
-/// and over the root nsh's own picking (`pointerEvents`, transforms,
-/// views animating out), which the root's `hitTest:` hands the press to.
-fn receiver(surface: &Surface, window: &NSWindow, x: f64, y: f64) -> Receiver {
+/// and over a surface's root nsh's own picking (`pointerEvents`,
+/// transforms, views animating out), which the root's `hitTest:` hands
+/// the press to. The hit test goes through a hosted view into the root of
+/// a surface it embeds: that surface picks.
+fn receiver(window: &NSWindow, x: f64, y: f64) -> Receiver {
     let Some(content) = window.contentView() else {
         return Receiver::Nothing;
     };
@@ -1216,12 +1500,11 @@ fn receiver(surface: &Surface, window: &NSWindow, x: f64, y: f64) -> Receiver {
     let Some(hit) = content.hitTest(in_super) else {
         return Receiver::Nothing;
     };
-    let root = surface.root.ns();
-    if &*hit != root {
+    let Some(surface) = NshView::from_ns(&hit).and_then(|v| v.surface()) else {
         return Receiver::View(hit);
-    }
-    let r = root.convertPoint_fromView(p, None);
-    match crate::input::view_at(surface, r.x as f32, r.y as f32) {
+    };
+    let r = hit.convertPoint_fromView(p, None);
+    match crate::input::view_at(&surface, r.x as f32, r.y as f32) {
         Some(view) => Receiver::View(view.ns().retain()),
         None => Receiver::Nothing,
     }
@@ -1290,8 +1573,8 @@ fn focused_in(view: &NshView, window: &NSWindow) -> bool {
 
 /// Gives `gesture`'s pointer input at `(x, y)`, content points from the
 /// top left, activating the app first only for the gestures that type
-/// ([`Gesture::activates`]).
-fn perform(surface: &Rc<Surface>, window: &NSWindow, gesture: &Gesture, x: f64, y: f64) {
+/// ([`Gesture::activates`]). `scope` is the target's surface.
+fn perform(scope: &Scope, window: &NSWindow, gesture: &Gesture, x: f64, y: f64) {
     if gesture.activates() {
         activate(window);
     }
@@ -1301,7 +1584,7 @@ fn perform(surface: &Rc<Surface>, window: &NSWindow, gesture: &Gesture, x: f64, 
             synth::mouse(window, NSEventType::LeftMouseDown, x, y, 1);
             synth::mouse(window, NSEventType::LeftMouseUp, x, y, 1);
         }
-        Gesture::Hover => hover(surface, window, x, y),
+        Gesture::Hover => hover(scope, window, x, y),
         Gesture::Drag { dx, dy } => drag(window, x, y, dx, dy),
         Gesture::Scroll { dx, dy, momentum } => scroll(window, x, y, dx, dy, momentum),
     }
@@ -1326,8 +1609,10 @@ fn drag(window: &NSWindow, x0: f64, y0: f64, dx: f64, dy: f64) {
     synth::mouse(window, NSEventType::LeftMouseUp, x0 + dx, y0 + dy, 1);
 }
 
-/// A pointer move with no press.
-fn hover(surface: &Rc<Surface>, window: &NSWindow, x: f64, y: f64) {
+/// A pointer move with no press, over the target's surface and the ones
+/// it is embedded in, from the window's: each surface's root tracks the
+/// pointer itself.
+fn hover(scope: &Scope, window: &NSWindow, x: f64, y: f64) {
     // `postEvent` drops `MouseMoved` when the window's
     // `acceptsMouseMovedEvents` is off (tracking areas opt real moves in,
     // not posted ones): dispatch it through the input path itself.
@@ -1339,7 +1624,9 @@ fn hover(surface: &Rc<Surface>, window: &NSWindow, x: f64, y: f64) {
         0,
         NSEventModifierFlags::empty(),
     ) {
-        crate::input::event(surface, &event);
+        for surface in scope.surfaces() {
+            crate::input::event(&surface, &event);
+        }
     }
 }
 
@@ -1687,12 +1974,15 @@ fn assert_spec(surface: &Rc<Surface>, spec: &AssertSpec) -> Result<DispatchResul
             Err(format!("assert failed: '{}' exists", spec.target))
         };
     }
-    let Some(Found { view, node, .. }) = found else {
+    let Some(Found {
+        scope, view, node, ..
+    }) = found
+    else {
         return Err(format!("assert failed: '{}' not found", spec.target));
     };
     assert_node(spec, &node)?;
     if let Some(want) = spec.in_viewport {
-        let has = visibility(surface, &view, &window).in_viewport();
+        let has = visibility(&scope, &view, &window).in_viewport();
         if has != want {
             return Err(format!(
                 "assert failed: '{}' in_viewport mismatch",
@@ -2038,6 +2328,118 @@ mod tests {
             occluded.starts_with("occluded_by: n42 \"FPS\""),
             "{occluded}"
         );
+    }
+
+    #[test]
+    fn embedded_ids_carry_the_keys_of_their_surfaces() {
+        assert_eq!(surface_id("", 7), "s7");
+        assert_eq!(prefix_of_keys([]), "");
+        assert_eq!(prefix_of_keys([7]), "s7:");
+        assert_eq!(prefix_of_keys([7, 9]), "s7:s9:");
+        // A view's prefix (up its views) is the one its scope gave its
+        // surface (down from the window).
+        let outer = prefix_of_keys([7]);
+        assert_eq!(surface_id(&outer, 9) + ":", prefix_of_keys([7, 9]));
+    }
+
+    #[test]
+    fn an_embedded_surface_is_a_node_holding_its_app_in_the_hosts_tree() {
+        let at = |mut node: UiNode, y: f32| {
+            node.bounds = TreeBounds {
+                x: 0.0,
+                y,
+                w: 100.0,
+                h: 20.0,
+            };
+            node
+        };
+        // The host's own `n3`, and the mini app's `n3` in surface 7, whose
+        // own card embeds surface 9.
+        let inner = surface_node(
+            "s7:s9",
+            String::new(),
+            vec![at(UiNode::new("s7:s9:save", "button", "Save"), 60.0)],
+        );
+        let card = at(
+            surface_node(
+                "s7",
+                "Weather".into(),
+                vec![
+                    at(UiNode::new("s7:n3", "button", "Refresh"), 20.0),
+                    at(UiNode::new("s7:n4", "text", "21°"), 40.0),
+                    at(inner, 60.0),
+                ],
+            ),
+            20.0,
+        );
+        let mut chat = at(UiNode::new("chat", "list", "Chat"), 0.0);
+        chat.children = vec![at(UiNode::new("n3", "button", "Send"), 0.0), card];
+
+        fn ids<'a>(nodes: &'a [UiNode], out: &mut Vec<&'a str>) {
+            for node in nodes {
+                out.push(&node.id);
+                ids(&node.children, out);
+            }
+        }
+        let nodes = vec![chat];
+        let mut all = Vec::new();
+        ids(&nodes, &mut all);
+        let unique: std::collections::HashSet<_> = all.iter().collect();
+        assert_eq!(unique.len(), all.len(), "{all:?}");
+
+        let tree = UiTree {
+            app: "app".into(),
+            platform: PlatformKind::Desktop,
+            ready: true,
+            nodes: compact(nodes, (400.0, 800.0)),
+            rev: None,
+        };
+        let lines = gpui_agent::compact_lines(&tree);
+        assert!(lines.contains("s7 group \"Weather\""), "{lines}");
+        assert!(lines.contains("s7:n3 button \"Refresh\""), "{lines}");
+        assert!(lines.contains("s7:s9:save button \"Save\""), "{lines}");
+        assert!(!lines.contains("s7:n4"), "{lines}");
+        let card = &tree.nodes[0].children[1];
+        assert_eq!(card.id, "s7");
+        assert_eq!(card.children[0].id, "s7:n3");
+    }
+
+    #[test]
+    fn an_embedded_view_shows_where_its_host_shows_it() {
+        let rect = |x, y, w, h| {
+            Bounds::new(
+                Point::new(Points(x), Points(y)),
+                Size::new(Points(w), Points(h)),
+            )
+        };
+        let shown = |x, y, w, h| Visibility::Shown(rect(x, y, w, h));
+        // A button half out of its card, which the chat shows whole.
+        match clip_to_host(
+            shown(0.0, 90.0, 50.0, 20.0),
+            shown(0.0, 0.0, 200.0, 100.0),
+            true,
+        ) {
+            Visibility::Shown(part) => assert_eq!(part, rect(0.0, 90.0, 50.0, 10.0)),
+            _ => panic!("the shown half is shown"),
+        }
+        // The chat scrolled the button's part of the card away: scrolling
+        // it brings it back.
+        let away = clip_to_host(
+            shown(0.0, 150.0, 50.0, 20.0),
+            shown(0.0, 0.0, 200.0, 100.0),
+            true,
+        );
+        assert!(matches!(away, Visibility::Offscreen));
+        let cut = clip_to_host(
+            shown(0.0, 150.0, 50.0, 20.0),
+            shown(0.0, 0.0, 200.0, 100.0),
+            false,
+        );
+        assert!(matches!(cut, Visibility::Hidden));
+        let card_away = clip_to_host(shown(0.0, 0.0, 50.0, 20.0), Visibility::Offscreen, true);
+        assert!(matches!(card_away, Visibility::Offscreen));
+        let hidden_card = clip_to_host(Visibility::Offscreen, Visibility::Hidden, true);
+        assert!(matches!(hidden_card, Visibility::Hidden));
     }
 
     /// Only the gestures that send keys activate the app: pointer ones
