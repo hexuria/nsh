@@ -92,6 +92,13 @@ server client, log forwarding, the error overlay: `dev.rs`). The runtime needs m
   leave visible, worked out once per scroll view, instead of walking every view's ancestors (400 texts 12 views deep:
   0.61 ms a frame before, 0.008 ms after, in a release build). The rectangles are kept until a view moves, is
   inserted or removed, or hides.
+- **A batch that makes hundreds of views out of sight is spread over frames** (`pace.rs`): a list row mounting out of
+  sight (overscan, a long reply) came as one batch of 400 and more views, and its creation and the Core Animation
+  commit sending their layers to the render server took one frame of 90 ms. Of a batch making 64 views or more, the
+  trees made under views that exist already wait unless they show once the rest is applied; waiting trees come a
+  level at a time, each view whole, within 4 ms and 32 views a frame, near ones first. A tree a scroll brings in comes
+  at once, and a later batch naming a view of a waiting tree applies that tree first, so views change in the order the
+  core sent. Nothing waits in a batch that animates its layout, nor a tree that anything else in the batch names.
 - **Trackpad scrolls are shown in step with the display** (`scroll.rs`, `Resampled`): gesture and momentum events come
   at about the display's rate (120 Hz) but not in step with it, so applied as they come some frames moved twice and
   some not at all (up to a quarter of a fling's frames, depending on how the events fell; the frame rate still read

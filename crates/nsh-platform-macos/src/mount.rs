@@ -176,6 +176,22 @@ impl Mounter {
         self.views.get(&view.state().id) == Some(view)
     }
 
+    /// Whether a waiting tree shows, and whether it is near showing: its
+    /// root if it went in, else its frame where it goes.
+    pub(crate) fn tree_shows(&self, tree: &crate::pace::Tree) -> (bool, bool) {
+        if let Some(root) = self.views.get(&tree.root).filter(|r| r.has_parent()) {
+            let mut pass = crate::clip::Pass::default();
+            return (
+                self.clips.shown(root, &mut pass),
+                self.clips.near(root, &mut pass),
+            );
+        }
+        let Some(parent) = self.views.get(&tree.parent) else {
+            return (false, false);
+        };
+        crate::clip::child_shows(parent, tree.frame)
+    }
+
     /// The batch is applied.
     pub(crate) fn end_batch(&mut self, surface: &Rc<Surface>) {
         self.moved();
