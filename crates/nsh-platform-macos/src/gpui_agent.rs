@@ -800,6 +800,17 @@ impl Gesture {
             Gesture::Type(_) | Gesture::SetValue(_) | Gesture::Key(_)
         )
     }
+
+    /// It activates the app (when it is not active already) before its
+    /// input: only the gestures that send keys, which want the window key
+    /// as a user's typing has it. Pointer gestures never do, so driving a
+    /// test app leaves the focus with the app in use: presses and drags
+    /// are posted to the app itself and nsh's views take a click in an
+    /// inactive window (`acceptsFirstMouse`), hovers go to its input and
+    /// scrolls to its window directly.
+    fn activates(&self) -> bool {
+        self.types()
+    }
 }
 
 /// Where a [`Job`] is.
@@ -1273,9 +1284,12 @@ fn focused_in(view: &NshView, window: &NSWindow) -> bool {
 }
 
 /// Gives `gesture`'s pointer input at `(x, y)`, content points from the
-/// top left.
+/// top left, activating the app first only for the gestures that type
+/// ([`Gesture::activates`]).
 fn perform(surface: &Rc<Surface>, window: &NSWindow, gesture: &Gesture, x: f64, y: f64) {
-    activate(window);
+    if gesture.activates() {
+        activate(window);
+    }
     match *gesture {
         Gesture::Press | Gesture::Type(_) | Gesture::SetValue(_) | Gesture::Key(_) => {
             synth::mouse(window, NSEventType::MouseMoved, x, y, 0);
@@ -2018,6 +2032,26 @@ mod tests {
         assert!(
             occluded.starts_with("occluded_by: n42 \"FPS\""),
             "{occluded}"
+        );
+    }
+
+    /// Only the gestures that send keys activate the app: pointer ones
+    /// leave the focus with the app in use.
+    #[test]
+    fn only_typing_gestures_activate_the_app() {
+        assert!(Gesture::Type("hi".into()).activates());
+        assert!(Gesture::SetValue("hi".into()).activates());
+        assert!(Gesture::Key("Return".into()).activates());
+        assert!(!Gesture::Press.activates());
+        assert!(!Gesture::Hover.activates());
+        assert!(!Gesture::Drag { dx: 10.0, dy: 0.0 }.activates());
+        assert!(
+            !Gesture::Scroll {
+                dx: 0.0,
+                dy: 100.0,
+                momentum: 0.0
+            }
+            .activates()
         );
     }
 }
