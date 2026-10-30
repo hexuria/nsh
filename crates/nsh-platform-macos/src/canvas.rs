@@ -1016,44 +1016,12 @@ impl<'a> Replay<'a> {
         }
         let c = self.cx();
         let s = &self.state;
-        let font = crate::text::make_font(&s.font.with_numeric(s.numeric).text_style());
-        let string =
-            CFMutableAttributedString::new(None, 0).expect("CFAttributedStringCreateMutable");
-        let whole = CFRange {
-            location: 0,
-            length: 0,
-        };
-        // SAFETY: a valid mutable string; attribute values have the types
-        // CoreText expects for their keys; the range covers the string.
-        unsafe {
-            CFMutableAttributedString::replace_string(
-                Some(&string),
-                whole,
-                Some(&CFString::from_str(text)),
-            );
-            let range = CFRange {
-                location: 0,
-                length: CFAttributedString::length(&string),
-            };
-            CFMutableAttributedString::set_attribute(
-                Some(&string),
-                range,
-                Some(kCTFontAttributeName),
-                Some(font.as_ref()),
-            );
-            let yes: &CFType = objc2_core_foundation::CFBoolean::new(true).as_ref();
-            CFMutableAttributedString::set_attribute(
-                Some(&string),
-                range,
-                Some(kCTForegroundColorFromContextAttributeName),
-                Some(yes),
-            );
-        }
-        // SAFETY: a valid attributed string.
-        let line = unsafe { CTLine::with_attributed_string(&string) };
-        let (mut ascent, mut descent, mut leading) = (0.0, 0.0, 0.0);
-        // SAFETY: valid out pointers.
-        let width = unsafe { line.typographic_bounds(&mut ascent, &mut descent, &mut leading) };
+        let Typeset {
+            line,
+            width,
+            ascent,
+            descent,
+        } = typeset(text, &s.font.with_numeric(s.numeric).text_style());
         let dx = match s.align {
             CanvasTextAlign::Start | CanvasTextAlign::Left => 0.0,
             CanvasTextAlign::Center => -width / 2.0,
@@ -1161,6 +1129,100 @@ impl<'a> Replay<'a> {
             Some(drawn),
         );
         CGContext::restore_g_state(c);
+    }
+}
+
+/// A canvas text set in one line, with its typographic bounds.
+#[derive(Clone)]
+struct Typeset {
+    line: CFRetained<CTLine>,
+    width: f64,
+    ascent: f64,
+    descent: f64,
+}
+
+/// How many lines and fonts the canvases keep ([`typeset`]).
+const KEPT_LINES: usize = 4096;
+const KEPT_FONTS: usize = 64;
+
+thread_local! {
+    /// Canvas texts as set lately, by font and text, and their fonts: a
+    /// canvas painted again (a list row mounted again, a chart's next
+    /// frame, a grid's next window) sets most of its labels as before, and
+    /// setting them (a font, an attributed string, a line each) cost more
+    /// than drawing them.
+    static TYPESET: RefCell<(
+        FxHashMap<crate::text::FontKey, CFRetained<objc2_core_text::CTFont>>,
+        FxHashMap<(crate::text::FontKey, Box<str>), Typeset>,
+    )> = RefCell::default();
+}
+
+/// `text` set in one line in `style`'s font (kept: [`TYPESET`]).
+fn typeset(text: &str, style: &nsh_core::ResolvedTextStyle) -> Typeset {
+    let key = crate::text::font_key(style);
+    TYPESET.with_borrow_mut(|(fonts, lines)| {
+        if let Some(t) = lines.get(&(key, Box::from(text))) {
+            return t.clone();
+        }
+        if fonts.len() >= KEPT_FONTS {
+            fonts.clear();
+        }
+        let font = fonts
+            .entry(key)
+            .or_insert_with(|| crate::text::make_font(style))
+            .clone();
+        let t = set_line(text, &font);
+        if lines.len() >= KEPT_LINES {
+            lines.clear();
+        }
+        lines.insert((key, Box::from(text)), t.clone());
+        t
+    })
+}
+
+/// `text` set in one line in `font`, its color the context's.
+fn set_line(text: &str, font: &objc2_core_text::CTFont) -> Typeset {
+    let string = CFMutableAttributedString::new(None, 0).expect("CFAttributedStringCreateMutable");
+    let whole = CFRange {
+        location: 0,
+        length: 0,
+    };
+    // SAFETY: a valid mutable string; attribute values have the types
+    // CoreText expects for their keys; the range covers the string.
+    unsafe {
+        CFMutableAttributedString::replace_string(
+            Some(&string),
+            whole,
+            Some(&CFString::from_str(text)),
+        );
+        let range = CFRange {
+            location: 0,
+            length: CFAttributedString::length(&string),
+        };
+        CFMutableAttributedString::set_attribute(
+            Some(&string),
+            range,
+            Some(kCTFontAttributeName),
+            Some(font.as_ref()),
+        );
+        let yes: &CFType = objc2_core_foundation::CFBoolean::new(true).as_ref();
+        CFMutableAttributedString::set_attribute(
+            Some(&string),
+            range,
+            Some(kCTForegroundColorFromContextAttributeName),
+            Some(yes),
+        );
+    }
+    // SAFETY: a valid attributed string.
+    let line = unsafe { CTLine::with_attributed_string(&string) };
+    let (mut ascent, mut descent, mut leading) = (0.0, 0.0, 0.0);
+    // SAFETY: valid out pointers.
+    let width = unsafe { line.typographic_bounds(&mut ascent, &mut descent, &mut leading) };
+    Typeset {
+        line,
+        width,
+        ascent,
+        descent,
     }
 }
 
@@ -1412,6 +1474,21 @@ mod tests {
             Some(AnimationValue::Number(0.4)),
         ];
         canvas
+    }
+
+    #[test]
+    fn a_text_is_set_once_per_font() {
+        let style = |size: f32| nsh_core::ResolvedTextStyle {
+            font_size: Points(size),
+            ..Default::default()
+        };
+        let a = typeset("Q3 revenue", &style(12.0));
+        let b = typeset("Q3 revenue", &style(12.0));
+        assert!(std::ptr::eq(&*a.line, &*b.line), "set again");
+        assert!(a.width > 0.0 && a.ascent > 0.0);
+        let c = typeset("Q3 revenue", &style(24.0));
+        assert!(!std::ptr::eq(&*a.line, &*c.line));
+        assert!(c.width > a.width * 1.5);
     }
 
     #[test]
