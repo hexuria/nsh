@@ -95,6 +95,8 @@ thread_local! {
     /// The views' contents drawn since the last display frame: kind and
     /// time of each (handed to the monitor as the frame closes).
     static PAINTS: RefCell<Vec<(&'static str, Duration)>> = const { RefCell::new(Vec::new()) };
+    /// The layer commits since the last display frame ([`committed`]).
+    static COMMITS: RefCell<Vec<Duration>> = const { RefCell::new(Vec::new()) };
 }
 
 /// The phases' samples since the last line.
@@ -135,10 +137,20 @@ pub(crate) fn painted(kind: &'static str, cost: Duration) {
     PAINTS.with_borrow_mut(|p| p.push((kind, cost)));
 }
 
-/// Hands the drawing since the last frame to `monitor`.
+/// Core Animation committed the layers' changes in `cost`: named on the
+/// frame's jank line ([`take_paints`]).
+pub(crate) fn committed(cost: Duration) {
+    COMMITS.with_borrow_mut(|c| c.push(cost));
+}
+
+/// Hands the drawing and the layer commits since the last frame to
+/// `monitor`.
 pub(crate) fn take_paints(monitor: &PerfMonitor) {
     for (kind, cost) in PAINTS.take() {
         monitor.record_paint(kind, cost);
+    }
+    for cost in COMMITS.take() {
+        monitor.record_layer_commit(cost);
     }
 }
 

@@ -234,9 +234,14 @@ fn ms_f(d: Duration) -> f64 {
     d.as_secs_f64() * 1000.0
 }
 
+/// What [`PerfMonitor::record_layer_commit`] files its commits under,
+/// among the paints.
+const LAYER_COMMIT: &str = "commit";
+
 /// One jank line: the frame's cost against its budget, the work by kind,
-/// the busiest mount item kinds, the drawing of view contents (part of
-/// the work it happened in), and the last engine commit and its cause.
+/// the busiest mount item kinds, the drawing of view contents and the
+/// layer commits (parts of the work they happened in), and the last
+/// engine commit and its cause.
 fn jank_line(
     cost: Duration,
     budget: Duration,
@@ -260,14 +265,24 @@ fn jank_line(
             .collect();
         let _ = write!(line, " · mounted {}", list.join(" "));
     }
+    let (layers, paints): (Vec<&Paint>, Vec<&Paint>) =
+        paints.iter().partition(|p| p.kind == LAYER_COMMIT);
+    let times = |line: &mut String, p: &Paint| {
+        let _ = write!(line, " {:.1}ms ×{}", ms_f(p.total), p.count);
+        if p.count > 1 {
+            let _ = write!(line, " (max {:.1}ms)", ms_f(p.max));
+        }
+    };
     if !paints.is_empty() {
         line.push_str(" · paint");
         for p in paints {
-            let _ = write!(line, " {} {:.1}ms ×{}", p.kind, ms_f(p.total), p.count);
-            if p.count > 1 {
-                let _ = write!(line, " (max {:.1}ms)", ms_f(p.max));
-            }
+            let _ = write!(line, " {}", p.kind);
+            times(&mut line, p);
         }
+    }
+    for p in layers {
+        line.push_str(" · commit");
+        times(&mut line, p);
     }
     if let Some(c) = commit {
         let _ = write!(
@@ -374,6 +389,15 @@ impl PerfMonitor {
                 max: cost,
             }),
         }
+    }
+
+    /// Main thread: committing the layers' changes to the render server
+    /// took `cost` (the drawing [`PerfMonitor::record_paint`] names
+    /// happens inside it). A frame that mounts hundreds of views spends
+    /// most of its time there; a jank line names it apart from the work
+    /// that made the changes: `· commit 31.2ms ×1`.
+    pub fn record_layer_commit(&self, cost: Duration) {
+        self.record_paint(LAYER_COMMIT, cost);
     }
 
     /// Engine thread: what woke it (an event on a view, …), named in a
@@ -780,6 +804,27 @@ mod tests {
         assert_eq!(
             line,
             "frame 30.0ms (budget 8.0ms): tick 30.0ms · paint canvas 22.0ms ×3 (max 20.0ms) text 4.0ms ×1"
+        );
+    }
+
+    #[test]
+    fn a_jank_line_names_the_layer_commit_apart() {
+        let monitor = PerfMonitor::new();
+        monitor.record_paint("text", ms(2));
+        monitor.record_layer_commit(ms(30));
+        let paints = monitor.lock().paints.clone();
+        let line = jank_line(
+            ms(40),
+            ms(8),
+            &[("tick", ms(40))],
+            Vec::new(),
+            &paints,
+            None,
+            None,
+        );
+        assert_eq!(
+            line,
+            "frame 40.0ms (budget 8.0ms): tick 40.0ms · paint text 2.0ms ×1 · commit 30.0ms ×1"
         );
     }
 
