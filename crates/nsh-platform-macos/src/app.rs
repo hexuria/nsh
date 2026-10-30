@@ -166,6 +166,13 @@ pub struct AppOptions {
     /// which has no Dock icon, shows it itself: from its tray, say). Quit
     /// still stops the app. Only used by [`run_app`]; defaults to false.
     pub keep_alive_on_close: bool,
+    /// Brings the app to the front when [`run_app`] opens its window: the
+    /// app becomes active and its window takes the keyboard. True by
+    /// default. False opens the window without taking focus from the app
+    /// in use: the app is not activated and its window is ordered front
+    /// without becoming key, as a test run or an automated session wants.
+    /// Reopening the app from the Dock still brings its window forward.
+    pub activate: bool,
     /// The native components apps can use (`nsh/native`); shared by the
     /// views made with these options. See [`AppView::register_component`].
     pub components: crate::native::Components,
@@ -237,6 +244,7 @@ impl Default for AppOptions {
             background: false,
             activation_policy: ActivationPolicy::Regular,
             keep_alive_on_close: false,
+            activate: true,
             components: Default::default(),
             appearance: Appearance::System,
             fps: false,
@@ -925,6 +933,25 @@ fn name_app(name: &str) {
     }
 }
 
+/// How [`run_app`] shows its window ([`AppOptions::activate`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Launch {
+    /// Makes the window key as it is ordered front.
+    make_key: bool,
+    /// Activates the app.
+    activate: bool,
+}
+
+impl Launch {
+    /// How `options` show the window: key and active, or only in front.
+    fn of(options: &AppOptions) -> Launch {
+        Launch {
+            make_key: options.activate,
+            activate: options.activate,
+        }
+    }
+}
+
 /// Runs `source` in a window until it is closed. Must be called on the
 /// main thread. By default closing the window stops the engine and returns;
 /// `keep_alive_on_close` retains the same engine until Quit or [`quit_app`].
@@ -1038,9 +1065,17 @@ pub fn run_app(source: AppSource, mut options: AppOptions) -> std::process::Exit
         // keyboard, which the test agent's keys go to.
         crate::window::became_key(view.surface(), &window);
     } else {
-        window.makeKeyAndOrderFront(None);
+        // In front, and unless `AppOptions::activate` is off, key and active.
+        let show = Launch::of(&options);
+        if show.make_key {
+            window.makeKeyAndOrderFront(None);
+        } else {
+            window.orderFront(None);
+        }
         window.makeFirstResponder(Some(view.surface().root.ns()));
-        app.activate();
+        if show.activate {
+            app.activate();
+        }
     }
     let view_surface = view.surface().clone();
     RUNNING.with(|r| {
@@ -1206,7 +1241,7 @@ mod tests {
     use objc2_app_kit::NSApplicationActivationPolicy;
     use objc2_foundation::{NSPoint, NSRect, NSSize};
 
-    use super::{ActivationPolicy, AppOptions, activation_policy, secondary};
+    use super::{ActivationPolicy, AppOptions, Launch, activation_policy, secondary};
 
     /// The app's policy, unless it runs in the background, which never
     /// activates it.
@@ -1248,5 +1283,31 @@ mod tests {
         assert_eq!(secondary(&[primary, built_in]), Some(1));
         assert_eq!(secondary(&[primary, primary, built_in]), Some(2));
         assert_eq!(secondary(&[primary, primary]), None);
+    }
+
+    /// An app activates and makes its window key on launch unless its
+    /// options turn activation off; then it only orders the window front.
+    #[test]
+    fn launch_activates_unless_options_turn_it_off() {
+        let options = AppOptions::default();
+        assert!(options.activate);
+        assert_eq!(
+            Launch::of(&options),
+            Launch {
+                make_key: true,
+                activate: true
+            }
+        );
+        let options = AppOptions {
+            activate: false,
+            ..AppOptions::default()
+        };
+        assert_eq!(
+            Launch::of(&options),
+            Launch {
+                make_key: false,
+                activate: false
+            }
+        );
     }
 }
