@@ -3,7 +3,11 @@
 //! [`crate::text_input`], [`crate::navigation`], ...); this file only
 //! keeps the view table and the tree.
 
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
 use nsh_core::{Command, LayoutAnimation, MountItem, NodeId, ROOT_ID, ViewKind, canvas::Damage};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -42,6 +46,10 @@ pub(crate) struct Mounter {
     /// The views the batch being applied deletes
     /// ([`Mounter::begin_batch`]).
     deleting: FxHashSet<NodeId>,
+    /// Some of `stale` may be near enough to draw ahead of showing
+    /// ([`Mounter::draw_ahead`]): set when one is put off and when views
+    /// move, cleared once none is.
+    ahead: Cell<bool>,
 }
 
 impl Mounter {
@@ -59,6 +67,7 @@ impl Mounter {
             sights: RefCell::default(),
             planned_sights: RefCell::default(),
             deleting: FxHashSet::default(),
+            ahead: Cell::new(false),
         }
     }
 
@@ -76,6 +85,7 @@ impl Mounter {
         self.views.insert(ROOT_ID, root);
         self.layout_animation = None;
         self.stale.borrow_mut().clear();
+        self.ahead.set(false);
     }
 
     /// `view`'s drawing changed in `damage` (on every frame of an animation
@@ -97,6 +107,63 @@ impl Mounter {
             }
         } else if view.set_stale(true) {
             self.stale.borrow_mut().push(view.clone());
+            self.ahead.set(true);
+        }
+    }
+
+    /// Views moved (a scroll, a batch): views put off may have come near.
+    pub(crate) fn moved(&self) {
+        if !self.stale.try_borrow().is_ok_and(|s| s.is_empty()) {
+            self.ahead.set(true);
+        }
+    }
+
+    /// Whether views put off may be near enough to draw ahead: the display
+    /// link runs for [`Mounter::draw_ahead`].
+    pub(crate) fn wants_ahead(&self) -> bool {
+        self.ahead.get()
+    }
+
+    /// Draws the static content put off out of sight that is within a
+    /// viewport of showing ([`NshView::near`], [`NshView::draws_static`]),
+    /// until `budget` is spent. Drawn on first show instead, a list row's
+    /// texts and canvases all landed in the frame a scroll brought it in
+    /// (tens of milliseconds for a long reply or a diagram); drawn here,
+    /// they are spread over the frames before it, when the rows mounted
+    /// out of sight are still waiting. What is left waits for the next
+    /// frame.
+    pub(crate) fn draw_ahead(&self, budget: Duration) {
+        if !self.ahead.get() {
+            return;
+        }
+        let start = Instant::now();
+        let Ok(stale) = self.stale.try_borrow() else {
+            return;
+        };
+        let candidates: Vec<NshView> = stale
+            .iter()
+            .filter(|v| self.alive(v) && v.draws_static())
+            .cloned()
+            .collect();
+        drop(stale);
+        let mut drawn = Vec::new();
+        let mut done = true;
+        for view in candidates {
+            if start.elapsed() >= budget {
+                done = false;
+                break;
+            }
+            if view.near() {
+                view.set_stale(false);
+                view.draw_now();
+                drawn.push(view);
+            }
+        }
+        if !drawn.is_empty() {
+            self.stale.borrow_mut().retain(|v| !drawn.contains(v));
+        }
+        if done {
+            self.ahead.set(false);
         }
     }
 
@@ -106,6 +173,9 @@ impl Mounter {
         let Ok(mut stale) = self.stale.try_borrow_mut() else {
             return false;
         };
+        if !views.is_empty() {
+            self.ahead.set(true);
+        }
         stale.append(views);
         true
     }
@@ -219,6 +289,7 @@ impl Mounter {
     /// The batch is applied.
     pub(crate) fn end_batch(&mut self, surface: &Rc<Surface>) {
         self.deleting.clear();
+        self.moved();
         self.layout_animation = None;
         crate::navigation::end_batch(surface);
         crate::system::end_batch(surface);
