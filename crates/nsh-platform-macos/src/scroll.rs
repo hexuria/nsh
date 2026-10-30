@@ -612,6 +612,9 @@ fn moved_to(surface: &Rc<Surface>, view: &NshView, pos: f32) {
         update_overlays(view);
     });
     crate::input::content_moved(surface, true);
+    if let Ok(mounter) = surface.mounter.try_borrow() {
+        mounter.moved();
+    }
     let mut fed = surface.anim.borrow_mut().scrolled(id, x, y);
     if let Some(distance) = pulled {
         fed |= surface.anim.borrow_mut().pulled(id, distance);
