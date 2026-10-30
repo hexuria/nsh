@@ -45,6 +45,7 @@ mod keymap;
 mod mount;
 mod native;
 mod navigation;
+mod pace;
 mod net;
 mod picker;
 mod screen_color;

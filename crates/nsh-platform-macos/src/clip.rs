@@ -184,6 +184,34 @@ fn outer_of(top: &NshView) -> Outer {
     }
 }
 
+/// Whether a child of `parent` at `frame` (not made yet) would show, and
+/// whether it would be near showing ([`crate::pace`]).
+pub(crate) fn child_shows(
+    parent: &NshView,
+    frame: nsh_core::Bounds<nsh_core::Points>,
+) -> (bool, bool) {
+    let ns = parent.ns();
+    if ns.window().is_none() || ns.isHiddenOrHasHiddenAncestor() {
+        return (false, false);
+    }
+    let (mut x, y) = (frame.origin.x.0, frame.origin.y.0);
+    let (w, h) = (frame.size.width.0, frame.size.height.0);
+    // placed as `NshView::place` will: mirrored in a mirrored list
+    let mirrored = parent.state().scroll.as_ref().is_some_and(|s| s.mirrored);
+    if mirrored {
+        x = parent.state().frame.size.width.0 - x - w;
+    }
+    let rect = Some((x, y, x + w, y + h));
+    let steps: Vec<Step> = std::iter::successors(Some(parent.clone()), NshView::parent_view)
+        .map(|p| step(&p))
+        .collect();
+    // within a viewport of the nearest scroll view's size
+    let near = std::iter::successors(Some(parent.clone()), NshView::parent_view)
+        .find_map(|p| margin(&p))
+        .and_then(|m| window(steps.iter().map(|s| grow(*s, m))));
+    (meet(rect, window(steps.iter().copied())), meet(rect, near))
+}
+
 /// Whether the walk up from a view stops at `view`: a scroll view, whose
 /// offset moves without anything below it moving, or the root.
 fn is_top(view: &NshView) -> bool {
