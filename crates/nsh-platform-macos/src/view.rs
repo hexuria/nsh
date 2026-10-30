@@ -1354,36 +1354,6 @@ impl NshView {
         ))
     }
 
-    /// Whether it is out of sight but within a viewport of showing: no
-    /// more than its innermost scroll view's width or height past any
-    /// clipping ancestor's edge (a list row a scroll brings in next).
-    /// False when no ancestor scrolls (nothing brings it in).
-    pub(crate) fn near(&self) -> bool {
-        let ns = self.ns();
-        if ns.window().is_none() || ns.isHiddenOrHasHiddenAncestor() {
-            return false;
-        }
-        let ancestors: Vec<NshView> =
-            std::iter::successors(self.parent_view(), NshView::parent_view).collect();
-        let Some(scroller) = ancestors.iter().find(|p| p.state().scroll.is_some()) else {
-            return false;
-        };
-        let size = scroller.ns().frame().size;
-        let (mx, my) = (size.width as f32, size.height as f32);
-        let grown = ancestors.iter().map(|p| {
-            let clips = p.state().clips() || p.state().id == ROOT_ID;
-            grow(
-                (
-                    placed(p.ns().frame()),
-                    crate::scroll::bounds_origin(p),
-                    clips,
-                ),
-                (mx, my),
-            )
-        });
-        clip_shows(placed(ns.frame()), grown)
-    }
-
     /// Its frame, transform or shift changed: places it again.
     pub(crate) fn moved(&self) {
         self.place();
@@ -1415,6 +1385,7 @@ impl NshView {
         };
         if !root && self.ns().frame() != rect {
             self.ns().setFrame(rect);
+            crate::clip::moved();
             self.size_container();
             crate::native::resized(self);
             self.place_natives();
@@ -1508,12 +1479,14 @@ impl NshView {
             ),
             None => container.addSubview(self.ns()),
         }
+        crate::clip::moved();
         self.place();
     }
 
     /// Takes it out of its parent.
     pub(crate) fn unparent(&self) {
         self.ns().removeFromSuperview();
+        crate::clip::moved();
     }
 
     /// Hosts `view` at `rect` (or moves it there).
@@ -1574,24 +1547,6 @@ fn placed(f: NSRect) -> Span {
     (x, y, x + f.size.width as f32, y + f.size.height as f32)
 }
 
-/// An ancestor as [`clip_shows`] takes it, its clip grown by `margin` on
-/// every side ([`NshView::near`]): its placed frame and the origin its
-/// content shows from move out together, which leaves the step into its
-/// parent's space as it was.
-fn grow(
-    (f, (ox, oy), clips): (Span, (f32, f32), bool),
-    (mx, my): (f32, f32),
-) -> (Span, (f32, f32), bool) {
-    if !clips {
-        return (f, (ox, oy), false);
-    }
-    (
-        (f.0 - mx, f.1 - my, f.2 + mx, f.3 + my),
-        (ox - mx, oy - my),
-        true,
-    )
-}
-
 /// Whether `rect` (in its parent's content space) is not clipped away by
 /// `ancestors`, innermost first: each one's placed frame (in its own
 /// parent's content space), the origin its content shows from (a scroll
@@ -1640,32 +1595,6 @@ mod tests {
         let list = |y| ((0.0, 0.0, 400.0, 600.0), (0.0, y), true);
         assert!(clip_shows(row, [list(0.0), screen]));
         assert!(!clip_shows(row, [list(1000.0), screen]));
-    }
-
-    #[test]
-    fn a_row_within_a_viewport_of_the_list_is_near() {
-        let screen = ((0.0, 0.0, 400.0, 800.0), (0.0, 0.0), true);
-        let list = ((0.0, 0.0, 400.0, 600.0), (0.0, 0.0), true);
-        let near = |y: f32| {
-            let row = (0.0, y, 400.0, y + 40.0);
-            clip_shows(
-                row,
-                [grow(list, (400.0, 600.0)), grow(screen, (400.0, 600.0))],
-            )
-        };
-        // Below the list's edge by less than its height: near.
-        assert!(near(700.0));
-        assert!(near(1150.0));
-        // A viewport and more away: not yet.
-        assert!(!near(1250.0));
-        // A view outside no clip is placed as before.
-        let plain = ((10.0, 20.0, 50.0, 60.0), (0.0, 0.0), false);
-        assert_eq!(grow(plain, (5.0, 5.0)), plain);
-        // A grown clip moves its content into the parent's space as it was:
-        // the next clip cuts it where it would have.
-        let row = (0.0, 100.0, 400.0, 140.0);
-        let below = ((0.0, 0.0, 400.0, 90.0), (0.0, 0.0), true);
-        assert!(!clip_shows(row, [grow(list, (400.0, 600.0)), below]));
     }
 
     #[test]
