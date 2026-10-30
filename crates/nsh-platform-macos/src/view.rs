@@ -354,16 +354,25 @@ define_class!(
                 CGContext::translate_ctm(c, 0.0, layer.bounds().size.height);
                 CGContext::scale_ctm(c, 1.0, -1.0);
             }
-            crate::text::draw(cx, &state);
+            let measuring = crate::fps::measuring();
+            if measuring && state.text.is_some() {
+                let start = std::time::Instant::now();
+                crate::text::draw(cx, &state);
+                crate::fps::painted("text", start.elapsed());
+            } else {
+                crate::text::draw(cx, &state);
+            }
             // What Core Animation redraws (all of it, or a canvas's part
             // that animated values changed), top down.
             let dirty = CGContext::clip_bounding_box(c);
             let (size, scale) = (layer.bounds().size, layer.contentsScale());
             let asynchronous = layer.drawsAsynchronously();
-            if crate::fps::measuring() && state.canvas.is_some() {
+            if measuring && state.canvas.is_some() {
                 let start = std::time::Instant::now();
                 crate::canvas::draw(cx, &state, dirty, size, scale, asynchronous);
-                crate::fps::drew_canvas(start.elapsed());
+                let cost = start.elapsed();
+                crate::fps::drew_canvas(cost);
+                crate::fps::painted("canvas", cost);
             } else {
                 crate::canvas::draw(cx, &state, dirty, size, scale, asynchronous);
             }

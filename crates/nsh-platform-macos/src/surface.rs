@@ -844,6 +844,7 @@ impl Surface {
         let cost = start.elapsed();
         monitor.record_part("tick", cost, dirty);
         crate::fps::ticked(cost);
+        crate::fps::take_paints(&monitor);
         monitor.vsync(
             Instant::now(),
             std::time::Duration::from_secs_f64(period.max(0.0)),
