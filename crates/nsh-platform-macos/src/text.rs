@@ -79,7 +79,18 @@ unsafe impl Send for CFStringKey {}
 unsafe impl Sync for CFStringKey {}
 
 /// Identifies a font: size bits, weight, family, italic, OpenType features.
-type FontKey = (u32, u16, Option<FontFamily>, bool, u8);
+pub(crate) type FontKey = (u32, u16, Option<FontFamily>, bool, u8);
+
+/// The key of `style`'s font.
+pub(crate) fn font_key(style: &ResolvedTextStyle) -> FontKey {
+    (
+        style.font_size.0.to_bits(),
+        style.font_weight,
+        style.font_family,
+        style.italic,
+        style.font_variant.0,
+    )
+}
 
 /// Caches fonts. Bounded: an app animating `fontSize` would otherwise grow
 /// it without limit.
@@ -92,13 +103,7 @@ impl FontCache {
     const MAX: usize = 64;
 
     fn get(&self, style: &ResolvedTextStyle) -> CFRetained<CTFont> {
-        let key = (
-            style.font_size.0.to_bits(),
-            style.font_weight,
-            style.font_family,
-            style.italic,
-            style.font_variant.0,
-        );
+        let key = font_key(style);
         let mut fonts = self.fonts.borrow_mut();
         if let Some(font) = fonts.get(&key) {
             return font.clone();
