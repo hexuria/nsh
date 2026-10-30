@@ -159,6 +159,11 @@ pub struct TestEnvironment {
     /// the embedding app's, which the test plays.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host_params: Option<serde_json::Map<String, serde_json::Value>>,
+    /// Whether the app's sockets and WebSockets reach the host's network
+    /// (`open`'s `network: "live"`); otherwise the host refuses them, as
+    /// the test fails requests no route answers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub live_network: Option<bool>,
 }
 
 /// How a test moves its app's manual clock ([`TestEnvironment::clock`];
@@ -319,6 +324,27 @@ impl TestFile {
     }
 }
 
+/// A character's resolved style, as [`TestStep::SpanStyle`] answers it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[non_exhaustive]
+pub struct SpanStyle {
+    /// Its text color, `0xRRGGBBAA`.
+    pub color: u32,
+    /// The color of the background a nested text's `backgroundColor` gives
+    /// it.
+    pub background: Option<u32>,
+    /// Its font size, in points.
+    pub font_size: f32,
+    /// Its font weight (400 regular, 700 bold).
+    pub font_weight: u16,
+    /// Whether it is italic.
+    pub italic: bool,
+    /// Whether it is underlined.
+    pub underline: bool,
+    /// Whether it is struck through.
+    pub line_through: bool,
+}
+
 /// A step of a test on a host's app, named as `nsh/test` names them: views
 /// are found by selectors (`id:save`, `text:Add`, `role:button[Save]`), and
 /// actions are native input at the view the selector names.
@@ -474,7 +500,10 @@ pub enum TestStep {
         /// How.
         change: ClockChange,
     },
-    /// Waits until a view matches, or none does (`app.waitFor`).
+    /// Waits until a view matches, or none does (`app.waitFor`). On a
+    /// manual clock ([`TestEnvironment::clock`]) the wait moves it, a
+    /// display frame at a time, looking after each frame, by `timeout_ms`
+    /// at most, and fails once as much real time passed too.
     WaitFor {
         /// The view.
         selector: String,
@@ -488,6 +517,14 @@ pub enum TestStep {
     NextChange {
         /// Milliseconds at most.
         timeout_ms: u64,
+    },
+    /// What polling a condition waits for between looks on a manual clock
+    /// (`app.waitUntil`): moves the clock by `ms` (a display frame), then
+    /// waits for the next batch a moment; as [`TestStep::NextChange`] on
+    /// the system's clock.
+    NextFrame {
+        /// Milliseconds the clock moves by.
+        ms: u64,
     },
     /// The texts on screen, in order: a list of strings.
     Texts,
@@ -508,6 +545,12 @@ pub enum TestStep {
     },
     /// The text of the input: a string, or null when none matches.
     Value {
+        /// The selector.
+        selector: String,
+    },
+    /// The style of the first character `selector` names
+    /// (`app.spanStyle`): a [`SpanStyle`].
+    SpanStyle {
         /// The selector.
         selector: String,
     },
@@ -668,7 +711,8 @@ pub enum SceneQuery {
         /// The view.
         id: u32,
     },
-    /// Whether a native animation runs.
+    /// Whether a native animation runs that ends by itself (not one
+    /// looping forever).
     Animating,
     /// Where to press to answer the dialog shown: its button `button`, or
     /// outside it (`None`).
