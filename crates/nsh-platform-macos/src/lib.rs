@@ -29,6 +29,7 @@ mod app;
 mod blur;
 mod canvas;
 mod chrome;
+mod clip;
 mod decor;
 #[cfg(feature = "dev")]
 pub mod dev;
