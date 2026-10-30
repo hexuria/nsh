@@ -401,6 +401,7 @@ define_class!(
                 base.d = -1.0;
             }
             let asynchronous = layer.drawsAsynchronously();
+            let measuring = crate::fps::measuring();
             let overlay = view.ivars().overlay.borrow();
             let part = match overlay.as_ref() {
                 Some((top, _)) if std::ptr::eq(&**top, layer) => crate::canvas::LayerPart::Suffix,
@@ -410,6 +411,10 @@ define_class!(
             if part == crate::canvas::LayerPart::Suffix {
                 let origin = layer.frame().origin;
                 CGContext::translate_ctm(c, -origin.x, -origin.y);
+            } else if measuring && state.text.is_some() {
+                let start = std::time::Instant::now();
+                crate::text::draw(cx, &state);
+                crate::fps::painted("text", start.elapsed());
             } else {
                 crate::text::draw(cx, &state);
             }
@@ -417,10 +422,12 @@ define_class!(
             // that animated values changed), top down.
             let dirty = CGContext::clip_bounding_box(c);
             let (size, scale) = (layer.bounds().size, layer.contentsScale());
-            if crate::fps::measuring() && state.canvas.is_some() {
+            if measuring && state.canvas.is_some() {
                 let start = std::time::Instant::now();
                 crate::canvas::draw(cx, &state, dirty, size, scale, base, part);
-                crate::fps::drew_canvas(start.elapsed());
+                let cost = start.elapsed();
+                crate::fps::drew_canvas(cost);
+                crate::fps::painted("canvas", cost);
             } else {
                 crate::canvas::draw(cx, &state, dirty, size, scale, base, part);
             }
