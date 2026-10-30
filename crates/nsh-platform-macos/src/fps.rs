@@ -92,6 +92,9 @@ thread_local! {
     static MEASURING: Cell<u32> = const { Cell::new(0) };
     static CANVAS: Cell<Duration> = const { Cell::new(Duration::ZERO) };
     static PHASES: RefCell<Phases> = RefCell::default();
+    /// The views' contents drawn since the last display frame: kind and
+    /// time of each (handed to the monitor as the frame closes).
+    static PAINTS: RefCell<Vec<(&'static str, Duration)>> = const { RefCell::new(Vec::new()) };
 }
 
 /// The phases' samples since the last line.
@@ -124,6 +127,19 @@ pub(crate) fn drained(cost: Duration) {
 /// A canvas drew in `cost` (closed into its frame at the next tick).
 pub(crate) fn drew_canvas(cost: Duration) {
     CANVAS.set(CANVAS.get() + cost);
+}
+
+/// A view's content of `kind` (`text`, `canvas`) drew in `cost`: named on
+/// the frame's jank line ([`take_paints`]).
+pub(crate) fn painted(kind: &'static str, cost: Duration) {
+    PAINTS.with_borrow_mut(|p| p.push((kind, cost)));
+}
+
+/// Hands the drawing since the last frame to `monitor`.
+pub(crate) fn take_paints(monitor: &PerfMonitor) {
+    for (kind, cost) in PAINTS.take() {
+        monitor.record_paint(kind, cost);
+    }
 }
 
 static NEXT_KEY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
