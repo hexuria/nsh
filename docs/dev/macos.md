@@ -87,7 +87,11 @@ server client, log forwarding, the error overlay: `dev.rs`). The runtime needs m
   mounted, and a content layer, unlike AppKit's lazy `drawRect:`, would otherwise draw them all at once (the Stocks
   demo's pulsing sparklines redrew all 22 rows at 120 Hz). A canvas in sight redraws only the area its changed values
   cover (`NshView::redraw_rect`: `setNeedsDisplayInRect:` on the content layer; `docs/dev/canvas.md`, "Partial
-  redraws").
+  redraws"). The views put off are tested again on every frame of a scroll, so each keeps its rectangle in its
+  nearest scroll view's content space (`clip.rs`): a frame meets those with what each scroll view and its ancestors
+  leave visible, worked out once per scroll view, instead of walking every view's ancestors (400 texts 12 views deep:
+  0.61 ms a frame before, 0.008 ms after, in a release build). The rectangles are kept until a view moves, is
+  inserted or removed, or hides.
 - **Trackpad scrolls are shown in step with the display** (`scroll.rs`, `Resampled`): gesture and momentum events come
   at about the display's rate (120 Hz) but not in step with it, so applied as they come some frames moved twice and
   some not at all (up to a quarter of a fling's frames, depending on how the events fell; the frame rate still read
