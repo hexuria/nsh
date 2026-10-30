@@ -1075,7 +1075,8 @@ impl ViewObj {
         None
     }
 
-    fn surface(&self) -> Option<std::rc::Rc<Surface>> {
+    /// The surface it is the root of; `None` for any other view.
+    pub(crate) fn surface(&self) -> Option<std::rc::Rc<Surface>> {
         self.ivars().surface.borrow().upgrade()
     }
 
