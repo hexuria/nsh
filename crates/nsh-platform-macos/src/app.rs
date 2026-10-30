@@ -124,6 +124,13 @@ pub struct AppOptions {
     /// Reopening from the Dock shows the same window. Quit still stops the app.
     /// Only used by [`run_app`]; defaults to false.
     pub keep_alive_on_close: bool,
+    /// Brings the app to the front when [`run_app`] opens its window: the
+    /// app becomes active and its window takes the keyboard. True by
+    /// default. False opens the window without taking focus from the app
+    /// in use: the app is not activated and its window is ordered front
+    /// without becoming key, as a test run or an automated session wants.
+    /// Reopening the app from the Dock still brings its window forward.
+    pub activate: bool,
     /// The native components apps can use (`nsh/native`); shared by the
     /// views made with these options. See [`AppView::register_component`].
     pub components: crate::native::Components,
@@ -171,6 +178,7 @@ impl Default for AppOptions {
             display: None,
             keep_size: false,
             keep_alive_on_close: false,
+            activate: true,
             components: Default::default(),
             appearance: Appearance::System,
             fps: false,
@@ -621,6 +629,25 @@ fn name_app(name: &str) {
     }
 }
 
+/// How [`run_app`] shows its window ([`AppOptions::activate`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Launch {
+    /// Makes the window key as it is ordered front.
+    make_key: bool,
+    /// Activates the app.
+    activate: bool,
+}
+
+impl Launch {
+    /// How `options` show the window: key and active, or only in front.
+    fn of(options: &AppOptions) -> Launch {
+        Launch {
+            make_key: options.activate,
+            activate: options.activate,
+        }
+    }
+}
+
 /// Runs `source` in a window until it is closed. Must be called on the
 /// main thread. By default closing the window stops the engine and returns;
 /// `keep_alive_on_close` retains the same engine until Quit or [`quit_app`].
@@ -685,9 +712,16 @@ pub fn run_app(source: AppSource, options: AppOptions) -> std::process::ExitCode
         #[cfg(feature = "dev")]
         AppSource::DevServer(url) => crate::dev::start(&view, url),
     }
-    window.makeKeyAndOrderFront(None);
+    let launch = Launch::of(&options);
+    if launch.make_key {
+        window.makeKeyAndOrderFront(None);
+    } else {
+        window.orderFront(None);
+    }
     window.makeFirstResponder(Some(view.surface().root.ns()));
-    app.activate();
+    if launch.activate {
+        app.activate();
+    }
     RUNNING.with(|r| {
         *r.borrow_mut() = Some(Running {
             window,
@@ -824,7 +858,7 @@ fn main_menu(mtm: MainThreadMarker, title: &str) -> Retained<NSMenu> {
 mod tests {
     use objc2_foundation::{NSPoint, NSRect, NSSize};
 
-    use super::secondary;
+    use super::{AppOptions, Launch, secondary};
 
     fn frame(x: f64, y: f64, w: f64, h: f64) -> NSRect {
         NSRect::new(NSPoint::new(x, y), NSSize::new(w, h))
@@ -841,5 +875,31 @@ mod tests {
         assert_eq!(secondary(&[primary, built_in]), Some(1));
         assert_eq!(secondary(&[primary, primary, built_in]), Some(2));
         assert_eq!(secondary(&[primary, primary]), None);
+    }
+
+    /// An app activates and makes its window key on launch unless its
+    /// options turn activation off; then it only orders the window front.
+    #[test]
+    fn launch_activates_unless_options_turn_it_off() {
+        let options = AppOptions::default();
+        assert!(options.activate);
+        assert_eq!(
+            Launch::of(&options),
+            Launch {
+                make_key: true,
+                activate: true
+            }
+        );
+        let options = AppOptions {
+            activate: false,
+            ..AppOptions::default()
+        };
+        assert_eq!(
+            Launch::of(&options),
+            Launch {
+                make_key: false,
+                activate: false
+            }
+        );
     }
 }
