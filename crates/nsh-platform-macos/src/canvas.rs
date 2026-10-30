@@ -287,6 +287,12 @@ impl CanvasState {
         0 < self.split && self.redrawn.get() >= STABLE
     }
 
+    /// Whether its drawing reads no animated values: it changes only with
+    /// a new drawing.
+    pub(crate) fn is_static(&self) -> bool {
+        self.drawing.as_ref().is_some_and(|d| d.slots.is_empty())
+    }
+
     /// Whether Core Animation draws it on its threads
     /// (`drawsAsynchronously`): when it paints often and keeps no layer.
     pub(crate) fn draws_asynchronously(&self) -> bool {
