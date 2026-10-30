@@ -12,7 +12,7 @@ use std::{
 use nsh_core::{Command, LayoutAnimation, MountItem, NodeId, ROOT_ID, ViewKind, canvas::Damage};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::{surface::Surface, view::NshView};
+use crate::{clip::Clips, surface::Surface, view::NshView};
 
 /// The views of a surface.
 pub(crate) struct Mounter {
@@ -35,6 +35,9 @@ pub(crate) struct Mounter {
     /// The views the batch being applied deletes
     /// ([`Mounter::begin_batch`]).
     deleting: FxHashSet<NodeId>,
+    /// Where `stale`'s views sit in their scroll views: what
+    /// [`Mounter::revisit`] and [`Mounter::draw_ahead`] test each frame.
+    clips: Clips,
 }
 
 impl Mounter {
@@ -49,6 +52,7 @@ impl Mounter {
             stale: RefCell::default(),
             ahead: Cell::new(false),
             deleting: FxHashSet::default(),
+            clips: Clips::default(),
         }
     }
 
@@ -67,6 +71,7 @@ impl Mounter {
         self.layout_animation = None;
         self.stale.borrow_mut().clear();
         self.ahead.set(false);
+        self.clips.clear();
     }
 
     /// `view`'s drawing changed in `damage` (on every frame of an animation
@@ -100,7 +105,7 @@ impl Mounter {
     }
 
     /// Draws the static content put off out of sight that is within a
-    /// viewport of showing ([`NshView::near`], [`NshView::draws_static`]),
+    /// viewport of showing ([`Clips::near`], [`NshView::draws_static`]),
     /// until `budget` is spent. Drawn on first show instead, a list row's
     /// texts and canvases all landed in the frame a scroll brought it in
     /// (tens of milliseconds for a long reply or a diagram); drawn here,
@@ -123,12 +128,13 @@ impl Mounter {
         drop(stale);
         let mut drawn = Vec::new();
         let mut done = true;
+        let mut pass = crate::clip::Pass::default();
         for view in candidates {
             if start.elapsed() >= budget {
                 done = false;
                 break;
             }
-            if view.near() {
+            if self.clips.near(&view, &mut pass) {
                 view.set_stale(false);
                 view.draw_now();
                 drawn.push(view);
@@ -145,7 +151,9 @@ impl Mounter {
     /// Draws the views [`Mounter::draw_when_shown`] put off that can be
     /// seen now (after scrolls, batches and frames). Views out of the tree
     /// wait (their content is drawn once they show); deleted ones are
-    /// dropped.
+    /// dropped. Runs on every frame of a scroll: each view costs a lookup
+    /// of where it sits in its scroll view, not a walk of its ancestors
+    /// ([`crate::clip`]).
     pub(crate) fn revisit(&self) {
         let Ok(mut stale) = self.stale.try_borrow_mut() else {
             return;
@@ -153,8 +161,9 @@ impl Mounter {
         if stale.is_empty() {
             return;
         }
+        let mut pass = crate::clip::Pass::default();
         let shown: Vec<NshView> = stale
-            .extract_if(.., |v| !self.alive(v) || v.shown())
+            .extract_if(.., |v| !self.alive(v) || self.clips.shown(v, &mut pass))
             .collect();
         drop(stale);
         for view in shown {
@@ -326,6 +335,9 @@ impl Mounter {
             MountItem::ViewStyle { id, style } => {
                 let Some(view) = self.get(*id) else { return };
                 let old = std::mem::replace(&mut view.state_mut().style, style.clone());
+                if old.overflow_hidden != style.overflow_hidden {
+                    crate::clip::moved();
+                }
                 crate::input::style_changed(view);
                 crate::transition::style_changed(surface, view, &old);
                 view.moved();
@@ -375,6 +387,8 @@ impl Mounter {
                 ..
             } => {
                 if let Some(view) = self.get(*id) {
+                    // A view that scrolls is where the walks up stop.
+                    crate::clip::moved();
                     crate::scroll::config(
                         surface,
                         view,

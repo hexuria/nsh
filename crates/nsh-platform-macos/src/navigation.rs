@@ -401,6 +401,7 @@ fn hide(surface: &Surface, view: &NshView) {
     if !view.ns().isHidden() {
         drop_focus(surface, view.ns());
         view.ns().setHidden(true);
+        crate::clip::moved();
     }
 }
 
@@ -408,6 +409,7 @@ fn hide(surface: &Surface, view: &NshView) {
 fn show(view: &NshView) {
     if view.ns().isHidden() {
         view.ns().setHidden(false);
+        crate::clip::moved();
         view.place();
     }
 }
