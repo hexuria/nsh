@@ -2093,12 +2093,14 @@ fn gesture_target(surface: &Surface, x: f32, y: f32, dx: f32, dy: f32) -> Option
 }
 
 /// Whether `event` belongs to a scroll this surface does not take — no
-/// scroll view of it under the pointer when the scroll began — so its
-/// view passes it up the responder chain: an app embedded in another
-/// one's content (a card in a chat) lets the host scroll, as a page
-/// scrolls under an iframe that cannot. Decided when a gesture begins
-/// (or per mouse wheel notch with nothing latched) and kept for the
-/// gesture's changes, end and momentum.
+/// scroll view of it that can move ([`crate::scroll::movable`]: enabled,
+/// with content overflowing its viewport) under the pointer when the
+/// scroll began — so its view passes it up the responder chain: an app
+/// embedded in another one's content (a card in a chat) lets the host
+/// scroll, as a page scrolls under an iframe that cannot. A card whose
+/// scroll view is switched off or whose content fits takes no scroll
+/// either. Decided when a gesture begins (or per mouse wheel notch with
+/// nothing latched) and kept for the gesture's changes, end and momentum.
 pub(crate) fn forwards_scroll(surface: &Rc<Surface>, event: &NSEvent) -> bool {
     let input = &surface.input;
     let phase = event.phase();
@@ -2120,7 +2122,7 @@ pub(crate) fn forwards_scroll(surface: &Rc<Surface>, event: &NSEvent) -> bool {
         let scrolls = pick(&surface.root, p.x as f32, p.y as f32).is_some_and(|hit| {
             chain(&hit.view)
                 .into_iter()
-                .any(|v| v.kind() == ViewKind::Scroll)
+                .any(|v| v.kind() == ViewKind::Scroll && crate::scroll::movable(&v))
         });
         input.forward_scroll.set(!scrolls);
     }
