@@ -181,6 +181,13 @@ pub struct AppOptions {
     /// which has no Dock icon, shows it itself: from its tray, say). Quit
     /// still stops the app. Only used by [`run_app`]; defaults to false.
     pub keep_alive_on_close: bool,
+    /// Brings the app to the front when [`run_app`] opens its window: the
+    /// app becomes active and its window takes the keyboard. True by
+    /// default. False opens the window without taking focus from the app
+    /// in use: the app is not activated and its window is ordered front
+    /// without becoming key, as a test run or an automated session wants.
+    /// Reopening the app from the Dock still brings its window forward.
+    pub activate: bool,
     /// The native components apps can use (`nsh/native`); shared by the
     /// views made with these options. See [`AppView::register_component`].
     pub components: crate::native::Components,
@@ -266,6 +273,7 @@ impl Default for AppOptions {
             background: false,
             activation_policy: ActivationPolicy::Regular,
             keep_alive_on_close: false,
+            activate: true,
             components: Default::default(),
             appearance: Appearance::System,
             fps: false,
@@ -658,6 +666,9 @@ struct Running {
     /// It runs in the background ([`AppOptions::background`]).
     #[cfg(feature = "dev")]
     background: bool,
+    /// How it shows its window ([`AppOptions::activate`]).
+    #[cfg(feature = "dev")]
+    show: Launch,
     /// A development host's window, made before its app's options came: it
     /// shows when the app comes (unless they say it starts hidden) or an
     /// error does ([`dev_app_came`], [`dev_error_shown`]).
@@ -692,9 +703,10 @@ impl QuitRequests {
     }
 }
 
-/// Shows the standalone app's window as it launches: key, the app active,
-/// or, in the background, in front without activating the app.
-fn show_launched(window: &NSWindow, surface: &Surface, background: bool) {
+/// Shows the standalone app's window as it launches: key, the app active
+/// (unless [`AppOptions::activate`] is off: then only in front), or, in the
+/// background, in front without activating the app.
+fn show_launched(window: &NSWindow, surface: &Surface, background: bool, show: Launch) {
     if background {
         // Shown without activating the app (it never is: its window is
         // never key, and the test agent's input goes to it directly).
@@ -704,9 +716,15 @@ fn show_launched(window: &NSWindow, surface: &Surface, background: bool) {
         // keyboard, which the test agent's keys go to.
         crate::window::became_key(surface, window);
     } else {
-        window.makeKeyAndOrderFront(None);
+        if show.make_key {
+            window.makeKeyAndOrderFront(None);
+        } else {
+            window.orderFront(None);
+        }
         window.makeFirstResponder(Some(surface.root.ns()));
-        NSApplication::sharedApplication(surface.mtm).activate();
+        if show.activate {
+            NSApplication::sharedApplication(surface.mtm).activate();
+        }
     }
 }
 
@@ -714,12 +732,13 @@ fn show_launched(window: &NSWindow, surface: &Surface, background: bool) {
 /// development host holds it unshown: taken (it shows now), with whether
 /// the app runs in the background.
 #[cfg(feature = "dev")]
-fn take_held(surface: &Surface) -> Option<(Retained<NSWindow>, bool)> {
+fn take_held(surface: &Surface) -> Option<(Retained<NSWindow>, bool, Launch)> {
     RUNNING.with(|running| {
         let running = running.try_borrow().ok()?;
         let running = running.as_ref()?;
         let ours = std::ptr::eq(&**running.view.surface(), surface);
-        (ours && running.held.replace(false)).then(|| (running.window.clone(), running.background))
+        (ours && running.held.replace(false))
+            .then(|| (running.window.clone(), running.background, running.show))
     })
 }
 
@@ -728,11 +747,11 @@ fn take_held(surface: &Surface) -> Option<(Retained<NSWindow>, bool)> {
 /// options came, shows as the app's package would show it.
 #[cfg(feature = "dev")]
 pub(crate) fn dev_app_came(surface: &Surface, visible: bool) {
-    let Some((window, background)) = take_held(surface) else {
+    let Some((window, background, show)) = take_held(surface) else {
         return;
     };
     if visible {
-        show_launched(&window, surface, background);
+        show_launched(&window, surface, background, show);
         crate::window::main_shown(surface);
     } else {
         log::info!("the main window starts hidden (nsh.json window.defaultVisible: false)");
@@ -753,10 +772,10 @@ pub(crate) fn dev_error_shown(surface: &Surface) {
         }
         let held = running.held.replace(false);
         let hidden = !running.window.isVisible() && !running.window.isMiniaturized();
-        (held || hidden).then(|| (running.window.clone(), running.background))
+        (held || hidden).then(|| (running.window.clone(), running.background, running.show))
     });
-    if let Some((window, background)) = hidden {
-        show_launched(&window, surface, background);
+    if let Some((window, background, show)) = hidden {
+        show_launched(&window, surface, background, show);
         crate::window::main_shown(surface);
     }
 }
@@ -1275,6 +1294,25 @@ fn name_app(name: &str) {
     }
 }
 
+/// How [`run_app`] shows its window ([`AppOptions::activate`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Launch {
+    /// Makes the window key as it is ordered front.
+    make_key: bool,
+    /// Activates the app.
+    activate: bool,
+}
+
+impl Launch {
+    /// How `options` show the window: key and active, or only in front.
+    fn of(options: &AppOptions) -> Launch {
+        Launch {
+            make_key: options.activate,
+            activate: options.activate,
+        }
+    }
+}
+
 /// Runs `source` in a window until it is closed. Must be called on the
 /// main thread. By default closing the window stops the engine and returns;
 /// `keep_alive_on_close` retains the same engine until Quit or [`quit_app`].
@@ -1391,7 +1429,12 @@ pub fn run_app(source: AppSource, mut options: AppOptions) -> std::process::Exit
     // app runs in it, unseen, until it shows it (a tray app).
     let shown = !held && launch.visible_at_launch();
     if shown {
-        show_launched(&window, view.surface(), options.background);
+        show_launched(
+            &window,
+            view.surface(),
+            options.background,
+            Launch::of(&options),
+        );
     } else if !held {
         log::info!("the main window starts hidden (nsh.json window.defaultVisible: false)");
     }
@@ -1405,6 +1448,8 @@ pub fn run_app(source: AppSource, mut options: AppOptions) -> std::process::Exit
             quit_requests: QuitRequests::default(),
             #[cfg(feature = "dev")]
             background: options.background,
+            #[cfg(feature = "dev")]
+            show: Launch::of(&options),
             #[cfg(feature = "dev")]
             held: Cell::new(held),
         })
@@ -1482,7 +1527,7 @@ mod tests {
     use objc2_app_kit::NSApplicationActivationPolicy;
     use objc2_foundation::{NSPoint, NSRect, NSSize};
 
-    use super::{ActivationPolicy, AppOptions, activation_policy, secondary};
+    use super::{ActivationPolicy, AppOptions, Launch, activation_policy, secondary};
 
     /// The app's policy, unless it runs in the background, which never
     /// activates it.
@@ -1524,5 +1569,31 @@ mod tests {
         assert_eq!(secondary(&[primary, built_in]), Some(1));
         assert_eq!(secondary(&[primary, primary, built_in]), Some(2));
         assert_eq!(secondary(&[primary, primary]), None);
+    }
+
+    /// An app activates and makes its window key on launch unless its
+    /// options turn activation off; then it only orders the window front.
+    #[test]
+    fn launch_activates_unless_options_turn_it_off() {
+        let options = AppOptions::default();
+        assert!(options.activate);
+        assert_eq!(
+            Launch::of(&options),
+            Launch {
+                make_key: true,
+                activate: true
+            }
+        );
+        let options = AppOptions {
+            activate: false,
+            ..AppOptions::default()
+        };
+        assert_eq!(
+            Launch::of(&options),
+            Launch {
+                make_key: false,
+                activate: false
+            }
+        );
     }
 }
