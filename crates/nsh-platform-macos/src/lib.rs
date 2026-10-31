@@ -87,6 +87,7 @@ pub use crate::{
         set_components, set_ui_sets,
     },
     image::AssetBase,
+    keymap::KeyPrecedence,
     native::{ComponentContext, ComponentFactory, Components, NativeComponent},
     text::CoreTextEngine,
 };

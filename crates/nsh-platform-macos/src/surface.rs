@@ -525,6 +525,7 @@ impl Surface {
         find(key)
     }
 
+<<<<<<< /tmp/ours_f
     /// The root view (node [`ROOT_ID`]).
     pub fn root(&self) -> NshView {
         self.root.clone()
@@ -543,6 +544,14 @@ impl Surface {
         }
     }
 
+||||||| /tmp/base_f
+=======
+    /// Every surface of this (the main) thread.
+    pub(crate) fn all() -> Vec<Rc<Surface>> {
+        SURFACES.with(|s| s.borrow().values().filter_map(Weak::upgrade).collect())
+    }
+
+>>>>>>> /tmp/theirs_f
     /// Starts `config`'s app, replacing what ran.
     pub(crate) fn start(self: &Rc<Self>, mut config: EngineConfig) {
         self.stop();
