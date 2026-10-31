@@ -227,9 +227,13 @@ any layout; the dev host's Cmd+R is a local key monitor (`dev.rs`).
   (`Keystroke::reloads`), so the dev host's reload monitor gets it. An auto-repeat (`isARepeat`) of a binding without
   `repeat` is consumed silently. A surface takes the key while the
   window's first responder is inside its root (a field or hosted view there counts as editing: `when`), or is the
-  window itself. The key is read as `Keystroke`: virtual key codes for named and function keys, else the character
-  without modifiers (`charactersByApplyingModifiers:` with none when Shift is held, so Shift+/ is `shift+/`), the US
-  layout's (`input::us_key`) when that is not ASCII. The monitor is removed when the table empties or the app stops.
+  window itself. An `AppView` hosted in another surface's views shares its window's keys with the surfaces around it;
+  `AppView::set_key_precedence` settles a key both bind: `Focus` (the default) leaves it to the focus and the
+  monitors' order, `First` gives the hosted app the keys it binds wherever the focus is (while it shows: the
+  surfaces around it skip them), `Last` leaves them to the surfaces around it. The key is read as `Keystroke`:
+  virtual key codes for named and function keys, else the character without modifiers
+  (`charactersByApplyingModifiers:` with none when Shift is held, so Shift+/ is `shift+/`), the US layout's
+  (`input::us_key`) when that is not ASCII. The monitor is removed when the table empties or the app stops.
 - Shortcuts NSH matches itself (Cmd+A / C / [ / R) read `input::shortcut_key`: the character without modifiers, or on
   a layout that types none in ASCII the US layout's key, as menus do.
 
