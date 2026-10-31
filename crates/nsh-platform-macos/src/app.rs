@@ -377,6 +377,21 @@ impl AppView {
         crate::keymap::set_precedence(&self.surface, precedence);
     }
 
+    /// The keys the surfaces around this view keep while it comes first
+    /// ([`KeyPrecedence::First`]): a way out of the app (closing it, going
+    /// back) that its bindings and focused text inputs never take.
+    pub fn set_host_keys(&self, keys: Vec<nsh_core::keymap::Keystroke>) {
+        crate::keymap::set_host_keys(&self.surface, keys);
+    }
+
+    /// Gives the keyboard focus to the app (its root view) in the window
+    /// it is in; false when it is in none.
+    pub fn focus(&self) -> bool {
+        let root = self.surface.root.ns();
+        root.window()
+            .is_some_and(|w| w.makeFirstResponder(Some(root)))
+    }
+
     /// Shows (or hides) the performance monitor: a panel at the top right
     /// with the frame rate, what frames cost the main thread, what commits
     /// cost the engine thread (JS, layout), and the process' CPU, GPU and
