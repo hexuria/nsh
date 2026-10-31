@@ -325,6 +325,11 @@ impl Surface {
         find(key)
     }
 
+    /// Every surface of this (the main) thread.
+    pub(crate) fn all() -> Vec<Rc<Surface>> {
+        SURFACES.with(|s| s.borrow().values().filter_map(Weak::upgrade).collect())
+    }
+
     /// Starts `config`'s app, replacing what ran.
     pub(crate) fn start(self: &Rc<Self>, mut config: EngineConfig) {
         self.stop();

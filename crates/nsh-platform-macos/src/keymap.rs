@@ -14,8 +14,22 @@
 //! A surface takes the keys of its window while the keyboard focus is in
 //! it (its root, one of its views, a field or hosted view inside it), or
 //! nowhere (the window itself).
+//!
+//! An app view hosted in another surface's views (an [`AppView`] inside an
+//! app's native component) sees the keys of the surfaces around it, and
+//! they see its keys. Which of them takes a key both bind is the hosted
+//! one's [`KeyPrecedence`]: by default the focus and the monitors' order
+//! decide; `First` makes it take the keys it binds wherever the focus is,
+//! `Last` leaves them to the surfaces around it.
+//!
+//! [`AppView`]: crate::AppView
 
-use std::{cell::RefCell, ptr::NonNull, rc::Rc, sync::Arc};
+use std::{
+    cell::{Cell, RefCell},
+    ptr::NonNull,
+    rc::Rc,
+    sync::Arc,
+};
 
 use block2::RcBlock;
 use nsh_core::{
@@ -34,6 +48,30 @@ use crate::surface::Surface;
 pub(crate) struct KeymapState {
     table: RefCell<Option<Arc<Keymap>>>,
     monitor: RefCell<Option<Retained<AnyObject>>>,
+    precedence: Cell<KeyPrecedence>,
+}
+
+/// Where a surface hosted in another surface's views stands for the keys
+/// both bind ([`AppView::set_key_precedence`]).
+///
+/// [`AppView::set_key_precedence`]: crate::AppView::set_key_precedence
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum KeyPrecedence {
+    /// It takes the keys it binds while the keyboard focus is in it or
+    /// nowhere, as the surfaces around it do: when both may, the newest
+    /// monitor wins.
+    #[default]
+    Focus,
+    /// It takes the keys it binds wherever the focus is in its window
+    /// (while it shows); the surfaces around it get the others.
+    First,
+    /// The surfaces around it take the keys they bind; it gets the others.
+    Last,
+}
+
+/// How `surface` stands with the surfaces around it from now on.
+pub(crate) fn set_precedence(surface: &Surface, precedence: KeyPrecedence) {
+    surface.keymap.precedence.set(precedence);
 }
 
 impl KeymapState {
@@ -107,7 +145,7 @@ fn pressed(surface: &Rc<Surface>, event: &NSEvent) -> bool {
     if event.window(surface.mtm).as_deref() != Some(&*window) {
         return false;
     }
-    let Some(editing) = editing(surface, &window) else {
+    let Some(editing) = taking(surface, &window) else {
         return false;
     };
     if crate::input::control_activation_target(surface, event).is_some() {
@@ -121,6 +159,9 @@ fn pressed(surface: &Rc<Surface>, event: &NSEvent) -> bool {
         return false;
     }
     let found = table.find(keystroke, editing, event.isARepeat());
+    if found.consumed() && leaves(surface, &window, keystroke, event.isARepeat()) {
+        return false;
+    }
     if let KeyMatch::Fire(id) = found {
         surface.event(
             ROOT_ID,
@@ -129,6 +170,61 @@ fn pressed(surface: &Rc<Surface>, event: &NSEvent) -> bool {
         );
     }
     found.consumed()
+}
+
+/// Whether the surface takes keys now, and whether they count as typed in
+/// a text input ([`editing`]); a `First` surface wherever the focus is,
+/// unless it is hidden.
+fn taking(surface: &Surface, window: &NSWindow) -> Option<bool> {
+    if surface.keymap.precedence.get() != KeyPrecedence::First {
+        return editing(surface, window);
+    }
+    if surface.root.ns().isHiddenOrHasHiddenAncestor() {
+        return None;
+    }
+    let focused = window.firstResponder();
+    let view = focused.as_deref().and_then(|r| r.downcast_ref::<NSView>());
+    Some(view.is_some_and(|v| !crate::view::is_ours(v)))
+}
+
+/// Whether `surface` leaves `keystroke`, which it binds, to another surface
+/// of `window` that hosts it or is hosted in it and takes it.
+fn leaves(surface: &Rc<Surface>, window: &NSWindow, keystroke: Keystroke, repeat: bool) -> bool {
+    let root = surface.root.ns();
+    let mine = surface.keymap.precedence.get();
+    Surface::all().iter().any(|other| {
+        if Rc::ptr_eq(other, surface) {
+            return false;
+        }
+        let theirs = other.root.ns();
+        let inside = theirs.isDescendantOf(root);
+        if !inside && !root.isDescendantOf(theirs) {
+            return false;
+        }
+        let precedence = other.keymap.precedence.get();
+        defers(mine, precedence, inside) && binds(other, window, keystroke, repeat)
+    })
+}
+
+/// Whether a surface of precedence `mine` leaves a key both bind to
+/// another of precedence `theirs`, hosted in it (`inside`) or hosting it.
+fn defers(mine: KeyPrecedence, theirs: KeyPrecedence, inside: bool) -> bool {
+    if inside {
+        theirs == KeyPrecedence::First
+    } else {
+        mine == KeyPrecedence::Last
+    }
+}
+
+/// Whether `surface` would take `keystroke` in `window` now.
+fn binds(surface: &Surface, window: &NSWindow, keystroke: Keystroke, repeat: bool) -> bool {
+    let Some(table) = surface.keymap.table.borrow().clone() else {
+        return false;
+    };
+    if surface.root.ns().window().as_deref() != Some(window) {
+        return false;
+    }
+    taking(surface, window).is_some_and(|editing| table.find(keystroke, editing, repeat).consumed())
 }
 
 /// Where the keyboard focus is: `Some(true)` in a text input or hosted
@@ -210,6 +306,27 @@ fn function_key(code: u16) -> Option<u8> {
 
 #[cfg(test)]
 mod tests {
+    use super::{KeyPrecedence, defers};
+
+    #[test]
+    fn a_hosted_surface_first_takes_the_keys_both_bind() {
+        // the host leaves them to it; it keeps them from the host
+        assert!(defers(KeyPrecedence::Focus, KeyPrecedence::First, true));
+        assert!(!defers(KeyPrecedence::First, KeyPrecedence::Focus, false));
+    }
+
+    #[test]
+    fn a_hosted_surface_last_leaves_them_to_its_host() {
+        assert!(defers(KeyPrecedence::Last, KeyPrecedence::Focus, false));
+        assert!(!defers(KeyPrecedence::Focus, KeyPrecedence::Last, true));
+    }
+
+    #[test]
+    fn by_default_neither_side_leaves_a_key() {
+        assert!(!defers(KeyPrecedence::Focus, KeyPrecedence::Focus, true));
+        assert!(!defers(KeyPrecedence::Focus, KeyPrecedence::Focus, false));
+    }
+
     #[test]
     fn function_keys() {
         assert_eq!(super::function_key(122), Some(1));

@@ -29,6 +29,7 @@ use objc2_foundation::{
 
 use crate::{
     image::{AssetBase, AssetReader},
+    keymap::KeyPrecedence,
     surface::Surface,
 };
 
@@ -347,6 +348,14 @@ impl AppView {
     /// created from now on.
     pub fn register_component(&self, name: &str, factory: crate::native::ComponentFactory) {
         self.surface.native.components().register(name, factory);
+    }
+
+    /// How the app's keyboard shortcuts (`nsh/keymap`) stand with those of
+    /// the surfaces around it, when this view is hosted in another app's
+    /// views (a native component's): by the focus (the default), ahead of
+    /// them wherever the focus is in the window, or after them.
+    pub fn set_key_precedence(&self, precedence: KeyPrecedence) {
+        crate::keymap::set_precedence(&self.surface, precedence);
     }
 
     /// Shows (or hides) the performance monitor: a panel at the top right
