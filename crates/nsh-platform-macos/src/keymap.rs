@@ -20,9 +20,12 @@
 //! they see its keys. Which of them takes a key both bind is the hosted
 //! one's [`KeyPrecedence`]: by default the focus and the monitors' order
 //! decide; `First` makes it take the keys it binds wherever the focus is,
+//! and every key while one of its text inputs has the focus, but for the
+//! few it leaves to its hosts (a way out: [`AppView::set_host_keys`]);
 //! `Last` leaves them to the surfaces around it.
 //!
 //! [`AppView`]: crate::AppView
+//! [`AppView::set_host_keys`]: crate::AppView::set_host_keys
 
 use std::{
     cell::{Cell, RefCell},
@@ -49,6 +52,8 @@ pub(crate) struct KeymapState {
     table: RefCell<Option<Arc<Keymap>>>,
     monitor: RefCell<Option<Retained<AnyObject>>>,
     precedence: Cell<KeyPrecedence>,
+    /// The keys a `First` surface leaves to the surfaces around it.
+    host_keys: RefCell<Vec<Keystroke>>,
 }
 
 /// Where a surface hosted in another surface's views stands for the keys
@@ -63,7 +68,9 @@ pub enum KeyPrecedence {
     #[default]
     Focus,
     /// It takes the keys it binds wherever the focus is in its window
-    /// (while it shows); the surfaces around it get the others.
+    /// (while it shows), and every key while the focus is in one of its
+    /// text inputs or hosted views; the surfaces around it get the others
+    /// and its host keys.
     First,
     /// The surfaces around it take the keys they bind; it gets the others.
     Last,
@@ -72,6 +79,18 @@ pub enum KeyPrecedence {
 /// How `surface` stands with the surfaces around it from now on.
 pub(crate) fn set_precedence(surface: &Surface, precedence: KeyPrecedence) {
     surface.keymap.precedence.set(precedence);
+}
+
+/// The keys `surface` leaves to the surfaces around it while it comes
+/// first.
+pub(crate) fn set_host_keys(surface: &Surface, keys: Vec<Keystroke>) {
+    *surface.keymap.host_keys.borrow_mut() = keys;
+}
+
+/// Whether `surface` comes first but leaves `keystroke` to its hosts.
+fn hosts_keep(surface: &Surface, keystroke: Keystroke) -> bool {
+    surface.keymap.precedence.get() == KeyPrecedence::First
+        && surface.keymap.host_keys.borrow().contains(&keystroke)
 }
 
 impl KeymapState {
@@ -158,6 +177,9 @@ fn pressed(surface: &Rc<Surface>, event: &NSEvent) -> bool {
     if cfg!(feature = "dev") && keystroke.reloads(Os::MacOs) {
         return false;
     }
+    if hosts_keep(surface, keystroke) {
+        return false;
+    }
     let found = table.find(keystroke, editing, event.isARepeat());
     if found.consumed() && leaves(surface, &window, keystroke, event.isARepeat()) {
         return false;
@@ -201,18 +223,39 @@ fn leaves(surface: &Rc<Surface>, window: &NSWindow, keystroke: Keystroke, repeat
         if !inside && !root.isDescendantOf(theirs) {
             return false;
         }
-        let precedence = other.keymap.precedence.get();
-        defers(mine, precedence, inside) && binds(other, window, keystroke, repeat)
+        let peer = Peer {
+            precedence: other.keymap.precedence.get(),
+            inside,
+            keeps_off: hosts_keep(other, keystroke),
+            binds: binds(other, window, keystroke, repeat),
+            edits: !theirs.isHiddenOrHasHiddenAncestor() && editing(other, window) == Some(true),
+        };
+        defers(mine, &peer)
     })
 }
 
-/// Whether a surface of precedence `mine` leaves a key both bind to
-/// another of precedence `theirs`, hosted in it (`inside`) or hosting it.
-fn defers(mine: KeyPrecedence, theirs: KeyPrecedence, inside: bool) -> bool {
-    if inside {
-        theirs == KeyPrecedence::First
+/// Another surface of the window, as one that binds a key sees it.
+struct Peer {
+    precedence: KeyPrecedence,
+    /// Hosted in the surface (else it hosts the surface).
+    inside: bool,
+    /// The key is one of its host keys.
+    keeps_off: bool,
+    /// It would take the key.
+    binds: bool,
+    /// One of its text inputs or hosted views has the focus.
+    edits: bool,
+}
+
+/// Whether a surface of precedence `mine` leaves a key it binds to `peer`:
+/// one hosted in it that comes first and takes the key, or has a text
+/// input focused (unless the key is a host key); one hosting it, when it
+/// comes last and the host takes the key.
+fn defers(mine: KeyPrecedence, peer: &Peer) -> bool {
+    if peer.inside {
+        peer.precedence == KeyPrecedence::First && !peer.keeps_off && (peer.binds || peer.edits)
     } else {
-        mine == KeyPrecedence::Last
+        mine == KeyPrecedence::Last && peer.binds
     }
 }
 
@@ -306,25 +349,102 @@ fn function_key(code: u16) -> Option<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::{KeyPrecedence, defers};
+    use super::{KeyPrecedence, Peer, defers};
+
+    fn peer(precedence: KeyPrecedence, inside: bool) -> Peer {
+        Peer {
+            precedence,
+            inside,
+            keeps_off: false,
+            binds: false,
+            edits: false,
+        }
+    }
 
     #[test]
-    fn a_hosted_surface_first_takes_the_keys_both_bind() {
+    fn a_hosted_surface_first_takes_the_keys_it_binds() {
         // the host leaves them to it; it keeps them from the host
-        assert!(defers(KeyPrecedence::Focus, KeyPrecedence::First, true));
-        assert!(!defers(KeyPrecedence::First, KeyPrecedence::Focus, false));
+        assert!(defers(
+            KeyPrecedence::Focus,
+            &Peer {
+                binds: true,
+                ..peer(KeyPrecedence::First, true)
+            }
+        ));
+        assert!(!defers(
+            KeyPrecedence::Focus,
+            &peer(KeyPrecedence::First, true)
+        ));
+        assert!(!defers(
+            KeyPrecedence::First,
+            &Peer {
+                binds: true,
+                ..peer(KeyPrecedence::Focus, false)
+            }
+        ));
+    }
+
+    #[test]
+    fn a_hosted_surface_first_takes_every_key_while_its_text_input_is_focused() {
+        assert!(defers(
+            KeyPrecedence::Focus,
+            &Peer {
+                edits: true,
+                ..peer(KeyPrecedence::First, true)
+            }
+        ));
+        // but its host keys
+        assert!(!defers(
+            KeyPrecedence::Focus,
+            &Peer {
+                edits: true,
+                keeps_off: true,
+                ..peer(KeyPrecedence::First, true)
+            }
+        ));
+        assert!(!defers(
+            KeyPrecedence::Focus,
+            &Peer {
+                binds: true,
+                keeps_off: true,
+                ..peer(KeyPrecedence::First, true)
+            }
+        ));
     }
 
     #[test]
     fn a_hosted_surface_last_leaves_them_to_its_host() {
-        assert!(defers(KeyPrecedence::Last, KeyPrecedence::Focus, false));
-        assert!(!defers(KeyPrecedence::Focus, KeyPrecedence::Last, true));
+        assert!(defers(
+            KeyPrecedence::Last,
+            &Peer {
+                binds: true,
+                ..peer(KeyPrecedence::Focus, false)
+            }
+        ));
+        assert!(!defers(
+            KeyPrecedence::Last,
+            &peer(KeyPrecedence::Focus, false)
+        ));
+        // its host takes them, its text input focused or not
+        assert!(!defers(
+            KeyPrecedence::Focus,
+            &Peer {
+                binds: true,
+                edits: true,
+                ..peer(KeyPrecedence::Last, true)
+            }
+        ));
     }
 
     #[test]
     fn by_default_neither_side_leaves_a_key() {
-        assert!(!defers(KeyPrecedence::Focus, KeyPrecedence::Focus, true));
-        assert!(!defers(KeyPrecedence::Focus, KeyPrecedence::Focus, false));
+        let both = |inside| Peer {
+            binds: true,
+            edits: true,
+            ..peer(KeyPrecedence::Focus, inside)
+        };
+        assert!(!defers(KeyPrecedence::Focus, &both(true)));
+        assert!(!defers(KeyPrecedence::Focus, &both(false)));
     }
 
     #[test]

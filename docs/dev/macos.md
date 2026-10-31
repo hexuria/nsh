@@ -212,8 +212,10 @@ any layout; the dev host's Cmd+R is a local key monitor (`dev.rs`).
   window's first responder is inside its root (a field or hosted view there counts as editing: `when`), or is the
   window itself. An `AppView` hosted in another surface's views shares its window's keys with the surfaces around it;
   `AppView::set_key_precedence` settles a key both bind: `Focus` (the default) leaves it to the focus and the
-  monitors' order, `First` gives the hosted app the keys it binds wherever the focus is (while it shows: the
-  surfaces around it skip them), `Last` leaves them to the surfaces around it. The key is read as `Keystroke`:
+  monitors' order, `First` gives the hosted app the keys it binds wherever the focus is, and every key while one of
+  its text inputs or hosted views has the focus (while it shows: the surfaces around it skip them), except its host
+  keys (`AppView::set_host_keys`, a way out such as closing it), `Last` leaves them to the surfaces around it.
+  `AppView::focus` gives the hosted app the keyboard. The key is read as `Keystroke`:
   virtual key codes for named and function keys, else the character without modifiers
   (`charactersByApplyingModifiers:` with none when Shift is held, so Shift+/ is `shift+/`), the US layout's
   (`input::us_key`) when that is not ASCII. The monitor is removed when the table empties or the app stops.
