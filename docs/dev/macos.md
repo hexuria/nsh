@@ -126,7 +126,9 @@ server client, log forwarding, the error overlay: `dev.rs`). The runtime needs m
   not fire while the window is occluded or minimized or the screen is locked; while frames are wanted and it has not
   ticked for 100 ms a 60 Hz
   main-queue timer ticks instead, so animations still end (a transition detaches its views when it does).
-- **Embedding**: `AppView` (`app.rs`) is one surface as a view; `run_app` opens one in a window with a standard menu
+- **Embedding**: `AppView` (`app.rs`) is one surface as a view. One placed in another view's content (not its
+  window's content view) passes a scroll that begins where none of its scroll views can move up the responder chain,
+  so the host scrolls (`input::forwards_scroll`). `run_app` opens one in a window with a standard menu
   (About, Hide, Quit; Edit's undo / redo / cut / copy / paste / select all, which fields answer; Minimize, Zoom, Enter
   Full Screen, Close), titled with `AppOptions::title`: `name_app` sets the main bundle's `CFBundleName` to it, as the
   menu bar shows that (the development host has no bundle; `nsh run` passes it the app's name with `--name`). The window
