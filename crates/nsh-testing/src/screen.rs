@@ -206,8 +206,6 @@ struct View {
     accessibility_hint: Option<Arc<str>>,
     /// Its accessibility value, if it has one.
     accessibility_value: Option<nsh_core::AccessibilityValue>,
-    /// Its complete accessibility state.
-    accessibility_state: nsh_core::AccessibilityState,
     /// Its children are grouped under this accessibility element.
     accessible: Option<bool>,
     /// It and its descendants are hidden from accessibility.
@@ -308,6 +306,13 @@ fn semantic_role(role: AccessibilityRole, kind: Option<ViewKind>, pressable: boo
         AccessibilityRole::RowGroup => "rowgroup",
         AccessibilityRole::Listbox => "listbox",
         AccessibilityRole::Option => "option",
+        AccessibilityRole::Group => "group",
+        AccessibilityRole::Region => "region",
+        AccessibilityRole::Navigation => "navigation",
+        AccessibilityRole::Tree => "tree",
+        AccessibilityRole::TreeItem => "treeitem",
+        AccessibilityRole::MenuItemCheckbox => "menuitemcheckbox",
+        AccessibilityRole::MenuItemRadio => "menuitemradio",
     }
 }
 
@@ -546,7 +551,6 @@ impl Screen {
                 view.disabled = props.accessibility.state.disabled;
                 view.accessibility_hint = props.accessibility.hint.clone();
                 view.accessibility_value = props.accessibility.value.clone();
-                view.accessibility_state = props.accessibility.state;
                 view.accessible = props.accessibility.accessible;
                 view.accessibility_hidden = props.accessibility.hidden;
                 view.focusable = props.focusable;
