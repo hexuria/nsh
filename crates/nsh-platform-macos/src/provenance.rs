@@ -49,6 +49,9 @@ thread_local! {
     static SYNTH_KEY: Cell<bool> = const { Cell::new(false) };
     /// Whether synthesized input is the developer's, not an agent's.
     static SYNTH_IS_PERSON: Cell<bool> = const { Cell::new(false) };
+    /// The in-process actions running ([`crate::AppView::act`]): theirs
+    /// are an agent's whatever the test channel says.
+    static AGENT_RUNS: Cell<u32> = const { Cell::new(0) };
 }
 
 /// Sets the listener and starts watching the app's input. Main thread.
@@ -91,6 +94,22 @@ pub(crate) fn agent_acts() {
     }
 }
 
+/// An in-process action began (`true`) or ended.
+#[cfg(feature = "gpui-agent")]
+pub(crate) fn agent_run(started: bool) {
+    AGENT_RUNS.set(if started {
+        AGENT_RUNS.get() + 1
+    } else {
+        AGENT_RUNS.get().saturating_sub(1)
+    });
+}
+
+/// An in-process action is stepping: always an agent's.
+#[cfg(feature = "gpui-agent")]
+pub(crate) fn agent_step() {
+    tell(Input::Agent);
+}
+
 /// Makes synthesized input the developer's: it reads as the person's, as
 /// a test channel's always did.
 #[cfg(feature = "gpui-agent-server")]
@@ -115,9 +134,15 @@ fn synthesized(kind: NSEventType, number: impl FnOnce() -> isize) -> bool {
     }
 }
 
+/// Whether synthesized input may read as the person's: the developer's
+/// channel's may, while no in-process action is running.
+fn counts_as_person() -> bool {
+    SYNTH_IS_PERSON.get() && AGENT_RUNS.get() == 0
+}
+
 fn observe(event: &NSEvent, mtm: MainThreadMarker) {
     let kind = event.r#type();
-    if synthesized(kind, || event.eventNumber()) && !SYNTH_IS_PERSON.get() {
+    if synthesized(kind, || event.eventNumber()) && !counts_as_person() {
         return;
     }
     let target = if kind == NSEventType::KeyDown {
@@ -175,5 +200,16 @@ mod tests {
             "keys have no number"
         )));
         SYNTH_KEY.set(false);
+    }
+
+    #[test]
+    fn an_in_process_action_is_never_the_persons_whatever_the_channel_says() {
+        assert!(!counts_as_person());
+        SYNTH_IS_PERSON.set(true);
+        assert!(counts_as_person());
+        AGENT_RUNS.set(1);
+        assert!(!counts_as_person());
+        AGENT_RUNS.set(0);
+        SYNTH_IS_PERSON.set(false);
     }
 }
