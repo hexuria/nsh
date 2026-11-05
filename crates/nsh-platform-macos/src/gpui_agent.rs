@@ -725,7 +725,7 @@ fn place(view: &NshView, window: &NSWindow, prefix: &str) -> Place {
     node.enabled = !spec.disabled;
     node.focused = text_input && focused_in(view, window);
     // a field holds what was typed, whatever its accessibility value says
-    node.value = value_text(&spec.value).or(typed);
+    node.value = typed.or_else(|| value_text(&spec.value));
     node.checked = match spec.value {
         Value::Checked(v) => Some(v != 0),
         _ => None,
