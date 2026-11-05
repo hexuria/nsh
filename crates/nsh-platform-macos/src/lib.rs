@@ -37,7 +37,9 @@ mod file_requests;
 mod fps;
 mod global_shortcut;
 mod gpu;
+// Without the server nothing drives it yet: an in-process caller will.
 #[cfg(feature = "gpui-agent")]
+#[cfg_attr(not(feature = "gpui-agent-server"), allow(dead_code, unused_imports))]
 mod gpui_agent;
 mod image;
 mod input;
@@ -48,6 +50,7 @@ mod navigation;
 mod net;
 mod pace;
 mod picker;
+mod provenance;
 mod screen_color;
 mod scroll;
 mod selectable_view;
@@ -90,5 +93,6 @@ pub use crate::{
     image::AssetBase,
     keymap::KeyPrecedence,
     native::{ComponentContext, ComponentFactory, Components, NativeComponent},
+    provenance::{Input, on_input},
     text::CoreTextEngine,
 };

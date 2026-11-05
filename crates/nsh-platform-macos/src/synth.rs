@@ -71,7 +71,7 @@ pub(crate) fn mouse_event(
         timestamp(),
         window.windowNumber(),
         None,
-        0,
+        crate::provenance::SYNTH_EVENT,
         clicks,
         if clicks > 0 { 1.0 } else { 0.0 },
     )
@@ -329,22 +329,24 @@ pub(crate) fn key_event(
         let app = NSApplication::sharedApplication(MainThreadMarker::from(window));
         // Key equivalents (menus) and key monitors (`nsh/keymap`) are the
         // application's, which hands the key to its key window.
-        if window.isKeyWindow() {
-            app.sendEvent(&event);
-        } else if kind == NSEventType::KeyDown && crate::keymap::fires(surface, &event) {
-            // The app's key monitor never sees a window's own events: it
-            // gets the key first, as it would in the key window (the test
-            // window often is not one, its app left in the background).
-        } else if kind == NSEventType::KeyDown && key_equivalent(window, &app, &event) {
-            // A key equivalent of the window's views (Command keys) or of
-            // the main menu, sent where the application would send it to
-            // its key window: this one is not (an app run in the
-            // background has none).
-        } else if flags.contains(NSEventModifierFlags::Command) {
-            app.sendEvent(&event);
-        } else {
-            window.sendEvent(&event);
-        }
+        crate::provenance::synth_key(|| {
+            if window.isKeyWindow() {
+                app.sendEvent(&event);
+            } else if kind == NSEventType::KeyDown && crate::keymap::fires(surface, &event) {
+                // The app's key monitor never sees a window's own events: it
+                // gets the key first, as it would in the key window (the test
+                // window often is not one, its app left in the background).
+            } else if kind == NSEventType::KeyDown && key_equivalent(window, &app, &event) {
+                // A key equivalent of the window's views (Command keys) or of
+                // the main menu, sent where the application would send it to
+                // its key window: this one is not (an app run in the
+                // background has none).
+            } else if flags.contains(NSEventModifierFlags::Command) {
+                app.sendEvent(&event);
+            } else {
+                window.sendEvent(&event);
+            }
+        });
     }
 }
 

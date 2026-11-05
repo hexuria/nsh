@@ -49,9 +49,11 @@ emoji-picker = ["nsh-base/emoji-picker"]
 zlib = ["js", "nsh-engine/zlib"]
 # The standard JS module `crypto` and the globals of Web Crypto.
 crypto = ["js", "nsh-engine/crypto"]
-# The gpui-agent control plane (`GPUI_AGENT=1`): snapshot/click/type over
-# TCP for the `gpui-agent` CLI.
+# The gpui-agent control plane in process: the tree and the actions.
 gpui-agent = ["dep:gpui-agent"]
+# Its server (`GPUI_AGENT=1`): snapshot/click/type over TCP for the
+# `gpui-agent` CLI. A shipped app leaves this off and opens no listener.
+gpui-agent-server = ["gpui-agent"]
 
 [dependencies]
 log.workspace = true

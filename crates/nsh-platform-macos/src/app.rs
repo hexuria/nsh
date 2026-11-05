@@ -382,9 +382,14 @@ impl AppView {
         if view.options.borrow().fps || nsh_engine::perf::enabled_by_env() {
             view.set_fps_monitor(true);
         }
-        #[cfg(feature = "gpui-agent")]
+        #[cfg(feature = "gpui-agent-server")]
         crate::gpui_agent::install(&view.surface);
         view
+    }
+
+    /// The surface's key: what [`crate::Input::Person`] names it by.
+    pub fn surface_key(&self) -> u64 {
+        self.surface.key()
     }
 
     /// The view to put in a window.
