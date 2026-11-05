@@ -467,7 +467,7 @@ fn hello() -> HelloInfo {
 
 /// The semantic tree of `surface`: every view that is an accessibility
 /// element, in subview order, as VoiceOver would list it.
-fn snapshot(surface: &Rc<Surface>) -> UiTree {
+pub(crate) fn snapshot(surface: &Rc<Surface>) -> UiTree {
     let mut nodes = Vec::new();
     let window = surface.root.ns().window();
     if let Some(window) = window.as_deref() {
