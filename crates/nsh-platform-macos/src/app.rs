@@ -286,6 +286,14 @@ impl AppView {
         self.surface.key()
     }
 
+    /// The semantic tree of this view's surface, as the `snapshot` op of
+    /// the gpui-agent host answers it (`crate::gpui_agent`), for a caller
+    /// in the process: no listener is needed. Main thread.
+    #[cfg(feature = "gpui-agent")]
+    pub fn ui_tree(&self) -> crate::ui_tree::UiTree {
+        crate::gpui_agent::snapshot(&self.surface)
+    }
+
     /// The view to put in a window.
     pub fn view(&self) -> Retained<NSView> {
         self.container.clone()
