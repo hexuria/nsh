@@ -10,7 +10,9 @@
 //! `GPUI_AGENT=1`, and
 //! `gpui_agent::security::from_env` sets the terms: requests carry the
 //! token (`GPUI_AGENT_TOKEN`, an HMAC challenge per connection; only
-//! `GPUI_AGENT_INSECURE_NO_TOKEN` waives it), the server listens on
+//! `GPUI_AGENT_INSECURE_NO_TOKEN` waives it; `GPUI_AGENT_TOKEN_FILE` names a
+//! file holding it instead, so it stays out of the environment, which any
+//! process of this user can read: [`agent_config`]), the server listens on
 //! loopback (`GPUI_AGENT_REMOTE` with a token opens another address),
 //! and a release build serves only with `GPUI_AGENT_ALLOW_RELEASE`. The
 //! server runs on a thread of its own and posts each request on an
@@ -155,7 +157,7 @@ const VIEWPORTS: [(&str, f64, f64); 4] = [
 /// logs — the app runs without the agent either way.
 #[cfg(feature = "gpui-agent-server")]
 pub(crate) fn install(surface: &Rc<Surface>) {
-    let config = match gpui_agent::security::from_env() {
+    let config = match agent_config() {
         Ok(Some(config)) => config,
         Ok(None) => return,
         Err(err) => {
@@ -181,6 +183,41 @@ pub(crate) fn install(surface: &Rc<Surface>) {
         }
         Err(err) => log::warn!("gpui-agent: cannot bind {}: {err}", config.addr),
     }
+}
+
+/// The token in `text`, a token file's contents; `None` for no token.
+#[cfg(feature = "gpui-agent-server")]
+fn token_in(text: &str) -> Option<String> {
+    Some(text.trim().to_owned()).filter(|token| !token.is_empty())
+}
+
+/// The server's terms: the environment's, with the token from
+/// `GPUI_AGENT_TOKEN_FILE` when that names one. `from_env` reads no file, so
+/// the same terms are applied here: `GPUI_AGENT=1`, a release build's own
+/// consent, and the address, which is required.
+#[cfg(feature = "gpui-agent-server")]
+fn agent_config() -> Result<Option<gpui_agent::security::AgentConfig>, String> {
+    let Some(file) = std::env::var_os("GPUI_AGENT_TOKEN_FILE") else {
+        return gpui_agent::security::from_env().map_err(|err| err.to_string());
+    };
+    if !gpui_agent::security::truthy_env("GPUI_AGENT") {
+        return Ok(None);
+    }
+    if !cfg!(debug_assertions) && !gpui_agent::security::truthy_env("GPUI_AGENT_ALLOW_RELEASE") {
+        return Err("a release build serves only with GPUI_AGENT_ALLOW_RELEASE=1".into());
+    }
+    let addr = std::env::var("GPUI_AGENT_ADDR")
+        .map_err(|_| "GPUI_AGENT_TOKEN_FILE needs GPUI_AGENT_ADDR".to_owned())?
+        .parse()
+        .map_err(|_| "GPUI_AGENT_ADDR is no address".to_owned())?;
+    let text = std::fs::read_to_string(file).map_err(|err| err.to_string())?;
+    let token = token_in(&text).ok_or("the token file is empty")?;
+    gpui_agent::security::authorize_bind(addr, Some(&token), false)
+        .map_err(|err| err.to_string())?;
+    Ok(Some(gpui_agent::security::AgentConfig {
+        addr,
+        token: Some(token),
+    }))
 }
 
 /// Whether `GPUI_AGENT_ACTOR` leaves the channel a developer's: a value it
@@ -484,6 +521,7 @@ pub(crate) fn act_in_process(
     surface: &Rc<Surface>,
     target: &str,
     act: UiAct,
+    still: Still,
     done: impl FnOnce(Result<(), String>) + Send + 'static,
 ) {
     let action = Action {
@@ -500,8 +538,23 @@ pub(crate) fn act_in_process(
         surface.key(),
         phase,
         action,
+        still,
         AgentRun::start(Box::new(done)),
     );
+}
+
+/// The caller's word that the screen is still the one it decided on. Asked on
+/// the main thread.
+type Still = Box<dyn Fn() -> bool + Send>;
+
+/// What a step that found the screen changed ends with: a code, then why.
+pub const SCREEN_CHANGED: &str = "screen_changed";
+
+/// Whether the step after `phase` may run. The input is given in the step of
+/// [`Phase::Locate`], in the turn right after this: a screen that moved since
+/// the caller decided gets no press. Once pressed, the press itself moves it.
+fn may_step(phase: &Phase, still: &dyn Fn() -> bool) -> bool {
+    !matches!(phase, Phase::Locate { .. }) || still()
 }
 
 /// An in-process action while it runs. However it ends, the caller hears
@@ -537,15 +590,18 @@ impl Drop for AgentRun {
 }
 
 /// Steps an in-process action once per drain until it ends.
-fn drive(key: u64, mut phase: Phase, action: Action, run: AgentRun) {
+fn drive(key: u64, mut phase: Phase, action: Action, still: Still, run: AgentRun) {
     crate::input::later(DRAIN.as_millis() as u64, move || {
         let Some(surface) = Surface::with_key(key) else {
             return run.finish(Err("the window is gone".into()));
         };
         crate::provenance::agent_step();
+        if !may_step(&phase, &*still) {
+            return run.finish(Err(format!("{SCREEN_CHANGED}: before the press")));
+        }
         match step(&surface, &mut phase, Some(&action)) {
             Some(result) => run.finish(result.map(drop)),
-            None => drive(key, phase, action, run),
+            None => drive(key, phase, action, still, run),
         }
     });
 }
@@ -2192,6 +2248,27 @@ fn assert_node(spec: &AssertSpec, node: &UiNode) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Only the step that gives the input asks: a press moves the screen.
+    #[test]
+    fn the_press_waits_on_the_callers_word_and_nothing_after_it_does() {
+        let locating = Phase::Locate {
+            tries: 0,
+            revealed: false,
+        };
+        assert!(may_step(&locating, &|| true));
+        assert!(!may_step(&locating, &|| false));
+        assert!(may_step(&Phase::Focus { tries: 0 }, &|| false));
+        let settling = Phase::Settle(Settle::new(SETTLE, Reply::Action));
+        assert!(may_step(&settling, &|| false));
+    }
+
+    #[cfg(feature = "gpui-agent-server")]
+    #[test]
+    fn a_token_file_holds_the_token_and_an_empty_one_none() {
+        assert_eq!(token_in("abc123\n").as_deref(), Some("abc123"));
+        assert_eq!(token_in("  \n"), None);
+    }
 
     #[test]
     fn an_action_dropped_on_the_way_still_ends_and_says_so() {
