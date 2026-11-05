@@ -3,8 +3,11 @@
 //! `gpui-agent` CLI, its MCP server and any other client drive the app
 //! with the input a user gives.
 //!
-//! **Trust.** The feature compiles the host in; [`install`] starts it for
-//! a window when the app runs with `GPUI_AGENT=1`, and
+//! **Trust.** Feature `gpui-agent` compiles in the tree and the actions.
+//! Feature `gpui-agent-server` adds the listener: a shipped app leaves it
+//! off and opens no port, whatever its environment says. With it,
+//! [`install`] starts the server for a window when the app runs with
+//! `GPUI_AGENT=1`, and
 //! `gpui_agent::security::from_env` sets the terms: requests carry the
 //! token (`GPUI_AGENT_TOKEN`, an HMAC challenge per connection; only
 //! `GPUI_AGENT_INSECURE_NO_TOKEN` waives it), the server listens on
@@ -13,6 +16,13 @@
 //! server runs on a thread of its own and posts each request on an
 //! [`AgentMailbox`]; a timer on the main queue drains it about once a
 //! display frame, so the host touches views only on the main thread.
+//!
+//! **Attribution.** The channel's input reads as the person's, as a
+//! developer's. `GPUI_AGENT_ACTOR=agent` (any value but `person`) makes
+//! it an agent's: each action tells the app
+//! ([`crate::provenance::Input::Agent`]) and its events never read as the
+//! person's. Without the server there is no such setting, and input made
+//! here is always an agent's.
 //!
 //! **Ops.** `hello`; `snapshot` (with `fingerprints`, `since` a
 //! revision, `format: "compact"`: what shows and can be operated, one
@@ -83,7 +93,6 @@ use gpui_agent::{
         AssertSpec, DeliveryMode, HelloInfo, KeybindingScope, Op, PROTOCOL_VERSION, PlatformKind,
         Request, Response, SnapshotFormat,
     },
-    server,
     tree::{Bounds as TreeBounds, UiNode, UiTree},
 };
 use nsh_core::{
@@ -106,6 +115,7 @@ use crate::{
 /// action in flight: about a display frame.
 const DRAIN: Duration = Duration::from_millis(15);
 /// How long a TCP thread waits for its request to be answered.
+#[cfg(feature = "gpui-agent-server")]
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// How many drains an action waits for its target to be actionable
 /// (visible, enabled, reached by the press) before it fails: about a
@@ -137,6 +147,7 @@ const VIEWPORTS: [(&str, f64, f64); 4] = [
 ///
 /// Called for every `AppView`; a `None` config or a failed bind only
 /// logs — the app runs without the agent either way.
+#[cfg(feature = "gpui-agent-server")]
 pub(crate) fn install(surface: &Rc<Surface>) {
     let config = match gpui_agent::security::from_env() {
         Ok(Some(config)) => config,
@@ -146,9 +157,12 @@ pub(crate) fn install(surface: &Rc<Surface>) {
             return;
         }
     };
+    if channel_is_person(std::env::var("GPUI_AGENT_ACTOR").ok().as_deref()) {
+        crate::provenance::synth_is_person();
+    }
     let mailbox = AgentMailbox::new();
     let app = gpui_agent::discovery::detect_identity().executable;
-    match server::spawn_mailbox_named(
+    match gpui_agent::server::spawn_mailbox_named(
         config.addr,
         config.token,
         mailbox.clone(),
@@ -163,6 +177,28 @@ pub(crate) fn install(surface: &Rc<Surface>) {
     }
 }
 
+/// Whether `GPUI_AGENT_ACTOR` leaves the channel a developer's: a value it
+/// can't read makes it the agent's.
+#[cfg(feature = "gpui-agent-server")]
+fn channel_is_person(actor: Option<&str>) -> bool {
+    matches!(actor, None | Some("person"))
+}
+
+/// Whether `op` does something to the app; what it can't name does.
+fn acts(op: &Op) -> bool {
+    !matches!(
+        op,
+        Op::Hello
+            | Op::Snapshot { .. }
+            | Op::Revision
+            | Op::Wait { .. }
+            | Op::WaitUntil { .. }
+            | Op::Assert { .. }
+            | Op::Screenshot { .. }
+            | Op::Keybindings
+    )
+}
+
 /// Re-arms the drain on the main queue while the surface lives.
 ///
 /// Requests that read the app are answered at once; actions are jobs,
@@ -170,6 +206,7 @@ pub(crate) fn install(surface: &Rc<Surface>) {
 /// the main queue is free, so the app handles the posted input, applies
 /// the engine's batches and runs its animations: an action never blocks
 /// the main thread while it waits for the app.
+#[cfg(feature = "gpui-agent-server")]
 fn schedule(key: u64, mailbox: AgentMailbox, mut jobs: VecDeque<Job>) {
     crate::input::later(DRAIN.as_millis() as u64, move || {
         let Some(surface) = Surface::with_key(key) else {
@@ -180,6 +217,9 @@ fn schedule(key: u64, mailbox: AgentMailbox, mut jobs: VecDeque<Job>) {
             return;
         };
         for request in mailbox.take() {
+            if acts(&request.request.op) {
+                crate::provenance::agent_acts();
+            }
             match start(&surface, &request.request) {
                 Start::Done(response) => request.reply(*response),
                 Start::Act(action) => jobs.push_back(Job {
@@ -196,6 +236,10 @@ fn schedule(key: u64, mailbox: AgentMailbox, mut jobs: VecDeque<Job>) {
                     phase: Phase::Settle(Settle::new(timeout, reply)),
                 }),
             }
+        }
+        // for as long as an action runs: it presses after it was asked to
+        if jobs.iter().any(|job| job.action.is_some()) {
+            crate::provenance::agent_acts();
         }
         while let Some(job) = jobs.front_mut() {
             let Some(result) = step(&surface, job) else {
@@ -2054,6 +2098,36 @@ mod tests {
         assert!(Gesture::Key("Return".into()).types());
         assert!(!Gesture::Press.types());
         assert!(!Gesture::Hover.types());
+    }
+
+    #[test]
+    fn only_what_reads_the_app_is_not_an_action() {
+        for op in [
+            Op::Hello,
+            Op::Revision,
+            Op::Keybindings,
+            Op::Wait {
+                timeout_ms: Some(1),
+            },
+        ] {
+            assert!(!acts(&op), "{op:?}");
+        }
+        assert!(acts(&Op::Shutdown));
+        assert!(acts(&Op::Invoke {
+            name: "press".into(),
+            args: serde_json::json!({}),
+        }));
+    }
+
+    #[cfg(feature = "gpui-agent-server")]
+    #[test]
+    fn the_channel_is_the_developers_unless_it_says_otherwise() {
+        assert!(channel_is_person(None));
+        assert!(channel_is_person(Some("person")));
+        assert!(!channel_is_person(Some("agent")));
+        // what it can't read is the agent's
+        assert!(!channel_is_person(Some("")));
+        assert!(!channel_is_person(Some("Person")));
     }
 
     #[test]
