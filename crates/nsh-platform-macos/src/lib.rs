@@ -37,7 +37,7 @@ mod file_requests;
 mod fps;
 mod global_shortcut;
 mod gpu;
-// Without the server only `AppView::ui_tree` reads it, and nothing acts yet.
+// Without the server only `AppView::ui_tree` and `AppView::act` reach it.
 #[cfg(feature = "gpui-agent")]
 #[cfg_attr(not(feature = "gpui-agent-server"), allow(dead_code, unused_imports))]
 mod gpui_agent;
@@ -73,6 +73,8 @@ mod visual;
 mod window;
 mod window_state;
 
+#[cfg(feature = "gpui-agent")]
+pub use crate::gpui_agent::UiAct;
 #[cfg(feature = "gpui-agent")]
 pub use ::gpui_agent::tree as ui_tree;
 pub use block2;
