@@ -496,29 +496,56 @@ pub(crate) fn act_in_process(
         tries: 0,
         revealed: false,
     };
-    crate::provenance::agent_run(true);
-    drive(surface.key(), phase, action, done);
+    drive(
+        surface.key(),
+        phase,
+        action,
+        AgentRun::start(Box::new(done)),
+    );
+}
+
+/// An in-process action while it runs. However it ends, the caller hears
+/// and the run is over: a step that panics or a timer that never fires
+/// drops this.
+struct AgentRun {
+    done: Option<Done>,
+}
+
+/// Who hears how an in-process action ended.
+type Done = Box<dyn FnOnce(Result<(), String>) + Send>;
+
+impl AgentRun {
+    fn start(done: Done) -> AgentRun {
+        crate::provenance::agent_run(true);
+        AgentRun { done: Some(done) }
+    }
+
+    fn finish(mut self, result: Result<(), String>) {
+        if let Some(done) = self.done.take() {
+            done(result);
+        }
+    }
+}
+
+impl Drop for AgentRun {
+    fn drop(&mut self) {
+        crate::provenance::agent_run(false);
+        if let Some(done) = self.done.take() {
+            done(Err("the action stopped".into()));
+        }
+    }
 }
 
 /// Steps an in-process action once per drain until it ends.
-fn drive(
-    key: u64,
-    mut phase: Phase,
-    action: Action,
-    done: impl FnOnce(Result<(), String>) + Send + 'static,
-) {
+fn drive(key: u64, mut phase: Phase, action: Action, run: AgentRun) {
     crate::input::later(DRAIN.as_millis() as u64, move || {
         let Some(surface) = Surface::with_key(key) else {
-            crate::provenance::agent_run(false);
-            return done(Err("the window is gone".into()));
+            return run.finish(Err("the window is gone".into()));
         };
         crate::provenance::agent_step();
         match step(&surface, &mut phase, Some(&action)) {
-            Some(result) => {
-                crate::provenance::agent_run(false);
-                done(result.map(drop));
-            }
-            None => drive(key, phase, action, done),
+            Some(result) => run.finish(result.map(drop)),
+            None => drive(key, phase, action, run),
         }
     });
 }
@@ -674,10 +701,11 @@ fn embed(scope: &Rc<Scope>, host: &NshView, window: &NSWindow, nodes: &mut Vec<U
 /// `prefix`, its surface's ([`Scope::prefix`]).
 fn place(view: &NshView, window: &NSWindow, prefix: &str) -> Place {
     let spec = spec_of(view);
-    let (test_id, text_input, masked) = {
+    let (test_id, text_input, masked, typed) = {
         let s = view.state();
         let masked = s.input.as_ref().and_then(|input| input.masked_len());
-        (s.props.test_id.clone(), s.input.is_some(), masked)
+        let typed = s.input.as_ref().map(|input| input.plain_text());
+        (s.props.test_id.clone(), s.input.is_some(), masked, typed)
     };
     if spec.hidden {
         return Place::Hidden;
@@ -696,7 +724,8 @@ fn place(view: &NshView, window: &NSWindow, prefix: &str) -> Place {
     );
     node.enabled = !spec.disabled;
     node.focused = text_input && focused_in(view, window);
-    node.value = value_text(&spec.value);
+    // a field holds what was typed, whatever its accessibility value says
+    node.value = value_text(&spec.value).or(typed);
     node.checked = match spec.value {
         Value::Checked(v) => Some(v != 0),
         _ => None,
@@ -2163,6 +2192,30 @@ fn assert_node(spec: &AssertSpec, node: &UiNode) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_action_dropped_on_the_way_still_ends_and_says_so() {
+        let heard = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let mine = heard.clone();
+        let run = AgentRun::start(Box::new(move |r| *mine.lock().unwrap() = Some(r)));
+        assert!(crate::provenance::agent_running());
+        drop(run);
+        assert!(!crate::provenance::agent_running());
+        assert_eq!(
+            *heard.lock().unwrap(),
+            Some(Err("the action stopped".to_owned()))
+        );
+    }
+
+    #[test]
+    fn a_finished_action_is_heard_once() {
+        let heard = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mine = heard.clone();
+        let run = AgentRun::start(Box::new(move |r| mine.lock().unwrap().push(r)));
+        run.finish(Ok(()));
+        assert!(!crate::provenance::agent_running());
+        assert_eq!(*heard.lock().unwrap(), [Ok(())]);
+    }
 
     #[test]
     fn an_invoke_with_a_point_acts_there_whatever_its_target() {
