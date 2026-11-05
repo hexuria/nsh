@@ -104,6 +104,12 @@ pub(crate) fn agent_run(started: bool) {
     });
 }
 
+/// Whether an in-process action is running.
+#[cfg(all(test, feature = "gpui-agent"))]
+pub(crate) fn agent_running() -> bool {
+    AGENT_RUNS.get() > 0
+}
+
 /// An in-process action is stepping: always an agent's.
 #[cfg(feature = "gpui-agent")]
 pub(crate) fn agent_step() {
