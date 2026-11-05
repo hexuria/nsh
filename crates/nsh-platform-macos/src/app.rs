@@ -297,16 +297,19 @@ impl AppView {
     /// Acts on the node `target` of [`Self::ui_tree`] as an agent, for a
     /// caller in the process: no listener is needed. The app hears
     /// [`crate::Input::Agent`] before the first event, the input never
-    /// reads as the person's, and the app isn't activated. `done` hears
-    /// how it ended, on the main thread, once the app settled. Main thread.
+    /// reads as the person's, and the app isn't activated. `still` is asked,
+    /// on the main thread, right before the input is given: `false` gives
+    /// none, and `done` hears [`crate::SCREEN_CHANGED`]. `done` hears how it
+    /// ended, on the main thread, once the app settled. Main thread.
     #[cfg(feature = "gpui-agent")]
     pub fn act(
         &self,
         target: &str,
         act: crate::UiAct,
+        still: impl Fn() -> bool + Send + 'static,
         done: impl FnOnce(Result<(), String>) + Send + 'static,
     ) {
-        crate::gpui_agent::act_in_process(&self.surface, target, act, done);
+        crate::gpui_agent::act_in_process(&self.surface, target, act, Box::new(still), done);
     }
 
     /// The view to put in a window.

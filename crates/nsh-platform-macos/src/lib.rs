@@ -68,7 +68,7 @@ mod view;
 mod visual;
 
 #[cfg(feature = "gpui-agent")]
-pub use crate::gpui_agent::UiAct;
+pub use crate::gpui_agent::{SCREEN_CHANGED, UiAct};
 #[cfg(feature = "gpui-agent")]
 pub use ::gpui_agent::tree as ui_tree;
 pub use block2;
