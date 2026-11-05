@@ -400,6 +400,21 @@ impl AppView {
         crate::gpui_agent::snapshot(&self.surface)
     }
 
+    /// Acts on the node `target` of [`Self::ui_tree`] as an agent, for a
+    /// caller in the process: no listener is needed. The app hears
+    /// [`crate::Input::Agent`] before the first event, the input never
+    /// reads as the person's, and the app isn't activated. `done` hears
+    /// how it ended, on the main thread, once the app settled. Main thread.
+    #[cfg(feature = "gpui-agent")]
+    pub fn act(
+        &self,
+        target: &str,
+        act: crate::UiAct,
+        done: impl FnOnce(Result<(), String>) + Send + 'static,
+    ) {
+        crate::gpui_agent::act_in_process(&self.surface, target, act, done);
+    }
+
     /// The view to put in a window.
     pub fn view(&self) -> Retained<NSView> {
         self.container.clone()
