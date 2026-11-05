@@ -7,8 +7,9 @@
 //!
 //! Input made in process ([`crate::synth`]) is told apart from the
 //! system's by a mark on the event, so a synthesized press never reads as
-//! the person's. Hover and scroll say nothing: they come without the
-//! person meaning to act.
+//! the person's. Nor does an event another process posted: the system says
+//! which process that was, and hardware is no process ([`source_of`]). Hover
+//! and scroll say nothing: they come without the person meaning to act.
 
 use std::{
     cell::{Cell, RefCell},
@@ -19,6 +20,7 @@ use std::{
 use block2::RcBlock;
 use objc2::{MainThreadMarker, Message, rc::Retained, runtime::AnyObject};
 use objc2_app_kit::{NSEvent, NSEventMask, NSEventType, NSView};
+use objc2_core_graphics::{CGEvent, CGEventField};
 
 use crate::view::{NshView, superview};
 
@@ -146,9 +148,31 @@ fn counts_as_person() -> bool {
     SYNTH_IS_PERSON.get() && AGENT_RUNS.get() == 0
 }
 
+/// The process that posted `event`: 0 for hardware, `None` when it can't be
+/// told.
+fn source_of(event: &NSEvent) -> Option<i64> {
+    let event = event.CGEvent()?;
+    Some(CGEvent::integer_value_field(
+        Some(&event),
+        CGEventField::EventSourceUnixProcessID,
+    ))
+}
+
+/// Whether input is the person's: what this process made, by
+/// [`counts_as_person`]; anything else only with no process behind it.
+fn persons(synthesized: bool, source: impl FnOnce() -> Option<i64>) -> bool {
+    if synthesized {
+        counts_as_person()
+    } else {
+        source() == Some(0)
+    }
+}
+
 fn observe(event: &NSEvent, mtm: MainThreadMarker) {
     let kind = event.r#type();
-    if synthesized(kind, || event.eventNumber()) && !counts_as_person() {
+    if !persons(synthesized(kind, || event.eventNumber()), || {
+        source_of(event)
+    }) {
         return;
     }
     let target = if kind == NSEventType::KeyDown {
@@ -206,6 +230,27 @@ mod tests {
             "keys have no number"
         )));
         SYNTH_KEY.set(false);
+    }
+
+    #[test]
+    fn an_event_a_process_posted_is_not_the_persons() {
+        assert!(persons(false, || Some(0)), "hardware");
+        assert!(!persons(false, || Some(17897)), "another process");
+        assert!(!persons(false, || None), "can't tell is no");
+    }
+
+    /// The test channel's events come from this very process: its word is
+    /// the channel's setting, and their source is never looked at.
+    #[test]
+    fn the_test_channel_keeps_its_own_rule() {
+        assert!(!persons(true, || unreachable!(
+            "synthesized goes by the channel"
+        )));
+        SYNTH_IS_PERSON.set(true);
+        assert!(persons(true, || unreachable!(
+            "synthesized goes by the channel"
+        )));
+        SYNTH_IS_PERSON.set(false);
     }
 
     #[test]
