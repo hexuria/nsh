@@ -24,6 +24,12 @@
 //! person's. Without the server there is no such setting, and input made
 //! here is always an agent's.
 //!
+//! **In the process.** [`act`] is the same action for a caller inside the
+//! app ([`crate::AppView::act`]), with or without the server: it steps as
+//! a request does, is always an agent's, whatever the channel says, and
+//! never activates the app, which the person may be using for something
+//! else.
+//!
 //! **Ops.** `hello`; `snapshot` (with `fingerprints`, `since` a
 //! revision, `format: "compact"`: what shows and can be operated, one
 //! line a node) and `revision`; `assert` and `wait_until`; `click`, `type`,
@@ -242,7 +248,7 @@ fn schedule(key: u64, mailbox: AgentMailbox, mut jobs: VecDeque<Job>) {
             crate::provenance::agent_acts();
         }
         while let Some(job) = jobs.front_mut() {
-            let Some(result) = step(&surface, job) else {
+            let Some(result) = step(&surface, &mut job.phase, job.action.as_ref()) else {
                 break;
             };
             if let Some(job) = jobs.pop_front() {
@@ -444,7 +450,77 @@ fn act(
         target: Some(target.to_owned()),
         at: None,
         gesture,
+        background: false,
     })
+}
+
+/// What a caller in the process does to a node ([`act`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UiAct {
+    /// Presses it.
+    Press,
+    /// Presses it, then types `text` at the end of what it holds.
+    Type(String),
+    /// Presses it, then replaces what it holds with the text.
+    SetValue(String),
+}
+
+impl UiAct {
+    fn gesture(self) -> Gesture {
+        match self {
+            UiAct::Press => Gesture::Press,
+            UiAct::Type(text) => Gesture::Type(text),
+            UiAct::SetValue(text) => Gesture::SetValue(text),
+        }
+    }
+}
+
+/// Acts on the node `target` of `surface` as an agent, for a caller in
+/// the process: an action as a request's, stepped on the main queue, and
+/// `done` hears how it ended once the app settled. Needs no server. Each
+/// step tells the app ([`crate::provenance::Input::Agent`]), so what the
+/// action starts is the agent's before its first event.
+pub(crate) fn act_in_process(
+    surface: &Rc<Surface>,
+    target: &str,
+    act: UiAct,
+    done: impl FnOnce(Result<(), String>) + Send + 'static,
+) {
+    let action = Action {
+        target: Some(target.to_owned()),
+        at: None,
+        gesture: act.gesture(),
+        background: true,
+    };
+    let phase = Phase::Locate {
+        tries: 0,
+        revealed: false,
+    };
+    crate::provenance::agent_run(true);
+    drive(surface.key(), phase, action, done);
+}
+
+/// Steps an in-process action once per drain until it ends.
+fn drive(
+    key: u64,
+    mut phase: Phase,
+    action: Action,
+    done: impl FnOnce(Result<(), String>) + Send + 'static,
+) {
+    crate::input::later(DRAIN.as_millis() as u64, move || {
+        let Some(surface) = Surface::with_key(key) else {
+            crate::provenance::agent_run(false);
+            return done(Err("the window is gone".into()));
+        };
+        crate::provenance::agent_step();
+        match step(&surface, &mut phase, Some(&action)) {
+            Some(result) => {
+                crate::provenance::agent_run(false);
+                done(result.map(drop));
+            }
+            None => drive(key, phase, action, done),
+        }
+    });
 }
 
 fn hello() -> HelloInfo {
@@ -1031,6 +1107,8 @@ struct Action {
     /// over `target`: for content no node names, such as a mini app's.
     at: Option<(f64, f64)>,
     gesture: Gesture,
+    /// It leaves the app as active or inactive as it found it.
+    background: bool,
 }
 
 /// The input of an [`Action`].
@@ -1220,6 +1298,7 @@ fn invoke_action(name: &str, args: &serde_json::Value) -> Option<Result<Action, 
         target,
         at,
         gesture,
+        background: false,
     }))
 }
 
@@ -1232,11 +1311,15 @@ fn invoke_action(name: &str, args: &serde_json::Value) -> Option<Result<Action, 
 /// still sliding in or an overlay fading out does not fail it, then fails
 /// with why: a press that would land elsewhere returns an error instead
 /// of reporting a press nothing received.
-fn step(surface: &Rc<Surface>, job: &mut Job) -> Option<Result<DispatchResult, String>> {
+fn step(
+    surface: &Rc<Surface>,
+    phase: &mut Phase,
+    action: Option<&Action>,
+) -> Option<Result<DispatchResult, String>> {
     let Some(window) = surface.root.ns().window() else {
         return Some(Err("the window is gone".into()));
     };
-    let action = match (&mut job.phase, &job.action) {
+    let action = match (&mut *phase, action) {
         (Phase::Settle(settle), _) => {
             let settled = settle.poll(surface.activity(), Instant::now())?;
             if !settled {
@@ -1248,7 +1331,7 @@ fn step(surface: &Rc<Surface>, job: &mut Job) -> Option<Result<DispatchResult, S
         (_, None) => return Some(Err("nothing to act on".into())),
     };
     let target = action.target.as_deref().unwrap_or("the window");
-    match &mut job.phase {
+    match &mut *phase {
         Phase::Locate { tries, revealed } => {
             let (scope, (x, y)) = match locate(surface, &window, action) {
                 Ok(at) => at,
@@ -1262,8 +1345,11 @@ fn step(surface: &Rc<Surface>, job: &mut Job) -> Option<Result<DispatchResult, S
                     return (*tries >= ACTIONABLE_TRIES).then(|| Err(unready.error(target)));
                 }
             };
+            if action.gesture.activates() && !action.background {
+                activate(&window);
+            }
             perform(&scope, &window, &action.gesture, x, y);
-            job.phase = if action.gesture.types() {
+            *phase = if action.gesture.types() {
                 // The press is in the event queue: the run loop handles it
                 // before the next drain.
                 Phase::Focus { tries: 0 }
@@ -1295,7 +1381,7 @@ fn step(surface: &Rc<Surface>, job: &mut Job) -> Option<Result<DispatchResult, S
                 Gesture::Key(key) => synth::key(surface, &window, key),
                 _ => {}
             }
-            job.phase = Phase::Settle(Settle::new(SETTLE, Reply::Action));
+            *phase = Phase::Settle(Settle::new(SETTLE, Reply::Action));
             None
         }
         Phase::Settle(_) => None,
@@ -1616,12 +1702,8 @@ fn focused_in(view: &NshView, window: &NSWindow) -> bool {
 }
 
 /// Gives `gesture`'s pointer input at `(x, y)`, content points from the
-/// top left, activating the app first only for the gestures that type
-/// ([`Gesture::activates`]). `scope` is the target's surface.
+/// top left. `scope` is the target's surface.
 fn perform(scope: &Scope, window: &NSWindow, gesture: &Gesture, x: f64, y: f64) {
-    if gesture.activates() {
-        activate(window);
-    }
     match *gesture {
         Gesture::Press | Gesture::Type(_) | Gesture::SetValue(_) | Gesture::Key(_) => {
             synth::mouse(window, NSEventType::MouseMoved, x, y, 0);
