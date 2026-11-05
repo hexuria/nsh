@@ -43,7 +43,7 @@ pub(crate) fn mouse_event(
         timestamp(),
         window.windowNumber(),
         None,
-        0,
+        crate::provenance::SYNTH_EVENT,
         clicks,
         if clicks > 0 { 1.0 } else { 0.0 },
     )
@@ -286,16 +286,18 @@ pub(crate) fn key_event(
         let Some(event) = event else { continue };
         // Key equivalents (menus) and key monitors (`nsh/keymap`) are the
         // application's, which hands the key to its key window.
-        if window.isKeyWindow() || flags.contains(NSEventModifierFlags::Command) {
-            objc2_app_kit::NSApplication::sharedApplication(MainThreadMarker::from(window))
-                .sendEvent(&event);
-        } else if kind == NSEventType::KeyDown && crate::keymap::fires(surface, &event) {
-            // The app's key monitor never sees a window's own events: it
-            // gets the key first, as it would in the key window (the test
-            // window often is not one, its app left in the background).
-        } else {
-            window.sendEvent(&event);
-        }
+        crate::provenance::synth_key(|| {
+            if window.isKeyWindow() || flags.contains(NSEventModifierFlags::Command) {
+                objc2_app_kit::NSApplication::sharedApplication(MainThreadMarker::from(window))
+                    .sendEvent(&event);
+            } else if kind == NSEventType::KeyDown && crate::keymap::fires(surface, &event) {
+                // The app's key monitor never sees a window's own events: it
+                // gets the key first, as it would in the key window (the test
+                // window often is not one, its app left in the background).
+            } else {
+                window.sendEvent(&event);
+            }
+        });
     }
 }
 
