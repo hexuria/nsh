@@ -1467,6 +1467,12 @@ impl InputState {
             .then(|| self.editor.borrow().text().chars().count())
     }
 
+    /// What the input holds, for the gpui-agent host's tree.
+    #[cfg(feature = "gpui-agent")]
+    pub(crate) fn plain_text(&self) -> String {
+        self.editor.borrow().text()
+    }
+
     fn update_placeholder(&self) {
         let editor = self.editor.borrow();
         let shown = matches!(&*editor, Editor::Area { .. })
