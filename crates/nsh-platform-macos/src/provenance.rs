@@ -2,8 +2,9 @@
 //!
 //! The app registers one listener ([`on_input`]) and hears
 //! [`Input::Person`] for each press or key given to a surface, and
-//! [`Input::Agent`] while an automation acts. What it does with them is
-//! its own business; nsh only says where input came from.
+//! [`Input::Agent`] while an automation acts. A press or key another
+//! process posted is [`Input::Posted`]. What it does with them is its own
+//! business; nsh only says where input came from.
 //!
 //! Input made in process ([`crate::synth`]) is told apart from the
 //! system's by a mark on the event, so a synthesized press never reads as
@@ -32,6 +33,13 @@ pub enum Input {
     Agent,
     /// The person pressed or typed in a surface.
     Person {
+        /// Its key ([`crate::AppView::surface_key`]).
+        surface: u64,
+    },
+    /// Another process posted a press or key to a surface: an assistive
+    /// app, a remote control or an automation, which can't be told apart.
+    /// Never [`Input::Person`]; whether it counts as one is the app's call.
+    Posted {
         /// Its key ([`crate::AppView::surface_key`]).
         surface: u64,
     },
@@ -168,20 +176,29 @@ fn persons(synthesized: bool, source: impl FnOnce() -> Option<i64>) -> bool {
     }
 }
 
+/// Whether input is another process's: not this one's, and from a process
+/// the system names.
+fn posted(synthesized: bool, source: impl FnOnce() -> Option<i64>) -> bool {
+    !synthesized && source().is_some_and(|pid| pid != 0)
+}
+
 fn observe(event: &NSEvent, mtm: MainThreadMarker) {
     let kind = event.r#type();
-    if !persons(synthesized(kind, || event.eventNumber()), || {
-        source_of(event)
-    }) {
+    let synthesized = synthesized(kind, || event.eventNumber());
+    let input: fn(u64) -> Input = if persons(synthesized, || source_of(event)) {
+        |surface| Input::Person { surface }
+    } else if posted(synthesized, || source_of(event)) {
+        |surface| Input::Posted { surface }
+    } else {
         return;
-    }
+    };
     let target = if kind == NSEventType::KeyDown {
         key_target(event, mtm)
     } else {
         press_target(event, mtm)
     };
     if let Some(surface) = target.as_deref().and_then(surface_of) {
-        tell(Input::Person { surface });
+        tell(input(surface));
     }
 }
 
@@ -237,6 +254,14 @@ mod tests {
         assert!(persons(false, || Some(0)), "hardware");
         assert!(!persons(false, || Some(17897)), "another process");
         assert!(!persons(false, || None), "can't tell is no");
+    }
+
+    #[test]
+    fn an_event_a_process_posted_is_told_apart() {
+        assert!(posted(false, || Some(17897)));
+        assert!(!posted(false, || Some(0)), "hardware is the person's");
+        assert!(!posted(false, || None), "can't tell is neither");
+        assert!(!posted(true, || unreachable!("this process's own")));
     }
 
     /// The test channel's events come from this very process: its word is
