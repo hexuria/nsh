@@ -185,7 +185,9 @@ enum Synthesized {
     Backspace,
     SelectAll,
     /// Ctrl+Z, Ctrl+Shift+Z.
-    Undo { redo: bool },
+    Undo {
+        redo: bool,
+    },
     Char(char),
     /// The focused window's keys: closing a window of the app's own, or
     /// going back.

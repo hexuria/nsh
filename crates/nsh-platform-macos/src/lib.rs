@@ -74,8 +74,6 @@ mod window;
 mod window_state;
 
 #[cfg(feature = "gpui-agent")]
-pub use crate::gpui_agent::{SCREEN_CHANGED, UiAct};
-#[cfg(feature = "gpui-agent")]
 pub use ::gpui_agent::tree as ui_tree;
 pub use block2;
 pub use keymap::keystroke as keystroke_of;
@@ -89,6 +87,8 @@ pub use objc2_foundation;
 
 #[cfg(feature = "dev")]
 pub use crate::app::set_root;
+#[cfg(feature = "gpui-agent")]
+pub use crate::gpui_agent::{SCREEN_CHANGED, UiAct};
 pub use crate::{
     app::{
         ActivationPolicy, AppOptions, AppSource, AppView, WindowDisplay, quit_app, run_app,
