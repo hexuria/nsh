@@ -2634,6 +2634,7 @@ fn menu_keybindings(
                 label,
                 enabled: true,
                 items,
+                ..
             } => {
                 path.push(label.clone());
                 menu_keybindings(items, path, out);
@@ -2818,16 +2819,19 @@ mod tests {
                 checked: None,
                 role: None,
                 when: When::Auto,
+                icon: None,
             })
         };
         let application_menu: Arc<[MenuItem]> = vec![MenuItem::Submenu {
             label: "File".into(),
             enabled: true,
+            icon: None,
             items: vec![
                 action(19, "Save", "ctrl+s", true),
                 MenuItem::Submenu {
                     label: "Disabled".into(),
                     enabled: false,
+                    icon: None,
                     items: vec![action(20, "Hidden", "ctrl+h", true)],
                 },
                 action(21, "Unavailable", "ctrl+u", false),
@@ -3298,6 +3302,7 @@ mod tests {
             end: 7,
             node: 102,
             events: EventMask::default(),
+            focus_stop: false,
         };
         screen.apply(&batch(vec![
             create(4, ViewKind::Text),
