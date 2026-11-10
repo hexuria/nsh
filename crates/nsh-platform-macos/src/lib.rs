@@ -46,6 +46,7 @@ mod mount;
 mod native;
 mod navigation;
 mod net;
+mod pace;
 mod picker;
 mod screen_color;
 mod scroll;
