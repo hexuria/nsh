@@ -103,9 +103,8 @@ mod tests {
             home_dir: true,
             ..Default::default()
         };
-        let denied = |r: Result<String, JsError>| {
-            r.is_err_and(|e| e.code() == Some(codes::ACCESS_DENIED))
-        };
+        let denied =
+            |r: Result<String, JsError>| r.is_err_and(|e| e.code() == Some(codes::ACCESS_DENIED));
         assert!(!denied(Os::homedir(sys(granted))));
     }
 
