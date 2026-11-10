@@ -849,6 +849,8 @@ fn role_name(role: Ax) -> &'static str {
         Ax::Toolbar => "toolbar",
         Ax::List => "list",
         Ax::Grid => "grid",
+        Ax::Row => "row",
+        Ax::Cell => "cell",
         Ax::Search => "search",
         Ax::TextField => "textfield",
         Ax::Alert => "alert",
@@ -858,6 +860,8 @@ fn role_name(role: Ax) -> &'static str {
         Ax::Region => "region",
         Ax::Navigation => "navigation",
         Ax::TreeItem => "treeitem",
+        // The window's own buttons, a view standing for each.
+        Ax::CloseButton | Ax::MinimizeButton | Ax::ZoomButton => "button",
     }
 }
 
