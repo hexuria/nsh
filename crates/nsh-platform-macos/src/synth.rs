@@ -37,7 +37,9 @@ thread_local! {
         const { std::cell::RefCell::new(std::collections::VecDeque::new()) };
 }
 
-/// Whether `event` is one of the agent's mouse events.
+/// Whether `event` is one of the agent's mouse events (`nsh test`'s: the
+/// views it is posted to tell).
+#[cfg(feature = "dev")]
 pub(crate) fn from_agent(event: &NSEvent) -> bool {
     made_at(event).is_some()
 }
