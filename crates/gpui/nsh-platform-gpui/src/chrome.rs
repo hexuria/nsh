@@ -120,12 +120,20 @@ const WINDOWS_CAPTION_HEIGHT: f32 = 32.0;
 const CAPTION_BUTTON_WIDTH: f32 = 46.0;
 
 /// Linux: the hidden title bar's height when the app gives none (GTK's
-/// header bars), the window buttons' size, the gap between them and their
-/// margin from the window's right edge.
+/// header bars), and the traffic lights' layout — three 14 point circles,
+/// 8 points apart, starting `LINUX_TRAFFIC_X` points in from the left
+/// edge, as macOS draws them.
 const LINUX_HEADER_HEIGHT: f32 = 46.0;
+const LINUX_TRAFFIC_X: f32 = 12.0;
+const LINUX_TRAFFIC_SIZE: f32 = 14.0;
+const LINUX_TRAFFIC_GAP: f32 = 8.0;
+/// The title bar inset the traffic lights take: their left margin, the
+/// three circles and their gaps, and a gap before the app's content.
+const LINUX_TRAFFIC_INSET: f32 =
+    LINUX_TRAFFIC_X + 3.0 * LINUX_TRAFFIC_SIZE + 2.0 * LINUX_TRAFFIC_GAP + 8.0;
+/// The legacy GTK-style window button's size (`control_button`'s
+/// non-Windows path, kept for platforms without traffic lights).
 const LINUX_BUTTON: f32 = 24.0;
-const LINUX_BUTTON_GAP: f32 = 8.0;
-const LINUX_BUTTON_MARGIN: f32 = 10.0;
 /// How far in from the border a client-decorated window resizes.
 const RESIZE_EDGE: f32 = 6.0;
 
@@ -769,7 +777,7 @@ fn title_bar_area(
         },
         Platform::Linux if client_decorated => Insets {
             top: Points(height.unwrap_or(LINUX_HEADER_HEIGHT)),
-            right: Points(3.0 * LINUX_BUTTON + 2.0 * LINUX_BUTTON_GAP + LINUX_BUTTON_MARGIN),
+            left: Points(LINUX_TRAFFIC_INSET),
             ..Insets::default()
         },
         Platform::Linux => Insets::default(),
@@ -847,13 +855,14 @@ pub(crate) fn render(
     let client = PLATFORM == Platform::Linux && c.client_decorated.get();
     if shows_bars && hide && (PLATFORM == Platform::Windows || client) {
         let height = title_bar_area(PLATFORM, true, client, c.height.get()).top;
-        body = body.child(
-            div()
-                .absolute()
-                .top_0()
-                .right_0()
-                .child(controls(surface, height.0, &theme)),
-        );
+        // Linux's traffic lights sit at the left, as macOS's do; Windows'
+        // caption buttons stay at the right.
+        let at = if client {
+            div().absolute().top_0().left_0().pl(px(LINUX_TRAFFIC_X))
+        } else {
+            div().absolute().top_0().right_0()
+        };
+        body = body.child(at.child(controls(surface, height.0, &theme)));
     }
     root = root.child(body);
     if shows_bars && client && !c.maximized.get() {
@@ -1030,9 +1039,17 @@ enum Control {
     Close,
 }
 
-/// The window controls (Windows' caption buttons, GTK-style window
-/// buttons on Linux), `height` points tall.
-fn controls(surface: &Rc<Surface>, height: f32, theme: &Theme) -> impl IntoElement {
+/// The window controls (Windows' caption buttons; Linux's macOS-style
+/// traffic lights), `height` points tall.
+fn controls(surface: &Rc<Surface>, height: f32, theme: &Theme) -> AnyElement {
+    if PLATFORM == Platform::Linux {
+        return linux_traffic_lights(
+            surface,
+            surface.chrome.maximized.get(),
+            surface.chrome.active.get(),
+            height,
+        );
+    }
     let maximized = surface.chrome.maximized.get();
     let active = surface.chrome.active.get();
     let mut row = div()
@@ -1041,9 +1058,6 @@ fn controls(surface: &Rc<Surface>, height: f32, theme: &Theme) -> impl IntoEleme
         .items_center()
         .h(px(height))
         .occlude();
-    if PLATFORM == Platform::Linux {
-        row = row.gap(px(LINUX_BUTTON_GAP)).pr(px(LINUX_BUTTON_MARGIN));
-    }
     for (i, control) in [Control::Minimize, Control::Maximize, Control::Close]
         .into_iter()
         .enumerate()
@@ -1052,7 +1066,130 @@ fn controls(surface: &Rc<Surface>, height: f32, theme: &Theme) -> impl IntoEleme
             surface, control, i, height, maximized, active, theme,
         ));
     }
-    row
+    row.into_any_element()
+}
+
+/// Linux's window controls: macOS's traffic lights — close, minimize and
+/// zoom as colored circles at the title bar's left, each showing its
+/// glyph while hovered, dimmed while the window is inactive.
+fn linux_traffic_lights(
+    surface: &Rc<Surface>,
+    maximized: bool,
+    active: bool,
+    height: f32,
+) -> AnyElement {
+    let mut row = div()
+        .flex()
+        .flex_row()
+        .items_center()
+        .h(px(height))
+        .gap(px(LINUX_TRAFFIC_GAP))
+        .occlude();
+    for (i, control) in [Control::Close, Control::Minimize, Control::Maximize]
+        .into_iter()
+        .enumerate()
+    {
+        row = row.child(traffic_button(surface, control, i, maximized, active));
+    }
+    row.into_any_element()
+}
+
+fn traffic_button(
+    surface: &Rc<Surface>,
+    control: Control,
+    index: usize,
+    maximized: bool,
+    active: bool,
+) -> AnyElement {
+    let mut color = match control {
+        Control::Close => gpui::rgba(0xff5f57ff),
+        Control::Minimize => gpui::rgba(0xfebc2eff),
+        Control::Maximize => gpui::rgba(0x28c840ff),
+    };
+    if !active {
+        // An inactive window's lights fade toward gray, as macOS's do.
+        color = gpui::rgba(0xd0d0d0ff);
+    }
+    let s = surface.clone();
+    div()
+        .id(("nsh-traffic-light", index))
+        .size(px(LINUX_TRAFFIC_SIZE))
+        .rounded_full()
+        .bg(color)
+        .relative()
+        .child(traffic_glyph(control, maximized))
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .on_click(move |_, window, cx| {
+            match control {
+                Control::Minimize => window.minimize_window(),
+                Control::Maximize => window.zoom_window(),
+                Control::Close => push(&s, Op::Close),
+            }
+            s.invalidate();
+            crate::rt::flush(cx);
+        })
+        .into_any_element()
+}
+
+/// A traffic light's glyph, drawn only while the pointer is on its
+/// button: × for close, − for minimize, + for zoom (a restore glyph
+/// while maximized).
+fn traffic_glyph(control: Control, maximized: bool) -> impl IntoElement {
+    canvas(
+        |_, _, _| {},
+        move |bounds, _, window, _| {
+            if !bounds.contains(&window.mouse_position()) {
+                return;
+            }
+            let (x0, y0) = (f32::from(bounds.origin.x), f32::from(bounds.origin.y));
+            let line = 1.0 / window.scale_factor();
+            // An 8 point glyph centered in the 14 point circle.
+            let g = 8.0f32;
+            let (ox, oy) = (
+                x0 + (f32::from(bounds.size.width) - g) / 2.0,
+                y0 + (f32::from(bounds.size.height) - g) / 2.0,
+            );
+            let p = |x: f32, y: f32| gpui::point(px(ox + x), px(oy + y));
+            let color = gpui::rgba(0x1e1e1e99);
+            let mut b = gpui::PathBuilder::stroke(px(line.max(1.0)));
+            match control {
+                Control::Close => {
+                    b.move_to(p(0.0, 0.0));
+                    b.line_to(p(g, g));
+                    b.move_to(p(g, 0.0));
+                    b.line_to(p(0.0, g));
+                }
+                Control::Minimize => {
+                    b.move_to(p(0.0, g / 2.0));
+                    b.line_to(p(g, g / 2.0));
+                }
+                Control::Maximize if maximized => {
+                    // Restore: a square with another behind it.
+                    let o = g * 0.25;
+                    b.move_to(p(0.0, o));
+                    b.line_to(p(g - o, o));
+                    b.line_to(p(g - o, g));
+                    b.line_to(p(0.0, g));
+                    b.close();
+                    b.move_to(p(o, o));
+                    b.line_to(p(o, 0.0));
+                    b.line_to(p(g, 0.0));
+                    b.line_to(p(g, g - o));
+                    b.line_to(p(g - o, g - o));
+                }
+                Control::Maximize => {
+                    b.move_to(p(g / 2.0, 0.0));
+                    b.line_to(p(g / 2.0, g));
+                    b.move_to(p(0.0, g / 2.0));
+                    b.line_to(p(g, g / 2.0));
+                }
+            }
+            if let Ok(path) = b.build() {
+                window.paint_path(path, color);
+            }
+        },
+    )
+    .size(px(LINUX_TRAFFIC_SIZE))
 }
 
 fn control_button(
@@ -1588,7 +1725,7 @@ mod tests {
             Insets::default()
         );
         let linux = title_bar_area(Platform::Linux, true, true, None);
-        assert_eq!((linux.top.0, linux.right.0), (46.0, 98.0));
+        assert_eq!((linux.top.0, linux.left.0, linux.right.0), (46.0, 78.0, 0.0));
     }
 
     #[test]
