@@ -286,52 +286,13 @@ impl Mounter {
             }));
     }
 
-    /// Whether a waiting tree ([`crate::pace`]) shows, and whether it is
-    /// near showing (within its nearest scroll view's size of what shows):
-    /// its root where it went in, else the frame it goes in at.
-    pub(crate) fn tree_shows(&self, tree: &crate::pace::Tree) -> (bool, bool) {
-        let root = self.views.get(&tree.root).filter(|r| r.has_parent());
-        let (parent, rect) = match root {
-            Some(root) => {
-                let Some(parent) = root.parent_view() else {
-                    return (false, false);
-                };
-                (parent, crate::sight::placed(root.ns().frame()))
-            }
-            None => {
-                let Some(parent) = self.views.get(&tree.parent) else {
-                    return (false, false);
-                };
-                let (mut x, y) = (tree.frame.origin.x.0, tree.frame.origin.y.0);
-                let (w, h) = (tree.frame.size.width.0, tree.frame.size.height.0);
-                // Placed as `NshView::place` will: mirrored in a mirrored list.
-                let state = parent.state();
-                if state.scroll.as_ref().is_some_and(|s| s.mirrored) {
-                    x = state.frame.size.width.0 - x - w;
-                }
-                drop(state);
-                (parent.clone(), (x, y, x + w, y + h))
-            }
-        };
-        let sight = Sights::default().content(&crate::view::Views, parent.clone());
-        let shows = crate::sight::admits(sight, rect);
-        let near = shows
-            || std::iter::successors(Some(parent), NshView::parent_view)
-                .find(|p| p.state().scroll.is_some())
-                .is_some_and(|scroll| {
-                    let size = scroll.ns().frame().size;
-                    let margin = (size.width as f32, size.height as f32);
-                    crate::sight::admits(crate::sight::grown(sight, margin), rect)
-                });
-        (shows, near)
-    }
-
     /// The batch is applied.
     pub(crate) fn end_batch(&mut self, surface: &Rc<Surface>) {
         self.deleting.clear();
         self.moved();
         self.layout_animation = None;
         crate::navigation::end_batch(surface);
+        crate::input::release_hidden_focus(surface);
         crate::system::end_batch(surface);
         crate::input::content_moved(surface, false);
         crate::selectable_view::end_batch(surface);
@@ -417,15 +378,18 @@ impl Mounter {
             MountItem::Delete { id } => {
                 crate::file_drop::deleted(surface, *id);
                 if let Some(view) = self.views.remove(id) {
+                    crate::text_input::deleted(&view);
                     crate::native::deleted(surface, &view);
                     crate::shader::deleted(surface, &view);
                     // A view whose parent the batch deletes too stays in it:
                     // the subtree leaves the window with its root, in one
                     // `removeFromSuperview`, not one per view while still
-                    // in the window.
-                    let inside = view
-                        .parent_view()
-                        .is_some_and(|p| self.deleting.contains(&p.id()));
+                    // in the window. A modal or a header item is shown
+                    // elsewhere and its detach takes it down.
+                    let inside = !matches!(view.kind(), ViewKind::Modal | ViewKind::HeaderItem)
+                        && view
+                            .parent_view()
+                            .is_some_and(|p| self.deleting.contains(&p.id()));
                     if inside {
                         // Its running layout animation ends with it.
                         crate::transition::deleted(&view);
@@ -490,6 +454,11 @@ impl Mounter {
                     old,
                     self.layout_animation.as_ref(),
                 );
+                // A scroll area's bar reads its position against the
+                // viewport.
+                if old.size != frame.size {
+                    crate::access::scroll_bar::moved(view);
+                }
                 match view.kind() {
                     ViewKind::Stack => crate::navigation::stack_resized(surface, view),
                     ViewKind::Canvas => view.changed(),
@@ -594,6 +563,8 @@ impl Mounter {
             MountItem::ScrollBehavior { id, behavior } => {
                 if let Some(view) = self.get(*id) {
                     crate::scroll::behavior(surface, view, behavior);
+                    // Its content insets are part of how far it scrolls.
+                    crate::access::scroll_bar::moved(view);
                 }
             }
             MountItem::Refreshing { id, refreshing } => {

@@ -839,3 +839,118 @@ mount(App);
     assert!(!fired(&drain(300), "starts 2"), "fired again");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// `ref.measureScrollPosition()` answers, after the layout of the turn
+/// that asks, which row the viewport starts in and how far into it, as
+/// the list lays out its rows of different sizes.
+#[test]
+fn a_list_measures_where_its_viewport_starts() {
+    let app = r#"
+import { List, mount, signal, Text, View, type ListRef } from "nsh";
+const shown = signal("waiting");
+let list!: ListRef;
+function App() {
+  return (
+    <View style={{ flex: 1 }}>
+      <Text>{shown()}</Text>
+      <List ref={list} each={Array.from({ length: 100 }, (_, i) => i)} estimatedItemSize={50} style={{ flex: 1 }}
+            onScroll={async () => {
+              const at = await list.measureScrollPosition();
+              shown.set(at ? `at ${at.index} ${at.offset}` : "none");
+            }}>
+        {(row) => <View style={{ height: 40 + (row() % 3) * 20 }} />}
+      </List>
+    </View>
+  );
+}
+mount(App);
+"#;
+    let (engine, rx, dir) = start(app);
+    let first = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    let list = first
+        .items
+        .iter()
+        .find_map(|i| match i {
+            MountItem::Create {
+                id,
+                kind: ViewKind::Scroll,
+            } => Some(*id),
+            _ => None,
+        })
+        .unwrap();
+    while rx.recv_timeout(Duration::from_millis(300)).is_ok() {}
+    // Rows of 40, 60 and 80 points: row 8 starts at 460.
+    engine.control().scroll(
+        list,
+        nsh_core::geometry::point(px(0.0), px(500.0)),
+        u32::MAX,
+    );
+    let shown: Vec<String> = std::iter::from_fn(|| rx.recv_timeout(Duration::from_secs(2)).ok())
+        .flat_map(|b| texts(&b))
+        .collect();
+    assert!(shown.iter().any(|t| t == "at 8 40"), "{shown:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The empty cell goes with its list: a list taken away while it shows
+/// its `empty` slot disposes what the slot made. It used to stay alive
+/// under a root no one disposed, its effects still running, its owner's
+/// freed slot taken by later nodes (#1984).
+#[test]
+fn the_empty_cell_goes_with_its_list() {
+    let app = r#"
+import { effect, List, mount, signal, Text, untracked, View } from "nsh";
+const shown = signal(true);
+const tick = signal(0);
+const runs = signal(0);
+const steps = [() => shown.set(false), () => tick.set(1)];
+function Empty() {
+  effect(() => {
+    tick();
+    untracked(() => runs.set(runs() + 1));
+  });
+  return <Text>empty</Text>;
+}
+function App() {
+  return (
+    <View style={{ flex: 1 }}>
+      <View onPress={() => steps.shift()?.()} style={{ height: 0 }} />
+      <Text>{`runs ${runs()}`}</Text>
+      <If when={shown()}>
+        <List each={[] as string[]} style={{ flex: 1 }} empty={<Empty />}>
+          {(row) => <Text>{row()}</Text>}
+        </List>
+      </If>
+    </View>
+  );
+}
+mount(App);
+"#;
+    let mut paced = Paced::start(app);
+    paced.settle(|_, _| {});
+    let has = |paced: &Paced, text: &str| paced.texts.values().any(|t| t == text);
+    let runs = |paced: &Paced| {
+        paced
+            .texts
+            .values()
+            .find(|t| t.starts_with("runs "))
+            .cloned()
+    };
+    assert!(has(&paced, "empty"), "{:?}", paced.texts);
+    let before = runs(&paced);
+    for _ in 0..2 {
+        paced.engine.control().dispatch_event(
+            paced.pressable.expect("the pressable view"),
+            nsh_core::EventKind::Press,
+            nsh_core::EventPayload::None,
+        );
+        paced.settle(|_, _| {});
+    }
+    assert_eq!(
+        runs(&paced),
+        before,
+        "the empty cell's effect ran after its list went: {:?}",
+        paced.texts
+    );
+    assert_eq!(paced.errors(), Vec::<String>::new());
+}

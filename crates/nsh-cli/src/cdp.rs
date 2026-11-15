@@ -113,7 +113,8 @@ fn candidates() -> Vec<PathBuf> {
     paths
 }
 
-/// A headless browser this process started; it goes when this is dropped.
+/// A headless browser this process started; it goes when it is closed
+/// ([`Browser::close`]) or dropped.
 pub(crate) struct Browser {
     child: Mutex<Child>,
     socket: Mutex<WebSocket<MaybeTlsStream<TcpStream>>>,
@@ -121,7 +122,6 @@ pub(crate) struct Browser {
     /// Its profile, removed after it.
     profile: PathBuf,
     output: ui::Tail,
-    /// It was closed ([`Browser::close`]).
     closed: AtomicBool,
 }
 
@@ -294,11 +294,9 @@ impl Browser {
     fn lock_child(&self) -> std::sync::MutexGuard<'_, Child> {
         self.child.lock().unwrap_or_else(|e| e.into_inner())
     }
-}
 
-impl Browser {
-    /// Closes it and removes its profile (once; dropping it does too): for
-    /// an owner that ends while others still hold it (an agent's thread).
+    /// Closes it and removes its profile, once; the pages left fail their
+    /// calls.
     pub(crate) fn close(&self) {
         if self.closed.swap(true, Ordering::SeqCst) {
             return;
@@ -355,6 +353,10 @@ fn command(exe: &Path, headed: bool, profile: &Path) -> Command {
             // Playwright launches it).
             "--blink-settings=primaryPointerType=4,availablePointerTypes=4,\
              primaryHoverType=2,availableHoverTypes=2",
+            // No downloads of its own (components, Safe Browsing lists):
+            // they made a profile in the temp directory 150 MB.
+            "--disable-component-update",
+            "--disable-background-networking",
             "about:blank",
         ])
         .stdin(Stdio::null())

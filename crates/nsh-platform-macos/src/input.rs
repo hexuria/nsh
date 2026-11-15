@@ -65,6 +65,7 @@ use nsh_core::{
         self, Gate, HitArea, PAN_SLOP, PRESS_SLOP, VelocityTracker, ZOOM_IDLE, has_press, laid_out,
         latch_holds, transforms,
     },
+    platform::InputModality,
     tailwind::state::{HOVERED, PRESSED},
 };
 use objc2::{AnyThread, ClassType, rc::Retained, sel};
@@ -154,6 +155,9 @@ pub(crate) struct Input {
     /// hosted view's or another app's) — `NSCursor::currentCursor` is
     /// another object than the one set when the pointer is customized.
     cursor: Cell<Option<Cursor>>,
+    /// A Control-click (the secondary click) is down: its left-button
+    /// release is the secondary button's (`onMouseUp` reports `right`).
+    control_click: Cell<bool>,
     /// Hovered views and the cursor are picked again on the main queue
     /// (what is under the mouse moved).
     repick: Cell<bool>,
@@ -377,6 +381,46 @@ fn release_invalid_control_focus(surface: &Surface, view: &NshView) {
     }
 }
 
+/// A batch is applied: the keyboard focus leaves a stop, or a field (an
+/// input's, a hosted view) in a view of ours, that it hid
+/// ([`NshView::seen_by_keys`]: `display: none` or `visibility: hidden`
+/// around it), for the root of its window, as it leaves a screen that
+/// hides. AppKit keeps a hidden view focused, and the keys would still act
+/// on what the user cannot see.
+pub(crate) fn release_hidden_focus(surface: &Surface) {
+    for root in std::iter::once(surface.root.clone()).chain(crate::window::roots(surface)) {
+        let Some(window) = root.ns().window() else {
+            continue;
+        };
+        let Some(mut at) = window
+            .firstResponder()
+            .and_then(|responder| responder.downcast::<objc2_app_kit::NSView>().ok())
+        else {
+            continue;
+        };
+        if !at.isDescendantOf(root.ns()) {
+            continue;
+        }
+        // The stop itself, or the view of ours holding the field (a field
+        // that edits has the window's field editor in it).
+        let view = loop {
+            if let Some(view) = NshView::from_ns(&at) {
+                break Some(view);
+            }
+            match crate::view::superview(&at) {
+                Some(up) => at = up,
+                None => break None,
+            }
+        };
+        if let Some(view) = view
+            && view != root
+            && !view.seen_by_keys()
+        {
+            window.makeFirstResponder(Some(root.ns()));
+        }
+    }
+}
+
 /// The view's style changed (cursor). The cursor follows on the next mouse
 /// move.
 pub(crate) fn style_changed(_view: &NshView) {}
@@ -544,10 +588,17 @@ fn set_cursor_at(surface: &Surface, x: f32, y: f32, always: bool) {
         }
         None => Cursor::Default,
     };
-    if always || surface.input.cursor.get() != Some(cursor) {
+    if let Some(cursor) = cursor_to_set(always, surface.input.cursor.get(), cursor) {
         ns_cursor(cursor).set();
         surface.input.cursor.set(Some(cursor));
     }
+}
+
+/// The cursor to set where the app's is `cursor`, after this surface last
+/// set `set` (`None`: another may show, a hosted view's or another app's):
+/// none when it shows already, unless `always`.
+fn cursor_to_set(always: bool, set: Option<Cursor>, cursor: Cursor) -> Option<Cursor> {
+    (always || set != Some(cursor)).then_some(cursor)
 }
 
 /// The mouse at `(x, y)` (root coordinates) is over `view` (none: off the
@@ -725,14 +776,17 @@ pub(crate) fn event(surface: &Rc<Surface>, event: &NSEvent) {
     ) {
         input.last.set(Some((x, y)));
     }
-    // A press in a window gives it the keyboard (AppKit does it itself, but
-    // for an app in the background).
     if matches!(
         ty,
         NSEventType::LeftMouseDown | NSEventType::RightMouseDown | NSEventType::OtherMouseDown
-    ) && let Some(window) = event.window(surface.mtm)
-    {
-        crate::window::became_key(surface, &window);
+    ) {
+        // Before the press acts: the focus it moves does not show.
+        surface.control(|c| c.set_input_modality(InputModality::Pointer));
+        // A press in a window gives it the keyboard (AppKit does it itself,
+        // but for an app in the background).
+        if let Some(window) = event.window(surface.mtm) {
+            crate::window::became_key(surface, &window);
+        }
     }
     match ty {
         // Control-click is the secondary click on macOS.
@@ -742,10 +796,16 @@ pub(crate) fn event(surface: &Rc<Surface>, event: &NSEvent) {
                 .contains(NSEventModifierFlags::Control) =>
         {
             input.last.set(Some((x, y)));
+            input.control_click.set(true);
             context_menu(surface, x, y, event.modifierFlags());
         }
         NSEventType::RightMouseDown => context_menu(surface, x, y, event.modifierFlags()),
         NSEventType::LeftMouseDown => {
+            // Every plain press clears the latch: a text context menu tracks
+            // the mouse synchronously and consumes its release, so a
+            // Control-click's latch can outlive its press and would
+            // otherwise report this release as the secondary button.
+            input.control_click.set(false);
             if window_part_press(surface, event, x, y) {
                 return;
             }
@@ -778,6 +838,12 @@ pub(crate) fn event(surface: &Rc<Surface>, event: &NSEvent) {
         }
         NSEventType::LeftMouseUp => {
             input.last.set(Some((x, y)));
+            let button = if input.control_click.replace(false) {
+                MouseButton::Right
+            } else {
+                MouseButton::Left
+            };
+            mouse_up(surface, x, y, Mouse::of(event), button);
             up(surface, x, y, time);
             update_cursor(surface, x, y);
             let control = input.window_control.borrow_mut().take();
@@ -786,6 +852,16 @@ pub(crate) fn event(surface: &Rc<Surface>, event: &NSEvent) {
                     .is_some_and(|hit| chain(&hit.view).contains(&view))
             {
                 crate::window::control(surface, control, event);
+            }
+        }
+        NSEventType::RightMouseUp => {
+            input.last.set(Some((x, y)));
+            mouse_up(surface, x, y, Mouse::of(event), MouseButton::Right);
+        }
+        NSEventType::OtherMouseUp => {
+            input.last.set(Some((x, y)));
+            if let Some(button) = other_button(event.buttonNumber()) {
+                mouse_up(surface, x, y, Mouse::of(event), button);
             }
         }
         NSEventType::MouseMoved | NSEventType::MouseEntered => {
@@ -849,6 +925,10 @@ fn context_menu(surface: &Surface, x: f32, y: f32, flags: NSEventModifierFlags) 
         if input {
             return;
         }
+        if crate::text::selectable(&v.state()) || v.state().props.selectable_view {
+            crate::text::context_menu(surface);
+            return;
+        }
     }
 }
 
@@ -861,6 +941,11 @@ fn context_menu(surface: &Surface, x: f32, y: f32, flags: NSEventModifierFlags) 
 /// move that way. Fields keep their keys (they reach the root only when
 /// they do not use them).
 pub(crate) fn key(surface: &Rc<Surface>, event: &NSEvent, down: bool) -> bool {
+    // Before the key acts: the focus it moves shows (`focus-visible:`).
+    // A modifier alone is a `flagsChanged`, never a key down.
+    if down {
+        surface.control(|c| c.set_input_modality(InputModality::Keyboard));
+    }
     if let Some(view) = control_activation_target(surface, event) {
         if down && !event.isARepeat() {
             activate(surface, &view, "keyboard");
@@ -933,7 +1018,7 @@ pub(crate) fn key(surface: &Rc<Surface>, event: &NSEvent, down: bool) -> bool {
 
 /// A mounted ordinary view the keyboard focus stops at (Tab): one that
 /// takes presses, or any `focusable` one ([`nsh_core::ViewProps::focus_stop`]),
-/// shown and reachable by the pointer.
+/// shown ([`NshView::seen_by_keys`]) and reachable by the pointer.
 pub(crate) fn is_key_stop(view: &NshView) -> bool {
     {
         let state = view.state();
@@ -945,7 +1030,7 @@ pub(crate) fn is_key_stop(view: &NshView) -> bool {
             return false;
         }
     }
-    view.can_target() && !view.ns().isHiddenOrHasHiddenAncestor()
+    view.can_target() && !view.ns().isHiddenOrHasHiddenAncestor() && view.seen_by_keys()
 }
 
 /// A stop that Return and Space press ([`is_key_stop`] taking presses): a
@@ -2011,6 +2096,7 @@ fn report(surface: &Surface, phase: TouchPhase, p: &Pointer, activated: Option<N
         page: point(Points(p.x), Points(p.y)),
         location: point(Points(lx), Points(ly)),
         changed: true,
+        pointer_type: nsh_core::PointerType::Mouse,
     };
     let event = TouchEvent {
         phase,
@@ -2516,6 +2602,32 @@ fn mouse_moved(surface: &Surface, x: f32, y: f32, mouse: Mouse) {
     }
 }
 
+/// `onMouseUp` of the views under the mouse at `(x, y)` (root coordinates)
+/// and the views they are inside, inside out, each with the mouse in it and
+/// the button that was released.
+fn mouse_up(surface: &Surface, x: f32, y: f32, mouse: Mouse, button: MouseButton) {
+    let Some(hit) = pick(&event_root(surface), x, y) else {
+        return;
+    };
+    for view in chain(&hit.view) {
+        let id = {
+            let state = view.state();
+            if !state.events.contains(EventKind::MouseUp) {
+                continue;
+            }
+            state.id
+        };
+        let (location_x, location_y) = local(surface, &view, x, y);
+        let event = nsh_core::MouseEvent::released(
+            point(Points(location_x), Points(location_y)),
+            point(Points(x), Points(y)),
+            mouse.modifiers,
+            button,
+        );
+        surface.event(id, EventKind::MouseUp, EventPayload::Mouse(event));
+    }
+}
+
 /// Installs the surface's [`FlagsMonitor`], unless it is there.
 fn watch_flags(surface: &Surface) {
     let monitor = &surface.input.flags.0;
@@ -2623,6 +2735,51 @@ fn gesture_target(surface: &Surface, x: f32, y: f32, dx: f32, dy: f32) -> Option
     })
 }
 
+/// A wheel by `(dx, dy)` (`precise`: points, else lines) at `(x, y)`
+/// (root coordinates): the nearest view around the one under it that
+/// listens to `onWheel` hears it ([`input::wheel_listener`]). Returns
+/// whether that view takes the wheel, so nothing scrolls natively; a
+/// hosted AppKit view under the pointer (a web page, a text view) keeps
+/// it.
+fn wheel_event(
+    surface: &Surface,
+    x: f32,
+    y: f32,
+    precise: bool,
+    dx: f32,
+    dy: f32,
+    flags: NSEventModifierFlags,
+) -> bool {
+    if dx == 0.0 && dy == 0.0 {
+        return false;
+    }
+    let Some(hit) = pick(&event_root(surface), x, y) else {
+        return false;
+    };
+    let Some((view, takes)) = input::wheel_listener(
+        chain(&hit.view),
+        |v| v.state().events.contains(EventKind::Wheel),
+        |v| v.kind() == ViewKind::Scroll,
+    ) else {
+        return false;
+    };
+    let delta = if precise {
+        nsh_core::WheelDelta::Points(point(Points(dx), Points(dy)))
+    } else {
+        nsh_core::WheelDelta::Lines(point(dx, dy))
+    };
+    let (location_x, location_y) = local(surface, &view, x, y);
+    let event = nsh_core::WheelEvent::new(
+        point(Points(location_x), Points(location_y)),
+        point(Points(x), Points(y)),
+        delta,
+        modifiers(flags),
+    );
+    let id = view.state().id;
+    surface.event(id, EventKind::Wheel, EventPayload::Wheel(event));
+    takes && !hit.native
+}
+
 /// Whether `event` belongs to a scroll this surface does not take, so its
 /// view passes it up the responder chain: the app is embedded in another
 /// view's content ([`embedded`]) and no scroll view of it that can move
@@ -2647,10 +2804,14 @@ pub(crate) fn forwards_scroll(surface: &Rc<Surface>, event: &NSEvent) -> bool {
         false
     };
     if starts {
-        let root = surface.root.ns();
-        let p = root.convertPoint_fromView(event.locationInWindow(), None);
-        let forward = embedded(root)
-            && !pick(&surface.root, p.x as f32, p.y as f32).is_some_and(|hit| {
+        // The root of the window the scroll came to: the app's own, or
+        // one of the windows it opened.
+        let root = event_root(surface);
+        let p = root
+            .ns()
+            .convertPoint_fromView(event.locationInWindow(), None);
+        let forward = embedded(root.ns())
+            && !pick(&root, p.x as f32, p.y as f32).is_some_and(|hit| {
                 chain(&hit.view)
                     .into_iter()
                     .any(|v| v.kind() == ViewKind::Scroll && crate::scroll::movable(&v))
@@ -2688,6 +2849,15 @@ fn scroll_event(surface: &Rc<Surface>, event: &NSEvent, x: f32, y: f32, time: f6
     );
     let phase = event.phase();
     let momentum = event.momentumPhase();
+    // A view listening to `onWheel` nearer than the scroll views under the
+    // pointer takes the wheel, Control + wheel and momentum included (a
+    // canvas zooming or panning); a gesture going on still ends.
+    if wheel_event(surface, x, y, precise, dx, dy, event.modifierFlags()) {
+        if phase.contains(NSEventPhase::Ended) || phase.contains(NSEventPhase::Cancelled) {
+            gesture_event(surface, phase, x, y, 0.0, 0.0, time);
+        }
+        return;
+    }
     if !momentum.is_empty() {
         return momentum_event(surface, momentum, dx, dy, time);
     }
@@ -3067,6 +3237,31 @@ mod tests {
         let vertical = Candidate::Pan { x: false, y: true };
         assert!(vertical.accepts(1.0, -7.0));
         assert!(!vertical.accepts(-7.0, 1.0));
+    }
+
+    #[test]
+    fn the_cursor_is_set_only_when_it_changes() {
+        // A move over views of the same cursor sets nothing.
+        assert_eq!(
+            cursor_to_set(false, Some(Cursor::Pointer), Cursor::Pointer),
+            None
+        );
+        // A move onto another cursor sets it.
+        assert_eq!(
+            cursor_to_set(false, Some(Cursor::Pointer), Cursor::Text),
+            Some(Cursor::Text)
+        );
+        // After a hosted view's or another app's cursor, it is set again.
+        assert_eq!(
+            cursor_to_set(false, None, Cursor::Pointer),
+            Some(Cursor::Pointer)
+        );
+        // The mouse coming in, a press's end and AppKit's cursor updates set
+        // it always.
+        assert_eq!(
+            cursor_to_set(true, Some(Cursor::Pointer), Cursor::Pointer),
+            Some(Cursor::Pointer)
+        );
     }
 
     #[test]

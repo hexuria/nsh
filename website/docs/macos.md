@@ -19,7 +19,8 @@ over the window and a menu bar.
 
 ## Requirements
 
-- **macOS 14** or later, where the app runs.
+- **macOS 14** or later, where the app runs, or the later version the app names
+  ([Minimum system version](./packaging.md#minimum-system-version)).
 - Xcode's command line tools (`xcode-select --install`), to build Rust apps' runners and NSH's macOS runtime from a
   checkout, and to package apps (`codesign`, `sips`). The distribution made with `cargo xtask dist` on a Mac ships the
   runtime of TSX apps in `runtime/macos/`.
@@ -111,6 +112,11 @@ Writes an app bundle:
 
 The `.app` is signed ad hoc, so it runs on the Mac that built it. To distribute it, sign it with a Developer ID and
 notarize it. `--run` opens the app after packaging it.
+
+The app logs its warnings, its errors and its `console.log` and `console.info` lines to the unified log, with its id
+as the subsystem: Console shows them, and so does `log stream --predicate 'subsystem == "com.example.notes"'`. Its
+standard error gets them too: the terminal it was started from (`.nsh/out/<Name>.app/Contents/MacOS/<Name>`) or a file
+(`2> app.log`, `open --stderr app.log`) ([A packaged app's logs](./dev-server-and-debugging.md#a-packaged-apps-logs)).
 
 ## Menu bar apps
 
@@ -271,9 +277,12 @@ Selectable text is selected by dragging, double- and triple-clicking, and copied
 Cmd+[ and the mouse's back button close the newest dialog or go back in a stack (Escape in a focused field or web page
 only leaves it; a page gets these keys first, and keeps those it uses); a `Dialog` is a layer over the whole window
 that shows the app's popup and backdrop. Pages show their `header` at the top. A click anywhere in an `Input`, its padding too, puts the caret at the nearest
-point. `AlertDialog` shows an `NSAlert` sheet on the window: up to two alert actions in a row (the cancel
-action leftmost, the last regular one the default for Return), more actions and an action sheet's actions stacked in
-their order with the cancel action last and no default; Escape chooses the cancel action.
+point. `AlertDialog` shows an `NSAlert`: a sheet of the window the user is in, and, while that window is out of sight
+(a tray app's hidden main window, the app hidden, the window minimized or off every screen), an alert of its own in
+front of every window, which takes the app's input until it is answered while the app goes on running. Up to two alert
+actions show in a row
+(the cancel action leftmost, the last regular one the default for Return), more actions and an action sheet's actions
+stacked in their order with the cancel action last and no default; Escape chooses the cancel action.
 
 ### Table accessibility
 

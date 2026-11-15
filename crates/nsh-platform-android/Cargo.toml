@@ -53,6 +53,7 @@ dev-agent = ["dev", "nsh-gpui-agent/dev-agent"]
 log.workspace = true
 
 [target.'cfg(target_os = "android")'.dependencies]
+tokio.workspace = true
 jni.workspace = true
 nsh-core = { workspace = true, features = ["svg"] }
 nsh-engine.workspace = true

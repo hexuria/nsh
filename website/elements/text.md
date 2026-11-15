@@ -94,10 +94,11 @@ leave spans as they are; spaces inside the span give the box room on its sides.
 
 `visibility: "hidden"` on a span (`.invisible()` in Rust, the class `invisible`) hides its characters where they
 stand: they keep their place in the lines, so the text lays out exactly as when they show, and nothing of them is drawn
-(glyphs, decoration lines, background). Copying a selection and screen readers leave them out, and their characters
-take no presses. Spans inside a hidden span are hidden with it. Showing it again (`visibility: "visible"`) draws the
-characters without laying the text out again, which suits revealing words one by one at the end of a streamed
-paragraph:
+(glyphs, color emoji, decoration lines, background, shadow). Copying a selection and screen readers leave them out, and
+their characters take no presses. Spans inside a hidden span are hidden with it, and so are views and images inside
+it: they keep their place, are not drawn and take no presses. Showing it again (`visibility: "visible"`) draws the
+characters where they already stand, without measuring the text again or moving anything, which suits revealing words
+one by one at the end of a streamed paragraph:
 
 ```rust tabs
 text("The answer is ")
@@ -117,6 +118,9 @@ Here the paragraph is as wide as "The answer is forty-two.", shows "The answer i
 ### Links
 
 A span with a press handler is a link: a press on its characters goes to the span, a press elsewhere to the paragraph.
+A span takes its hover styles (`hoverStyle`, `hover:`, `.hover(..)`) while the mouse is over its characters, and a
+link its press styles (`activeStyle`, `active:`, `.active(..)`) while a press on it is in; the other runs of the
+paragraph keep their look. Over a span inside a link, the link is the one hovered: style the link.
 In a terminal each link is also a stop of the keyboard focus: Tab reaches the links of a paragraph in turn, and Return
 presses the focused one.
 
@@ -127,7 +131,7 @@ text("By continuing you agree to the ")
     .child(
         text("Terms of service")
             .text_color(rgb(0x0969da))
-            .underline()
+            .hover(|s| s.underline())
             .on_press(move || open("terms")),
     )
     .child(".")
@@ -136,7 +140,11 @@ text("By continuing you agree to the ")
 ```tsx tabs
 <Text style={{ fontSize: 15 }} onPress={() => log("the sentence")}>
   {"By continuing you agree to the "}
-  <Text style={{ color: "#0969da", textDecorationLine: "underline" }} onPress={() => open("terms")}>
+  <Text
+    style={{ color: "#0969da" }}
+    hoverStyle={{ textDecorationLine: "underline" }}
+    onPress={() => open("terms")}
+  >
     Terms of service
   </Text>
   .

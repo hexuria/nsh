@@ -127,6 +127,9 @@ struct WindowData {
     /// The dialog root a window of the app's own shows
     /// ([`crate::app_window`]); none for the surface's window.
     window: Option<NodeId>,
+    /// What the surface's window registered for to follow whether the user
+    /// can see it ([`crate::presence`]); none for the app's other windows.
+    presence: Cell<Option<crate::presence::Watch>>,
 }
 
 thread_local! {
@@ -220,6 +223,7 @@ pub(crate) fn create(
         shell: crate::shell::Shell::new(nsh_core::desktop::WindowKind::Normal),
         root: Cell::new(None),
         window: None,
+        presence: Cell::new(None),
     });
     let title: Vec<u16> = title.encode_utf16().chain(Some(0)).collect();
     let (style, ex_style) = match parent {
@@ -251,10 +255,16 @@ pub(crate) fn create(
         )?
     };
     surface.set_hwnd(hwnd);
-    if parent.is_some()
-        && let Some(window) = self::data(hwnd)
-    {
-        window.root.set(observe_root(hwnd));
+    if transparent && parent.is_none() {
+        // SetWindowPos can synchronously paint through WM_SIZE. Composition
+        // must exist before that first frame chooses its swap chain.
+        *surface.base.borrow_mut() = Some(crate::compose::Composition::new(hwnd)?);
+    }
+    if let Some(window) = self::data(hwnd) {
+        if parent.is_some() {
+            window.root.set(observe_root(hwnd));
+        }
+        window.presence.set(Some(crate::presence::watch(hwnd)));
     }
     if parent.is_none() {
         OPEN.with(|o| o.set(o.get() + 1));
@@ -319,6 +329,7 @@ pub(crate) fn create_app_window(
         shell,
         root: Cell::new(None),
         window: Some(id),
+        presence: Cell::new(None),
     });
     let title = attributes.title.clone().unwrap_or_default();
     let title: Vec<u16> = title.encode_utf16().chain(Some(0)).collect();
@@ -835,9 +846,10 @@ fn hi(l: isize) -> i32 {
 }
 
 /// Has the embedding app's root window tell `child`, an embedded surface's
-/// window, what the app's state follows: `WM_ACTIVATEAPP`, which only
-/// top-level windows get, and [`WM_NSH_ROOT`] when the root is shown,
-/// hidden, minimized or restored, which `child`'s own messages do not say.
+/// window, what the app's state follows: `WM_ACTIVATEAPP` and the
+/// session's end (`WM_QUERYENDSESSION`, `WM_ENDSESSION`), which only
+/// top-level windows get, and [`WM_NSH_ROOT`] when the root is shown, hidden, minimized or
+/// restored, which `child`'s own messages do not say.
 /// Returns the root it observes (`None` when `child` has none, or the root
 /// is another thread's, which cannot be subclassed).
 fn observe_root(child: HWND) -> Option<HWND> {
@@ -885,6 +897,14 @@ unsafe extern "system" fn root_proc(
             WM_WINDOWPOSCHANGED => {
                 SendMessageW(child, WM_NSH_ROOT, None, None);
             }
+            // The session may end, unless the root refused it: the
+            // embedded app leaves too ([`crate::session`]).
+            WM_QUERYENDSESSION if result.0 != 0 => {
+                SendMessageW(child, msg, Some(wparam), Some(lparam));
+            }
+            WM_ENDSESSION => {
+                SendMessageW(child, msg, Some(wparam), Some(lparam));
+            }
             WM_NCDESTROY => {
                 let _ = RemoveWindowSubclass(hwnd, Some(root_proc), id);
             }
@@ -930,6 +950,11 @@ unsafe extern "system" fn window_proc(
         && let Some(root) = data.root.take()
     {
         unobserve_root(root, hwnd);
+    }
+    if msg == WM_DESTROY
+        && let Some(watch) = data.presence.take()
+    {
+        crate::presence::unwatch(hwnd, watch);
     }
     if msg == WM_DESTROY && data.top_level {
         let left = OPEN.with(|o| {
@@ -987,6 +1012,13 @@ fn handle(
         crate::tray::readd(hwnd);
         return None;
     }
+    // The session ends (signing out, shutting down, the Restart Manager):
+    // the surface's window, or an embedded one's root ([`observe_root`]).
+    if data.window.is_none()
+        && let Some(result) = crate::session::message(surface, data.top_level, msg, wparam)
+    {
+        return Some(LRESULT(result));
+    }
     match msg {
         WM_NSH_WAKE => surface.drain(),
         WM_NSH_TICK => surface.tick(),
@@ -1039,6 +1071,10 @@ fn handle(
             surface.paint();
             // SAFETY: as above.
             let _ = unsafe { EndPaint(hwnd, &ps) };
+            // Handled: `DefWindowProcW` would validate the window again and
+            // drop an invalidation made while the frame was drawn, leaving
+            // `invalid` set and no `WM_PAINT` to come (#1594).
+            return Some(LRESULT(0));
         }
         WM_ERASEBKGND => return Some(LRESULT(1)),
         WM_SIZE => {
@@ -1048,6 +1084,8 @@ fn handle(
             // chain's own background color).
             fill_background(surface, hwnd);
             sync_size(surface, hwnd);
+            // The frame's material follows the zoom state.
+            crate::shell::zoom_changed(hwnd);
             // Drawn now, so that the window never shows stretched or
             // stale pixels while it is resized.
             surface.paint();
@@ -1076,6 +1114,9 @@ fn handle(
             crate::window_state::displays_changed(surface);
         }
         WM_MOUSEMOVE => {
+            if crate::chrome::press_moved(surface, hwnd, lparam) {
+                return Some(LRESULT(0));
+            }
             if !data.tracking.replace(true) {
                 let mut track = TRACKMOUSEEVENT {
                     cbSize: std::mem::size_of::<TRACKMOUSEEVENT>() as u32,
@@ -1133,6 +1174,9 @@ fn handle(
                 return Some(LRESULT(0));
             }
             let button = button_of(msg, wparam);
+            if msg == WM_LBUTTONUP && crate::chrome::press_released(surface, hwnd, point(lparam)) {
+                return Some(LRESULT(0));
+            }
             data.buttons.set(data.buttons.get() & !(1 << button));
             if data.buttons.get() == 0 {
                 // SAFETY: plain call.
@@ -1148,6 +1192,7 @@ fn handle(
             return Some(LRESULT(1));
         }
         WM_CAPTURECHANGED => {
+            crate::chrome::press_cancelled(surface, hwnd);
             if data.buttons.replace(0) != 0 {
                 crate::input::pointer(
                     surface,
@@ -1293,6 +1338,17 @@ fn handle(
         }
         // An embedded surface's: its root window's ([`observe_root`]).
         WM_NSH_ROOT => crate::system::lifecycle_changed(surface),
+        // The display turned off or on (the surface's window registered
+        // for it: [`crate::presence`]).
+        WM_POWERBROADCAST
+            if data.window.is_none() && wparam.0 == PBT_POWERSETTINGCHANGE as usize =>
+        {
+            crate::presence::power_setting_changed(surface, lparam);
+        }
+        // The session was locked, unlocked, switched away from or back to.
+        WM_WTSSESSION_CHANGE if data.window.is_none() => {
+            crate::presence::session_changed(surface, wparam.0 as u32);
+        }
         WM_DESTROY => {
             #[cfg(feature = "dev-agent")]
             surface.release_agent();
@@ -1300,6 +1356,7 @@ fn handle(
             crate::tray::destroyed(hwnd);
             crate::global_shortcut::destroyed(hwnd);
             surface.stop();
+            crate::text_input::destroyed(surface);
             surface.set_hwnd(HWND::default());
         }
         _ => {}
@@ -1328,6 +1385,7 @@ fn window_api(
             let attrs = shell.attrs();
             let scale = dpi(hwnd) as f32 / 96.0;
             let (l, t, r, b) = frame_extents(hwnd);
+            crate::chrome::nc_max_size(hwnd, info);
             let (min, max) = crate::shell::track_sizes(&attrs, scale, (l + r, t + b));
             match min {
                 Some((x, y)) => info.ptMinTrackSize = POINT { x, y },
@@ -1471,7 +1529,7 @@ fn sys_close(hwnd: HWND, lparam: LPARAM) -> crate::shell::SysClose {
 
 /// True when a mouse message was synthesized from touch or pen input,
 /// which comes as `WM_POINTER*` messages too.
-fn from_touch() -> bool {
+pub(crate) fn from_touch() -> bool {
     // MI_WP_SIGNATURE in the extra info marks synthesized mouse messages.
     // SAFETY: plain call.
     let extra = unsafe { GetMessageExtraInfo() }.0 as usize;
@@ -1548,6 +1606,16 @@ fn mouse_event(
         modifiers: modifiers(),
         clicks,
     }
+}
+
+/// A click of the primary button that the window held back
+/// ([`crate::chrome::WindowPress`]): down at `from`, up at `to` (client
+/// points).
+pub(crate) fn click(surface: &Rc<Surface>, from: (f32, f32), to: (f32, f32)) {
+    let down = mouse_event(PointerKind::Down, from.0, from.1, 0, 1, 1, surface);
+    crate::input::pointer(surface, down);
+    let up = mouse_event(PointerKind::Up, to.0, to.1, 0, 0, 1, surface);
+    crate::input::pointer(surface, up);
 }
 
 /// The pointer moved over a view of the app's title bar that answers as
@@ -1900,6 +1968,76 @@ mod tests {
             assert!(ours(&heard).is_empty() && !moved(&heard), "{heard:?}");
             DestroyWindow(root).unwrap();
         }
+    }
+
+    /// Asks once, while it is drawn, for the window to be drawn again, as a
+    /// web view that leaves does. Counts its frames.
+    struct AsksOnce {
+        surface: std::rc::Weak<Surface>,
+        armed: Cell<bool>,
+        drawn: Cell<u32>,
+    }
+
+    impl crate::view::Hosted for AsksOnce {
+        fn draw(&self, _cx: &mut crate::render::DrawCx<'_>, _size: (f32, f32)) {
+            self.drawn.set(self.drawn.get() + 1);
+            if self.armed.replace(false)
+                && let Some(surface) = self.surface.upgrade()
+            {
+                surface.invalidate();
+            }
+        }
+    }
+
+    fn pump_for(ms: u64) {
+        let until = std::time::Instant::now() + std::time::Duration::from_millis(ms);
+        let mut msg = MSG::default();
+        while std::time::Instant::now() < until {
+            // SAFETY: the test thread's own queue.
+            unsafe {
+                while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+                    let _ = TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+    }
+
+    #[test]
+    fn a_paint_asked_for_while_drawing_comes() {
+        if crate::gfx::get().is_err() {
+            return;
+        }
+        let surface = Surface::new(Default::default());
+        let hwnd = create(&surface, "NSH paint test", (200, 150), None, false).unwrap();
+        let asks = Rc::new(AsksOnce {
+            surface: Rc::downgrade(&surface),
+            armed: Cell::new(false),
+            drawn: Cell::new(0),
+        });
+        let item: Rc<dyn crate::view::Hosted> = asks.clone();
+        surface
+            .root
+            .set_native(&item, crate::geom::rect(0.0, 0.0, 50.0, 50.0));
+        // SAFETY: plain calls on the test's window.
+        unsafe {
+            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        }
+        pump_for(200);
+        let before = asks.drawn.get();
+        asks.armed.set(true);
+        // SAFETY: as above.
+        unsafe {
+            let _ = InvalidateRect(Some(hwnd), None, false);
+            let _ = UpdateWindow(hwnd);
+        }
+        assert_eq!(asks.drawn.get() - before, 1, "drawn by the WM_PAINT");
+        pump_for(200);
+        let after = asks.drawn.get() - before;
+        // SAFETY: as above.
+        unsafe { DestroyWindow(hwnd).unwrap() };
+        assert!(after >= 2, "the frame asked for while drawing never came");
     }
 
     #[test]

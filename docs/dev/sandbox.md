@@ -19,7 +19,24 @@ trusted: every limit and check is enforced in Rust, never in JS.
   rendering it causes, one list bind, one timer, one frame's callbacks, the microtask drain; nested calls share the
   outermost budget), and quotas for what the heap limit does not cover: changes at once (the op queue,
   `max_op_values`: ops are Rust memory), ops per canvas drawing, nodes in the core (`Core::set_max_nodes`; each may hold a native view) and dense
-  node ids (an id far past the ids in use would grow the id table: `ApplyError::IdOutOfRange`).
+  node ids (an id far past the ids in use would grow the id table: `ApplyError::IdOutOfRange`). Arrays the runtime
+  reads natively, where the time budget cannot interrupt (children, nested arrays counted together; `<Each>`; menus,
+  submenus counted together; a tray's title; `Animated.sequence` / `parallel` / `stagger`; `split`'s keys; a navigation
+  stack's routes; a native component's `props` and `events`; a pan's `touches`; a canvas call's arguments, counted
+  together; what the decoders of `protocol.rs` read of one value, counted together: a style and its shadows and
+  transforms, a host prop's lists, an animation's ranges and easing, a composite's runs, a native component's JSON),
+  hold at most `dom::MAX_ARRAY_ITEMS` (2^20) items, each loop running over the length it checked: a sparse array is as
+  long as it says, and one nested in itself multiplies its length, so more is refused (a `RangeError`; a menu's or the
+  tray's error; a canvas argument is ignored with a warning; an animation's `start` rejects) rather than read index by
+  index. Lengths are never read with rquickjs's `Array::len` (`protocol::take_len`): it asserts an integer, and the
+  length of an array of 2^31 items or more is a float, so the panic, in a call from QuickJS that cannot unwind, aborts
+  the process. A navigation stack does not grow past the bound either (`push` throws), so it can always be navigated.
+  Two arrays read together are looked up, never compared pairwise (`setRoutes`'s old and new routes, `split`'s keys
+  and the props' names, the keys a style's objects merge). Children, submenus and styles nested more than
+  `dom::MAX_DEPTH` (64) levels deep are refused, and a scrollbar theme's JSON reads `null` past that depth or 2^20
+  entries: they are read by native recursion, which the interpreter's stack limit does not cover. A composite keeps
+  the values it animates once each, however many places of its tree hold them. A list's rows (`<List each>`) are not
+  bounded: a long list is what it is for.
 - An overrun call is cut off by the interrupt handler with an exception no `catch` swallows, reported with the budget it
   exceeded; the VM goes on. Running out of memory or going over a quota **stops the VM** (`Host::fatal`), also when the
   app catches the error: the heap's allocator (`HeapAllocator`) enforces the limit and records reaching it, since QuickJS
@@ -126,12 +143,21 @@ one form) names a `host` pattern; every other key narrows it and is optional: `m
 (any of `http`, `https`, `ws`, `wss`), `port` (any; a URL without one has its scheme's default), `paths` (exact,
 without the query) and `pathPrefixes` / `pathPrefix` / `path_prefixes` (whole segments: `/v1` covers `/v1/x`, not
 `/v10`; a prefix ending in `/` covers what follows). Without paths or prefixes a rule covers every path, so
-`{host, methods}` means what it always did. The spellings of a key are merged and may appear together (gpui-shell's
+`{host, methods}` means what it always did. Paths match the path WHATWG's parser (the `url` crate) sends, and what
+loads is what was checked: `Access::http_url` (the engine's requests) and `Access::media_url` (every media source; the
+core writes the result back over it) return the checked URL's serialization. For media, `//` and relative paths take
+the bundle's base URL (the page's on the web) and are refused without one; `asset:` paths stay inside the app's files
+(`access::is_inside_assets`, shared with `fetch`); a local file (`file:`, or with no base an absolute path) is read
+under `capabilities.fs.read` (`MediaFiles`: held to the roots by its text, then resolved on every check, since the
+platforms' loaders open what they get); a source that platforms read differently is granted only by `*` (#979). The
+spellings of a key are merged and may appear together (gpui-shell's
 `scheme` and `path_prefixes` read as they are); rules serialize in one form (`schemes`, `pathPrefixes`). What cannot
 match is a parse error rather than a silent grant of nothing: a scheme outside the four, port 0, a path without a
-leading `/` or with `*`, `?` or `#`, a method that is not a token. WebSockets (the global and the `websocket` module)
-go through `Access::allows_websocket`: a handshake is an HTTP GET, so `ws` / `wss` are checked as GETs over `http` /
-`https` (or under their own scheme, for rules listing `ws` / `wss`), on the parsed URL the handshake then connects
+leading `/`, with `*`, `?` or `#`, or with a `.` or `..` segment, a method that is not a token. A rule's paths are kept
+as requests send them (`path_as_sent`: WHATWG's serialization, `/my photos` → `/my%20photos`). WebSockets (the
+global and the `websocket` module) go through `Access::allows_websocket`: a handshake is an HTTP GET, so `ws` / `wss`
+are checked as GETs over `http` / `https` (or under their own scheme, for rules listing `ws` / `wss`), on the parsed
+URL the handshake then connects
 to, before DNS; redirects are rejected; both APIs share one cap of 32 per VM (the `Quotas` kind `runtime::WEBSOCKETS`). A
 `websocket` connection's unread messages are bounded by back pressure: it stops reading from the network while 8
 messages or 8 MiB wait (`runtime/websocket.rs`), so the native memory one keeps stays under 16 MiB. Raw TCP

@@ -222,10 +222,12 @@ pub fn motion_spec<I: HostInput>(input: &I) -> Option<MotionSpec> {
     }
     let mut spec = MotionSpec::new(keyframe_timing(input));
     let frames = input.field("keyframes")?;
-    if frames.as_list().is_some() {
+    if let Some(list) = frames.as_list() {
         // Frames of channels: each channel's keyframes are the frames that
-        // name it, with the frame's offset and easing.
-        let items = frames.items();
+        // name it, with the frame's offset and easing. The list is taken
+        // once: reading it again could see another length, or count its
+        // items against a budget twice.
+        let items: Vec<_> = (0..list.len()).filter_map(|i| list.item(i)).collect();
         let count = items.len();
         for channel in MotionChannel::ALL {
             let mut track = Vec::new();
@@ -287,7 +289,9 @@ type MakeLayoutCurve = fn(f32) -> LayoutCurve;
 /// the default.
 const LAYOUT_TYPES: &[(&str, MakeLayoutCurve)] = &[
     ("easeInEaseOut", |_| LayoutCurve::EaseInEaseOut),
-    ("spring", |damping| LayoutCurve::Spring { damping }),
+    ("spring", |damping_ratio| LayoutCurve::FittedSpring {
+        damping_ratio,
+    }),
     ("linear", |_| LayoutCurve::Linear),
     ("easeIn", |_| LayoutCurve::EaseIn),
     ("easeOut", |_| LayoutCurve::EaseOut),
@@ -581,8 +585,10 @@ pub fn tables() -> crate::JsonValue {
             LayoutCurve::EaseIn => ("easeIn", None),
             LayoutCurve::EaseOut => ("easeOut", None),
             LayoutCurve::EaseInEaseOut => ("easeInEaseOut", None),
-            LayoutCurve::Spring { damping } => ("spring", Some(damping)),
+            LayoutCurve::FittedSpring { damping_ratio } => ("spring", Some(damping_ratio)),
             LayoutCurve::Keyboard => ("keyboard", None),
+            // JS names no spring by its physics, and no preset is one.
+            LayoutCurve::Spring(_) => ("spring", None),
         };
         let property = match t.property {
             LayoutProperty::Opacity => "opacity",

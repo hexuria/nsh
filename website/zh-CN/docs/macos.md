@@ -17,7 +17,7 @@ macOS 后端的行为是桌面应用：鼠标、触控板和键盘输入，可�
 
 ## 环境要求
 
-- 运行应用的机器需要 **macOS 14** 及以上。
+- 运行应用的机器需要 **macOS 14** 及以上，或应用指定的更高版本（见[最低系统版本](./packaging.md#最低系统版本)）。
 - Xcode 命令行工具（`xcode-select --install`），用于构建 Rust 应用的 runner、从源码构建 NSH 的 macOS 运行时以及打包应用
   （`codesign`、`sips`）。在 Mac 上用 `cargo xtask dist` 制作的发行版把 TSX 应用的运行时放在 `runtime/macos/` 中。
 
@@ -93,6 +93,11 @@ nsh package App.tsx --target macos [--run]   # TSX 应用
 ```
 
 `.app` 使用 ad hoc 签名，因此可以在构建它的 Mac 上运行。要分发它，请用 Developer ID 签名并进行公证。`--run` 会在打包后打开应用。
+
+应用把它的警告、错误以及 `console.log` 和 `console.info` 日志写入统一日志，以它的 id 为子系统：“控制台”应用会显示它们，
+`log stream --predicate 'subsystem == "com.example.notes"'` 也会。从终端启动时（`.nsh/out/<Name>.app/Contents/MacOS/<Name>`），
+它还会把日志打印在终端里；标准错误重定向到文件时（`2> app.log`、`open --stderr app.log`）也会写进文件
+（[打包应用的日志](./dev-server-and-debugging.md#a-packaged-apps-logs)）。
 
 ## 菜单栏应用
 
@@ -225,7 +230,8 @@ view.load(Bundle::source(code).into());
 Escape、Option+Left、Cmd+[ 和鼠标的后退键会关闭最新的对话框或在栈中返回（焦点在输入框或网页中时，Escape 只会离开它；
 网页先收到这些按键，它自己用掉的不会触发返回）；`Dialog` 是覆盖整个窗口的一层，显示应用的弹出层和背景。页面在顶部显示它的 `header`。
 点击 `Input` 的任意位置（包括内边距）都会把光标放到最近的位置。
-`AlertDialog` 以 `NSAlert` 表单的形式显示在窗口上：不超过两个操作的提示框操作排成一行（取消操作在最左边，最后一个普通操作是
+`AlertDialog` 显示 `NSAlert`：它是用户所在窗口上的表单；该窗口不可见时（如托盘应用隐藏的主窗口、应用被隐藏、窗口最小化或不在任何屏幕上），
+它单独显示在所有窗口最前面，在得到回答之前接收应用的输入，应用本身照常运行。不超过两个操作的提示框操作排成一行（取消操作在最左边，最后一个普通操作是
 Return 的默认操作）；更多操作以及操作表的操作按顺序竖排，取消操作在最后，没有默认操作；Escape 选择取消操作。
 
 ### 表格无障碍

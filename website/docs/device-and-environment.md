@@ -377,7 +377,7 @@ effect(() => {
 });
 ```
 
-Use `background` to pause work, and save what the user changes as they change it: the system may suspend an app seconds after it moves to the background, before an effect that reads the change has run. An app shown inside a native app follows that app's state, and where an app has several windows (an iPad, a desktop) a view follows the window it is in. In tests, `app.setLifecycle("background")` of `nsh/test` moves the app there ([Testing](./testing-and-trace.md#steps)).
+Use `background` to pause work, and save what the user changes as they change it: the system may suspend an app seconds after it moves to the background, before an effect that reads the change has run. An app shown inside a native app follows that app's state, and where an app has several windows (an iPad, a desktop) a view follows the window it is in. Standalone apps and views embedded in AppKit and Win32 apps are in the `background` too on macOS and Windows while the screen is locked or turned off and while their window is on another desktop (a Space, a virtual desktop). On Windows, an app moves to `background` when the user signs out, Windows shuts down or restarts, or an installer closes it, and its handlers run before the session ends; then the app quits ([`Application.on("quit")`](../modules/nsh-desktop.md#quitting)). In tests, `app.setLifecycle("background")` of `nsh/test` moves the app there ([Testing](./testing-and-trace.md#steps)).
 
 ## Safe areas
 
@@ -492,6 +492,19 @@ come from the browser and follow it live.
 In a terminal ([the terminal backend](./tui.md)), `platform.idiom` is `"terminal"`, `platform.desktop` is `true` and
 `platform.os` is the machine's own system. `colorScheme()` follows the terminal's background, `reduceMotion()` is
 `true`, and the safe area and the keyboard height are 0.
+
+## The app's data directory
+
+`data_dir()` in Rust, `process.dataDir` in TSX, is the directory the app keeps its own files in, such as a SQLite database: `<data dir>/<app id>`, beside its `storage.json`, on every native platform, Android and iOS included. It is `None` (`null`) where the host keeps no files for the app, such as the web. The directory may not exist yet, so create it before writing.
+
+```rust
+use nsh_core::prelude::*;
+
+if let Some(dir) = data_dir() {
+    std::fs::create_dir_all(&dir)?;
+    let db = dir.join("app.sqlite");
+}
+```
 
 ## Pixel density
 

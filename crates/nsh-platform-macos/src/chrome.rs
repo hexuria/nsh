@@ -159,6 +159,11 @@ pub(crate) struct TitleBar {
     /// Set while [`place_controls`] runs: the frames it sets post the
     /// notifications that call it.
     placing: Cell<bool>,
+    /// Coalesces offset placement until AppKit finishes moving all buttons.
+    placement_pending: Cell<bool>,
+    /// Set while a measure of the area from `contentLayoutRect` waits for
+    /// AppKit's layout ([`update_area`]).
+    remeasure: Cell<bool>,
 }
 
 impl Drop for Chrome {
@@ -187,12 +192,13 @@ pub(crate) fn full_screen(window: &NSWindow) -> bool {
 /// change, a resize, full screen).
 pub(crate) fn update_area(surface: &Surface) {
     let bar = &surface.main_window.title_bar;
-    let area = match window(surface) {
+    let window = window(surface);
+    let area = match &window {
         Some(window) => {
             // The buttons are placed first: whether NSH holds them decides
             // the height.
-            place_controls(surface, ROOT_ID, bar, &window);
-            title_bar_area(bar, &window)
+            place_controls(surface, ROOT_ID, bar, window);
+            title_bar_area(bar, window)
         }
         None => Edges::default(),
     };
@@ -201,6 +207,37 @@ pub(crate) fn update_area(surface: &Surface) {
         env.title_bar = area;
         surface.set_environment(env);
     }
+    // Read from `contentLayoutRect`, the area may be the old frame's: that
+    // rectangle is laid out for a new frame only after the resize, and the
+    // root view's size, which the next measure waits for, may stay the
+    // same. Measured again once AppKit has laid the window out.
+    if let Some(window) = window
+        && bar.style.get() == TitleBarStyle::Hidden
+        && !full_screen(&window)
+        && reads_layout_rect(&window)
+        && !bar.remeasure.replace(true)
+    {
+        let key = surface.key();
+        DispatchQueue::main().exec_async(move || {
+            if let Some(surface) = Surface::with_key(key) {
+                update_area(&surface);
+                surface.main_window.title_bar.remeasure.set(false);
+            }
+        });
+    }
+}
+
+/// Whether [`title_bar_area`] reads `window`'s toolbar height from
+/// `contentLayoutRect`: a toolbar without the title bar view around the
+/// window's buttons (a window without them).
+fn reads_layout_rect(window: &NSWindow) -> bool {
+    measured_from_layout(window.toolbar().is_some(), title_bar_view_height(window))
+}
+
+/// Whether a title bar's area is read from `contentLayoutRect`, given
+/// whether the window has a toolbar and its title bar view's height.
+fn measured_from_layout(toolbar: bool, title_bar_view: Option<f32>) -> bool {
+    toolbar && title_bar_view.is_none()
 }
 
 /// The area of `window`'s hidden title bar `bar` over its content: its
@@ -283,17 +320,19 @@ fn toolbar_height(frame_height: f64, layout: NSRect, natural: f32) -> f32 {
 /// again when the window resizes (every frame of a live resize), changes
 /// screen or leaves full screen: the frame-change notifications of the
 /// buttons and the container place them again at once, in the same layout
-/// pass, before anything is drawn. Nothing is placed in full screen, where
-/// AppKit shows the bar in a window of its own, nor with a toolbar: a
-/// host's lays the buttons out itself. Dropping it gives the container and
+/// pass, before anything is drawn. Explicit offsets use the saved AppKit
+/// spacing and defer notification-driven writes until layout finishes.
+/// Nothing is placed in full screen, where
+/// AppKit shows the bar in a window of its own. A host toolbar owns its
+/// container height. Dropping this gives the container and
 /// the buttons back their frames.
 struct TrafficLights {
     window: Weak<NSWindow>,
     container: Retained<NSView>,
     /// The container's height before (the system title bar's).
     container_height: f64,
-    /// The buttons and their `y` before.
-    buttons: Vec<(Retained<NSButton>, f64)>,
+    /// The buttons and their original AppKit origins, before any placement.
+    buttons: Vec<(Retained<NSButton>, NSPoint)>,
     /// Frame-change observers (tokens of the default center).
     observers: Vec<Retained<ProtocolObject<dyn NSObjectProtocol>>>,
 }
@@ -312,8 +351,8 @@ impl TrafficLights {
         .into_iter()
         .filter_map(|kind| window.standardWindowButton(kind))
         .map(|button| {
-            let y = button.frame().origin.y;
-            (button, y)
+            let origin = button.frame().origin;
+            (button, origin)
         })
         .collect();
         let key = surface.key();
@@ -322,7 +361,25 @@ impl TrafficLights {
                 && let Some(window) = crate::window::window_of(&surface, id)
             {
                 crate::window::with_title_bar(&surface, id, |bar| {
-                    place_controls(&surface, id, bar, &window)
+                    if bar.placing.get() {
+                        return;
+                    }
+                    if bar.controls_offset.get().is_none() {
+                        place_controls(&surface, id, bar, &window);
+                    } else if !bar.placement_pending.replace(true) {
+                        // AppKit can be between moving two buttons here. Wait
+                        // for the whole layout, and use the saved spacing.
+                        DispatchQueue::main().exec_async(move || {
+                            if let Some(surface) = Surface::with_key(key) {
+                                crate::window::with_title_bar(&surface, id, |bar| {
+                                    bar.placement_pending.set(false);
+                                    if let Some(window) = crate::window::window_of(&surface, id) {
+                                        place_controls(&surface, id, bar, &window);
+                                    }
+                                });
+                            }
+                        });
+                    }
                 });
             }
         });
@@ -424,18 +481,16 @@ impl Drop for TrafficLights {
             return;
         }
         set_top(&self.container, &window, self.container_height);
-        for (button, y) in &self.buttons {
-            let mut origin = button.frame().origin;
-            origin.y = *y;
-            button.setFrameOrigin(origin);
+        for (button, origin) in &self.buttons {
+            button.setFrameOrigin(*origin);
         }
         self.container.setNeedsLayout(true);
     }
 }
 
 /// Centers the traffic lights of window `id` in its app's bar, or gives
-/// them back to AppKit when there is none ([`TrafficLights`]); buttons the
-/// app put somewhere (`controlsOffset`) are only given the bar's height.
+/// them back to AppKit when there is none ([`TrafficLights`]). An explicit
+/// offset also keeps the original button spacing, even without a height.
 fn place_traffic_lights(surface: &Surface, id: NodeId, bar: &TitleBar, window: &NSWindow) {
     let height = bar
         .height
@@ -443,10 +498,10 @@ fn place_traffic_lights(surface: &Surface, id: NodeId, bar: &TitleBar, window: &
         .filter(|_| bar.style.get() == TitleBarStyle::Hidden)
         .filter(|_| !full_screen(window) && window.toolbar().is_none());
     let mut placed = bar.traffic_lights.borrow_mut();
-    let Some(height) = height else {
+    if full_screen(window) || (height.is_none() && bar.controls_offset.get().is_none()) {
         *placed = None;
         return;
-    };
+    }
     if placed.as_ref().is_some_and(|p| !p.is_for(window)) {
         // Also gives the old window its buttons back when the surface
         // moves to another.
@@ -456,11 +511,15 @@ fn place_traffic_lights(surface: &Surface, id: NodeId, bar: &TitleBar, window: &
         *placed = TrafficLights::new(surface, id, window);
     }
     if let Some(placed) = placed.as_ref() {
-        placed.place(
-            window,
-            f64::from(height),
-            bar.controls_offset.get().is_none(),
-        );
+        if let Some(height) = height {
+            placed.place(
+                window,
+                f64::from(height),
+                bar.controls_offset.get().is_none(),
+            );
+        } else if window.toolbar().is_none() {
+            set_top(&placed.container, window, placed.container_height);
+        }
     }
 }
 
@@ -638,25 +697,22 @@ fn place_at_offset(bar: &TitleBar, window: &NSWindow) {
     if full_screen(window) {
         return;
     }
-    let buttons = [
-        NSWindowButton::CloseButton,
-        NSWindowButton::MiniaturizeButton,
-        NSWindowButton::ZoomButton,
-    ]
-    .map(|b| window.standardWindowButton(b));
-    let Some(close) = &buttons[0] else {
+    let placed = bar.traffic_lights.borrow();
+    let Some(placed) = placed.as_ref() else {
+        return;
+    };
+    let Some((close, original_close)) = placed.buttons.first() else {
         return;
     };
     let Some(holder) = crate::view::superview(close) else {
         return;
     };
-    let from = close.frame().origin.x;
     let height = holder.frame().size.height;
-    for button in buttons.iter().flatten() {
+    for (button, original) in &placed.buttons {
         let f = button.frame();
         let origin = controls_origin(
             (x, y),
-            f.origin.x - from,
+            original.x - original_close.x,
             f.size.height,
             height,
             holder.isFlipped(),
@@ -1139,6 +1195,18 @@ mod tests {
         assert_eq!(toolbar_height(800.0, rect(12.0, 750.0), 22.0), 38.0);
         // An embedding host's expanded toolbar occupies its full native area.
         assert_eq!(toolbar_height(800.0, rect(0.0, 730.0), 22.0), 70.0);
+    }
+
+    #[test]
+    fn only_a_toolbar_without_a_title_bar_view_waits_for_the_layout() {
+        // With a title bar view (the window's buttons), its height is read,
+        // which is right during a resize; without a toolbar the area is the
+        // natural or the app's height.
+        assert!(!measured_from_layout(true, Some(40.0)));
+        assert!(!measured_from_layout(false, None));
+        assert!(!measured_from_layout(false, Some(32.0)));
+        // A host's toolbar on a window without buttons: `contentLayoutRect`.
+        assert!(measured_from_layout(true, None));
     }
 
     #[test]

@@ -106,8 +106,10 @@ final class Mounter {
 
     /** One part of a layout animation (`encode.rs` `layout_transition`). */
     private static final class Transition {
-        int curve; // 0 linear, 1 ease in, 2 ease out, 3 ease in-out, 4 spring, 5 the keyboard's
+        int curve; // 0 linear, 1 ease in, 2 ease out, 3 ease in-out, 4 fitted spring, 5 the keyboard's, 6 spring
         float damping;
+        /** A spring's progress (6), sampled evenly over the time it settles in (the duration), ending at 1. */
+        float[] samples;
         int property; // 0 opacity, 1 scale
         long duration, delay;
 
@@ -121,6 +123,16 @@ final class Mounter {
                     // React Native's spring interpolator.
                     float d = damping;
                     return t -> (float) (1 + Math.pow(2, -10 * t) * Math.sin((t - d / 4) * Math.PI * 2 / d));
+                }
+                case 6: {
+                    float[] p = samples;
+                    int last = p.length - 1;
+                    return t -> {
+                        if (t >= 1) return 1;
+                        float x = Math.max(t, 0) * last;
+                        int i = (int) x;
+                        return p[i] + (p[i + 1] - p[i]) * (x - i);
+                    };
                 }
                 default: return new AccelerateDecelerateInterpolator();
             }
@@ -232,6 +244,11 @@ final class Mounter {
     /** Whether the running app's web views may navigate to {@code url} (its capabilities). */
     boolean allowsWebview(String url) {
         return Native.allowsWebview(handle(), url);
+    }
+
+    /** Whether the running app's web pages may capture {@code kind} (its {@code webview.media}). */
+    boolean allowsWebMedia(String kind) {
+        return Native.allowsWebMedia(handle(), kind);
     }
 
     long handle() {
@@ -400,6 +417,7 @@ final class Mounter {
                         if (v instanceof ComponentBox && ((ComponentBox) v).component instanceof TabBarComponent) {
                             ((TabBarComponent) ((ComponentBox) v).component).appearanceChanged();
                         }
+                        if (v instanceof StackBox.ScreenBox) ((StackBox.ScreenBox) v).appearanceChanged();
                     }
                     if (barStyle == 0) {
                         SystemUi.statusBar(context, barStyle, barHidden, night());
@@ -640,6 +658,10 @@ final class Mounter {
         Transition t = new Transition();
         t.curve = b.getInt();
         t.damping = b.getFloat();
+        if (t.curve == 6) {
+            t.samples = new float[b.getInt()];
+            for (int i = 0; i < t.samples.length; i++) t.samples[i] = b.getFloat();
+        }
         t.property = b.getInt();
         t.duration = (long) b.getFloat();
         t.delay = (long) b.getFloat();
@@ -721,6 +743,7 @@ final class Mounter {
         for (int i = 0; i < views.size(); i++) {
             View v = views.valueAt(i);
             if (v instanceof ComponentBox) ((ComponentBox) v).destroy();
+            if (v instanceof WebBox) ((WebBox) v).destroy();
             if (v instanceof ScrollBox) {
                 ((ScrollBox) v).unmounted = true;
                 unkeyScroll((ScrollBox) v);
@@ -1653,26 +1676,21 @@ final class Mounter {
     }
 
     /** Applies `[animating, (view, prop, value)*]` from the animator. */
-    /** A canvas's drawing; loads the images it draws (bitmaps: an SVG is an image that failed to load). */
+    /** A canvas's drawing; loads the images it draws (an SVG as its rasterized bitmap). */
     private void drawing(CanvasBox canvas, int[] code, Object[] objects) {
         for (String uri : canvas.setDrawing(code, objects)) {
             if (canvas.images.containsKey(uri)) continue;
             // At their natural size: the drawing may scale them anyway.
             Images.Image cached = images.request(uri, 0, 0, (image, error) -> {
-                if (image != null && !image.vector) {
+                if (image != null) {
                     canvas.images.put(uri, image);
                     canvas.invalidate();
                 } else {
-                    android.util.Log.w("nsh", "canvas image failed: " + (image != null ? notABitmap(uri) : error));
+                    android.util.Log.w("nsh", "canvas image failed: " + error);
                 }
             });
-            if (cached != null && cached.vector) android.util.Log.w("nsh", "canvas image failed: " + notABitmap(uri));
-            else if (cached != null) canvas.images.put(uri, cached);
+            if (cached != null) canvas.images.put(uri, cached);
         }
-    }
-
-    private static String notABitmap(String uri) {
-        return uri + " is an SVG image: canvases draw bitmaps (PNG, JPEG, ...)";
     }
 
     /** Canvas animated value slot `n` arrives as property `CANVAS_ARG + n` (`animation.rs`). */
@@ -2188,15 +2206,34 @@ final class Mounter {
                 if (v instanceof InputBox) {
                     ((InputBox) v).blur();
                 } else if (id == 1) {
-                    // Keyboard.dismiss(): hide the keyboard even when the field that showed it is gone (a page that
-                    // closed with it), which leaves no focused view in the host but the keyboard still up. Not when
-                    // an editor outside the host has it (the embedding app's, another NshView's): they share the window.
+                    // Keyboard.dismiss(): prefer the tracked field (a dialog's
+                    // EditText lives in another window, so host.findFocus()
+                    // misses it). Else hide whatever still holds the IME.
+                    // Matches iOS (#522): dismiss ends editing in modals too.
+                    InputBox field = focusedInput();
+                    if (field != null) {
+                        field.blur();
+                        break;
+                    }
                     View f = host.findFocus();
+                    if (f == null) {
+                        View modal = topModalWindow();
+                        if (modal != null) f = modal.findFocus();
+                    }
                     InputMethodManager imm = (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);
                     if (f != null) {
                         imm.hideSoftInputFromWindow(f.getWindowToken(), 0);
-                        if (f != host) host.requestFocus();
+                        View root = f.getRootView();
+                        if (root != null && root != host.getRootView()) {
+                            root.setFocusable(true);
+                            root.setFocusableInTouchMode(true);
+                            root.requestFocus();
+                        } else if (f != host) {
+                            host.requestFocus();
+                        }
                     } else {
+                        // Field gone: hide with the host token unless another
+                        // editor outside the host still has the IME (#714).
                         View other = host.getRootView().findFocus();
                         if (other == null || !other.onCheckIsTextEditor() || !imm.isActive(other)) {
                             imm.hideSoftInputFromWindow(host.getWindowToken(), 0);
@@ -2265,8 +2302,11 @@ final class Mounter {
                 boolean block = b.getInt() != 0;
                 clearJsResponder();
                 if (block && v != null) {
-                    // Scroll views around the responder stop taking its touches.
+                    // Scroll views around the responder stop taking its touches, and the presses around it
+                    // end: a handle held past the long press delay is no long press of the text around it.
                     for (ViewParent p = v.getParent(); p != null; p = p.getParent()) {
+                        if (p instanceof Box) ((Box) p).cancelPress();
+                        else if (p instanceof TextBox && ((TextBox) p).press != null) ((TextBox) p).press.cancel();
                         if (p instanceof ScrollBox) {
                             ((ScrollBox) p).jsBlocked = true;
                             blockedScrolls.add((ScrollBox) p);
@@ -2286,6 +2326,20 @@ final class Mounter {
                 float x = b.getFloat(), y = b.getFloat(), w = b.getFloat(), h = b.getFloat();
                 int actions = b.getInt();
                 if (v instanceof InputBox) ((InputBox) v).openEditMenu(x, y, w, h, actions);
+                break;
+            }
+            case 51: {
+                int request = b.getInt();
+                String generation = (String) objects[b.getInt()];
+                String start = (String) objects[b.getInt()];
+                String poll = (String) objects[b.getInt()];
+                String cleanup = (String) objects[b.getInt()];
+                if (v instanceof WebBox) ((WebBox) v).evaluate(request, generation, start, poll, cleanup);
+                break;
+            }
+            case 52: {
+                int request = b.getInt();
+                if (v instanceof WebBox) ((WebBox) v).cancelEvaluation(request);
                 break;
             }
             case 50:
@@ -2535,6 +2589,44 @@ final class Mounter {
 
     // --- Events --------------------------------------------------------------
 
+    /**
+     * The scroll view whose `keyboardShouldPersistTaps` "never" holds the current touch: if the touch is a tap, it
+     * only dismisses the keyboard; meanwhile it presses nothing.
+     */
+    private ScrollBox tapScroll;
+    /** A view of the touch reported a long press: it is no tap. */
+    private boolean longPressed;
+
+    void startTapOnly(ScrollBox s) {
+        tapScroll = s;
+    }
+
+    void endTapOnly(ScrollBox s) {
+        if (tapScroll == s) tapScroll = null;
+    }
+
+    /**
+     * At a root (the surface, a modal), before it dispatches {@code e}: a tap that only dismisses the keyboard
+     * reaches the views and JS responders as a cancel, so nothing inside (a responder, a web view) acts on it.
+     * Returns the event to dispatch, a new one to recycle when it is not {@code e}.
+     */
+    android.view.MotionEvent keyboardTap(android.view.MotionEvent e) {
+        int action = e.getActionMasked();
+        if (action == android.view.MotionEvent.ACTION_DOWN) {
+            // Set by the scroll view as the down goes through it; nothing of an earlier touch lingers.
+            tapScroll = null;
+            longPressed = false;
+            return e;
+        }
+        if (action != android.view.MotionEvent.ACTION_UP || tapScroll == null || longPressed || !tapScroll.stillTap(e)) return e;
+        ScrollBox s = tapScroll;
+        tapScroll = null;
+        s.hideKeyboard();
+        android.view.MotionEvent cancel = android.view.MotionEvent.obtain(e);
+        cancel.setAction(android.view.MotionEvent.ACTION_CANCEL);
+        return cancel;
+    }
+
     boolean wants(int id, int kind) {
         if (kind >= 64) return (eventsHigh.get(id) & (1L << (kind - 64))) != 0;
         return (events.get(id) & (1L << kind)) != 0;
@@ -2554,6 +2646,7 @@ final class Mounter {
     private final android.util.SparseArray<float[]> panActivations = new android.util.SparseArray<>();
     /** Scroll views an activated pan gate blocks. */
     private final java.util.ArrayList<ScrollBox> gatedScrolls = new java.util.ArrayList<>();
+    private View activeGate;
 
     private void clearJsResponder() {
         for (ScrollBox s : blockedScrolls) s.jsBlocked = false;
@@ -2578,6 +2671,7 @@ final class Mounter {
     /** The pan gate of {@code v} activated: the scroll views around it stop taking the touches. */
     void gateBlock(View v) {
         gateRelease();
+        activeGate = v;
         for (ViewParent p = v.getParent(); p != null; p = p.getParent()) {
             if (p instanceof ScrollBox) {
                 ((ScrollBox) p).gateBlocked = true;
@@ -2589,8 +2683,14 @@ final class Mounter {
 
     /** The touches of an activated pan gate ended. */
     void gateRelease() {
+        activeGate = null;
         for (ScrollBox s : gatedScrolls) s.gateBlocked = false;
         gatedScrolls.clear();
+    }
+
+    /** The view whose pan gate activated for the touches down now, or null. */
+    View activeGate() {
+        return activeGate;
     }
 
     void event(int id, int kind) {
@@ -2617,6 +2717,8 @@ final class Mounter {
      * where the touch is in {@code v} and in its root view.
      */
     void press(int id, int kind, View v, PressAt at) {
+        if (kind == Native.LONG_PRESS) longPressed = true;
+        if (kind == Native.PRESS && tapScroll != null) return;
         // The surface, or the window of the modal the view is in.
         View root = v.getRootView() == host.getRootView() ? host : v.getRootView();
         int[] rootAt = new int[2];

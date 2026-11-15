@@ -84,7 +84,7 @@ pub(crate) fn package(
     let version = config.version.as_deref().unwrap_or("1.0.0");
     let info = crate::package::desktop_app_json(config, name, id, version);
     fs::write(resources.join("app.json"), info.to_string())?;
-    if let Some(icon) = &config.icon {
+    if let Some(icon) = config.icon(crate::package::PackageTarget::Windows) {
         let images = icon_images(icon)?;
         fs::write(resources.join("icon.ico"), icon_file(&images))?;
         set_icon(&exe, &images)
@@ -92,7 +92,7 @@ pub(crate) fn package(
     }
     let archive = options.out.join(format!("{name}.zip"));
     zip_dir(&dir, name, &archive).with_context(|| format!("create {}", archive.display()))?;
-    crate::updater::copy_archive(config, name, &archive, options.out)?;
+    crate::updater::copy_archive(config, name, &update_platform(), &archive, options.out)?;
     step.done(format!(
         "packaged {} and {}",
         ui::path(&dir),
@@ -318,7 +318,7 @@ pub(crate) fn host_args(entry: &Path, work: &Path) -> Vec<OsString> {
     let config = crate::package::read_config(entry).unwrap_or_default();
     let (name, _) = crate::package::name_and_id(entry, &config);
     let mut args = vec!["--name".into(), name.into()];
-    if let Some(icon) = &config.icon {
+    if let Some(icon) = config.icon(crate::package::PackageTarget::Windows) {
         let ico = work.join("windows").join("icon.ico");
         match host_icon(icon, &ico) {
             Ok(()) => args.extend(["--icon".into(), ico.into_os_string()]),
@@ -547,9 +547,32 @@ fn zip_dir(dir: &Path, root: &str, archive: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// The updater's name of the platform a Windows package runs on: the runner
+/// is built for this machine on Windows, else cross-compiled for
+/// `x86_64-pc-windows-msvc`, whose archive must not be named after the
+/// machine that built it.
+fn update_platform() -> String {
+    if cfg!(windows) {
+        nsh_updater::platform()
+    } else {
+        "windows-x86_64".to_owned()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A package cross-built on Linux or macOS is the update of Windows, not
+    /// of the machine that built it.
+    #[test]
+    fn update_archives_are_named_for_windows() {
+        assert!(
+            update_platform().starts_with("windows-"),
+            "{}",
+            update_platform()
+        );
+    }
 
     #[test]
     fn installer_scripts_install_per_user_and_upgrade_by_id() {

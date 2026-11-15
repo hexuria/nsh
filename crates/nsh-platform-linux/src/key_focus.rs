@@ -119,6 +119,8 @@ pub(crate) fn watch(surface: &Rc<Surface>, window: &gtk::Window) {
     let current = RefCell::new(None::<NshView>);
     window.connect_focus_widget_notify(move |window| {
         if let Some(surface) = weak.upgrade() {
+            // The screen reader follows the keyboard focus again.
+            crate::access::clear_reader_focus(&surface);
             moved(&surface, window, &current);
         }
     });
@@ -157,6 +159,16 @@ fn key_pressed(
     key: gdk::Key,
     modifiers: gdk::ModifierType,
 ) -> bool {
+    // Every key the window gets passes here first (the capture phase),
+    // before it acts: the focus it moves shows (`focus-visible:`). A
+    // modifier alone does not count.
+    let modifier = keys.current_event().is_some_and(|e| {
+        e.downcast_ref::<gdk::KeyEvent>()
+            .is_some_and(gdk::KeyEvent::is_modifier)
+    });
+    if !modifier {
+        surface.control(|c| c.set_input_modality(nsh_core::platform::InputModality::Keyboard));
+    }
     if matches!(
         key,
         gdk::Key::Tab | gdk::Key::ISO_Left_Tab | gdk::Key::KP_Tab

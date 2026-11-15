@@ -73,6 +73,7 @@ use nsh_core::{
         SCROLL_PRESS_DELAY, TOUCHPAD_IDLE, VelocityTracker, ZOOM_IDLE, ZOOM_NOTCH, has_press,
         laid_out, latch_holds, touchpad_wait, transforms,
     },
+    platform::InputModality,
     tailwind::state::{HOVERED, PRESSED},
 };
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -1061,6 +1062,11 @@ pub(crate) fn file_drop_target(surface: &Surface, x: f32, y: f32) -> Option<NshV
 
 /// A pointer event from the window.
 pub(crate) fn pointer(surface: &Rc<Surface>, event: PointerEvent) {
+    // Before the press acts: the focus it moves does not show
+    // (`focus-visible:`).
+    if matches!(event.kind, PointerKind::Down) {
+        surface.control(|c| c.set_input_modality(InputModality::Pointer));
+    }
     let key = if event.touch || event.pen {
         Key::Touch(event.pointer)
     } else {
@@ -1120,8 +1126,14 @@ pub(crate) fn pointer(surface: &Rc<Surface>, event: PointerEvent) {
             motion(surface, key, x, y, time);
         }
         PointerKind::Up => {
-            if mouse && event.button != 0 {
-                return;
+            if mouse {
+                surface.input.last.set(Some((x, y)));
+                if let Some(released) = mouse_button(event.button) {
+                    mouse_up(surface, x, y, event.modifiers, released);
+                }
+                if event.button != 0 {
+                    return;
+                }
             }
             up(surface, key, Some((x, y)), time, false);
         }
@@ -1137,6 +1149,42 @@ pub(crate) fn pointer(surface: &Rc<Surface>, event: PointerEvent) {
             set_hover_item(surface, None, (x, y), event.modifiers);
         }
     }
+}
+
+/// `onWheel` for a wheel by `delta` from the window: the nearest view
+/// around the one under the pointer that listens hears it
+/// ([`input::wheel_listener`]). Returns whether that view takes the
+/// wheel, so nothing scrolls or zooms natively.
+pub(crate) fn wheel_event(
+    surface: &Rc<Surface>,
+    event: &WheelEvent,
+    delta: nsh_core::WheelDelta,
+) -> bool {
+    let (x, y) = (event.x, event.y);
+    if delta.xy() == (0.0, 0.0) {
+        return false;
+    }
+    let Some(hit) = pick(&surface.input_root(), x, y, true) else {
+        return false;
+    };
+    let Some((view, takes)) = input::wheel_listener(
+        chain(&hit.view),
+        |v| v.state().events.contains(EventKind::Wheel),
+        // A multiline field scrolls its own lines.
+        |v| matches!(v.kind(), ViewKind::Scroll | ViewKind::Input),
+    ) else {
+        return false;
+    };
+    let (location_x, location_y) = local(&view, x, y);
+    let wheel = nsh_core::WheelEvent::new(
+        nsh_core::geometry::point(Points(location_x), Points(location_y)),
+        nsh_core::geometry::point(Points(x), Points(y)),
+        delta,
+        event.modifiers.core(),
+    );
+    let id = view.state().id;
+    surface.event(id, EventKind::Wheel, EventPayload::Wheel(wheel));
+    takes
 }
 
 /// A wheel event from the window.
@@ -1179,6 +1227,15 @@ pub(crate) fn wheel(surface: &Rc<Surface>, event: WheelEvent) {
 /// A key from the window; true when handled. Only key downs (and their
 /// repeats) go to the modules; ups are not acted on.
 pub(crate) fn key(surface: &Rc<Surface>, event: KeyEvent) -> bool {
+    // Before the key acts: the focus it moves shows (`focus-visible:`). A
+    // modifier alone (Shift, Control, Alt, the Windows / Command keys)
+    // does not count.
+    const MODIFIERS: [u16; 11] = [
+        0x10, 0x11, 0x12, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0x5B, 0x5C,
+    ];
+    if event.down && !MODIFIERS.contains(&event.vk) {
+        surface.control(|c| c.set_input_modality(InputModality::Keyboard));
+    }
     if event.down && event.vk == VK_ESCAPE {
         crate::text_input::disarm(surface);
     }
@@ -1210,6 +1267,7 @@ pub(crate) fn key_now(surface: &Rc<Surface>, event: KeyEvent) -> bool {
         || crate::text::key(surface, &event)
         || crate::selectable_view::key(surface, &event)
         || crate::navigation::key_pressed(surface, &event)
+        || crate::key_focus::key(surface, &event)
         || {
             let (x, y) = input.last.get().unwrap_or((-1.0, -1.0));
             crate::scroll::key(surface, &event, x, y)
@@ -1309,28 +1367,36 @@ fn focus_stop(surface: &Rc<Surface>, view: &NshView) {
 }
 
 /// The Tab stops shown under `view`, in tree order (a scroll view's
-/// content as it is on screen): enabled text fields and
+/// content as it is on screen; a shown overlay's content after the view it
+/// follows, [`input::tab_order`]): enabled text fields and
 /// the native components that take the keyboard.
 fn collect_stops(surface: &Surface, view: &NshView, out: &mut Vec<NshView>) {
-    {
+    let skipped = |view: &NshView| {
         let s = view.state();
-        if s.style.hidden || s.concealed || s.props.pointer_events == PointerEvents::None {
-            return;
+        s.style.hidden || s.concealed || s.props.pointer_events == PointerEvents::None
+    };
+    let order = input::tab_order(
+        view.clone(),
+        |view| {
+            if skipped(view) {
+                return Vec::new();
+            }
+            view.with_children_in_reading_order(<[NshView]>::to_vec)
+        },
+        NshView::id,
+        |view| view.state().props.tab_after,
+    );
+    out.extend(order.into_iter().filter(|view| {
+        if skipped(view) {
+            return false;
         }
-        let stop = match s.kind {
+        let s = view.state();
+        match s.kind {
             ViewKind::Input => !s.props.accessibility.state.disabled,
             ViewKind::Native => crate::native::focusable(surface, s.id),
             _ => false,
-        };
-        if stop {
-            out.push(view.clone());
         }
-    }
-    view.with_children_in_reading_order(|children| {
-        for child in children {
-            collect_stops(surface, child, out);
-        }
-    });
+    }));
 }
 
 // --- Hit testing --------------------------------------------------------------------
@@ -1493,6 +1559,25 @@ fn put(surface: &Surface, p: Pointer) {
     surface.input.pointers.borrow_mut().push(p);
 }
 
+/// Selecting with the mouse (a drag that began, or a double or triple
+/// click that selected a word or paragraph) takes the keyboard from the
+/// focused text field when the press was outside it, as in browsers: the
+/// field would otherwise swallow Cmd/Ctrl + C (even with nothing selected in
+/// it) and the text just selected could not be copied. The field blurs as
+/// for `blur()`, so its composition, caret and `onBlur` follow. A plain
+/// click on a button or a link in selectable text keeps the focus, and so
+/// does a press inside the field. Touch never selects this way. "Inside"
+/// follows the mounted parents: a portaled overlay that belongs to the
+/// field logically counts as outside it.
+fn blur_field_for_selection(surface: &Rc<Surface>, hit: &NshView) {
+    let Some(field) = crate::text_input::focused(surface) else {
+        return;
+    };
+    if !chain(hit).contains(&field) {
+        crate::text_input::blur_all(surface);
+    }
+}
+
 fn down(
     surface: &Rc<Surface>,
     key: Key,
@@ -1509,6 +1594,7 @@ fn down(
     let Some(mut hit) = pick(&surface.input_root(), x, y, true) else {
         return;
     };
+    crate::key_focus::pointer_down(surface, &hit.view);
     let touch = key != Key::Mouse;
     let mut item = None;
     if let Some(native) = hit.item.take() {
@@ -1576,6 +1662,9 @@ fn down(
         // Mouse drags in a selectable view select across its texts; its
         // texts never select alone.
         crate::selectable_view::down(surface, &area, &hit.view, (x, y), clicks, modifiers.shift);
+        if clicks >= 2 {
+            blur_field_for_selection(surface, &hit.view);
+        }
         item = Some(Item::Area(area));
     }
     if item.is_none() {
@@ -1590,6 +1679,9 @@ fn down(
         };
         if let Some(c) = candidate {
             c.send(surface, PointerKind::Down, (x, y), clicks, modifiers);
+            if clicks >= 2 && matches!(c, Item::Text(_)) {
+                blur_field_for_selection(surface, &hit.view);
+            }
             item = Some(c);
         }
     }
@@ -1712,7 +1804,11 @@ fn motion(surface: &Rc<Surface>, key: Key, x: f32, y: f32, time: f64) {
     p.velocity
         .add(time, nsh_core::geometry::point(Points(x), Points(y)));
     if let Some(item) = &p.item {
-        item.send(surface, PointerKind::Move, (x, y), 1, p.modifiers);
+        let taken = item.send(surface, PointerKind::Move, (x, y), 1, p.modifiers);
+        // The drag selecting text has begun.
+        if taken && matches!(item, Item::Text(_) | Item::Area(_)) {
+            blur_field_for_selection(surface, &p.target);
+        }
     }
     let moved = std::mem::replace(&mut p.moved, true);
     let (tx, ty) = (x - p.start.0, y - p.start.1);
@@ -1894,6 +1990,11 @@ fn report(surface: &Surface, phase: TouchPhase, changed: &Pointer, activated: Op
                     page: nsh_core::geometry::point(Points(p.x), Points(p.y)),
                     location: nsh_core::geometry::point(Points(lx), Points(ly)),
                     changed: is_changed,
+                    pointer_type: if p.key == Key::Mouse {
+                        nsh_core::PointerType::Mouse
+                    } else {
+                        nsh_core::PointerType::Touch
+                    },
                 }
             })
             .collect()
@@ -2447,6 +2548,38 @@ fn mouse_event(
         button,
     );
     surface.event(id, kind, EventPayload::Mouse(event));
+}
+
+/// `onMouseUp` of the views under the mouse at `(x, y)` (root coordinates)
+/// and the views they are inside, inside out, each with the mouse in it and
+/// the button that was released.
+fn mouse_up(
+    surface: &Surface,
+    x: f32,
+    y: f32,
+    modifiers: Modifiers,
+    button: nsh_core::MouseButton,
+) {
+    let Some(hit) = pick(&surface.input_root(), x, y, true) else {
+        return;
+    };
+    for view in chain(&hit.view) {
+        let id = {
+            let state = view.state();
+            if !state.events.contains(EventKind::MouseUp) {
+                continue;
+            }
+            state.id
+        };
+        let (location_x, location_y) = local(&view, x, y);
+        let event = nsh_core::MouseEvent::released(
+            nsh_core::geometry::point(Points(location_x), Points(location_y)),
+            nsh_core::geometry::point(Points(x), Points(y)),
+            modifiers.core(),
+            button,
+        );
+        surface.event(id, EventKind::MouseUp, EventPayload::Mouse(event));
+    }
 }
 
 /// A mouse button numbered as [`PointerEvent::button`] numbers them.
@@ -3220,6 +3353,142 @@ mod tests {
             .iter()
             .map(NshView::id)
             .collect()
+    }
+
+    /// A surface with a focused field 4 and a selectable text 6 (inside a
+    /// selectable view 5 when `area`) beside it. The text has no layout (no
+    /// text engine in tests), which selecting does not need to begin.
+    fn field_and_text(area: bool) -> (Rc<Surface>, NshView, NshView) {
+        let surface = Surface::new(nsh_engine::Environment::default());
+        surface.root.state_mut().frame = rect(0.0, 0.0, 400.0, 400.0);
+        let field = view(
+            &surface.root,
+            4,
+            ViewKind::Input,
+            rect(0.0, 0.0, 100.0, 30.0),
+        );
+        let parent = if area {
+            let a = view(
+                &surface.root,
+                5,
+                ViewKind::View,
+                rect(0.0, 100.0, 200.0, 100.0),
+            );
+            a.state_mut().props.selectable_view = true;
+            a
+        } else {
+            surface.root.clone()
+        };
+        let y = if area { 0.0 } else { 100.0 };
+        let text = view(&parent, 6, ViewKind::Text, rect(0.0, y, 100.0, 30.0));
+        let content = nsh_core::AttributedText {
+            text: "hello world".into(),
+            selectable: Some(true),
+            ..Default::default()
+        };
+        crate::text::set(
+            &text,
+            &std::sync::Arc::new(content),
+            &nsh_core::TextLayout(std::sync::Arc::new(())),
+            rect(0.0, 0.0, 100.0, 30.0),
+        );
+        crate::text_input::focus_for_test(&surface, &field);
+        (surface, field, text)
+    }
+
+    fn cmd_c(down: bool) -> KeyEvent {
+        let mac = cfg!(target_os = "macos");
+        KeyEvent {
+            vk: 0x43,
+            down,
+            repeat: false,
+            modifiers: Modifiers {
+                meta: mac,
+                ctrl: !mac,
+                ..Default::default()
+            },
+        }
+    }
+
+    /// Presses at `(10, y)` with `key`, then drags 40 points right (past
+    /// the selection slop) and releases.
+    fn press_and_drag(surface: &Rc<Surface>, key: Key, y: f32, clicks: u32, drag: bool) {
+        down(surface, key, 10.0, y, 1.0, clicks, Modifiers::default());
+        if drag {
+            motion(surface, key, 50.0, y, 1.1);
+        }
+        up(surface, key, Some((50.0, y)), 1.2, false);
+    }
+
+    fn focused_is(surface: &Rc<Surface>, field: &NshView) -> bool {
+        crate::text_input::focused(surface).as_ref() == Some(field)
+    }
+
+    /// While the field is focused it swallows Cmd + C; once a selection
+    /// drag blurred it, the key is left to the selection.
+    fn assert_copy_goes_to_selection(surface: &Rc<Surface>, field: &NshView) {
+        assert!(!focused_is(surface, field));
+        assert!(!crate::text_input::key(surface, &cmd_c(true)));
+    }
+
+    #[test]
+    fn dragging_selectable_text_blurs_the_field_and_copy_goes_to_the_selection() {
+        let (surface, field, _) = field_and_text(false);
+        assert!(crate::text_input::key(&surface, &cmd_c(true)));
+        press_and_drag(&surface, Key::Mouse, 110.0, 1, true);
+        assert_copy_goes_to_selection(&surface, &field);
+        crate::text_input::surface_stopped(surface.key());
+    }
+
+    #[test]
+    fn dragging_in_a_selectable_view_blurs_the_field() {
+        let (surface, field, _) = field_and_text(true);
+        assert!(crate::text_input::key(&surface, &cmd_c(true)));
+        press_and_drag(&surface, Key::Mouse, 110.0, 1, true);
+        assert_copy_goes_to_selection(&surface, &field);
+        crate::text_input::surface_stopped(surface.key());
+    }
+
+    #[test]
+    fn a_plain_click_keeps_the_field_focused() {
+        for area in [false, true] {
+            let (surface, field, _) = field_and_text(area);
+            press_and_drag(&surface, Key::Mouse, 110.0, 1, false);
+            assert!(focused_is(&surface, &field), "area: {area}");
+            crate::text_input::surface_stopped(surface.key());
+        }
+    }
+
+    #[test]
+    fn a_double_click_selecting_a_word_blurs_the_field() {
+        for area in [false, true] {
+            let (surface, field, _) = field_and_text(area);
+            press_and_drag(&surface, Key::Mouse, 110.0, 2, false);
+            assert!(!focused_is(&surface, &field), "area: {area}");
+            crate::text_input::surface_stopped(surface.key());
+        }
+    }
+
+    #[test]
+    fn a_touch_drag_over_selectable_text_keeps_the_focus() {
+        for area in [false, true] {
+            let (surface, field, _) = field_and_text(area);
+            press_and_drag(&surface, Key::Touch(1), 110.0, 1, true);
+            assert!(focused_is(&surface, &field), "area: {area}");
+            crate::text_input::surface_stopped(surface.key());
+        }
+    }
+
+    #[test]
+    fn dragging_inside_the_field_keeps_the_focus() {
+        let (surface, field, _) = field_and_text(false);
+        press_and_drag(&surface, Key::Mouse, 10.0, 1, true);
+        assert!(focused_is(&surface, &field));
+        // A selectable text inside the field counts as inside it.
+        let inner = view(&field, 8, ViewKind::Text, rect(0.0, 0.0, 50.0, 30.0));
+        blur_field_for_selection(&surface, &inner);
+        assert!(focused_is(&surface, &field));
+        crate::text_input::surface_stopped(surface.key());
     }
 
     #[test]

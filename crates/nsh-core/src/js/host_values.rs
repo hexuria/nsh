@@ -6,8 +6,8 @@ use super::host::{HostCx, HostInput, HostList, HostValue, field};
 use crate::{
     AccessibilityCurrent, AccessibilityProp, AccessibilityRole, AccessibilityState, AutoFill,
     CellSlot, EdgeInsets, ImageScales, ImageSource, KeyboardTaps, ListContentStyle, MacOsBackdrop,
-    MacOsBackdropBlending, MacOsBackdropMaterial, MacOsBackdropState, ModalProp, Prop, ScrollProp,
-    StatusBarSetting, StatusBarStyle, Viewability,
+    MacOsBackdropBlending, MacOsBackdropMaterial, MacOsBackdropState, ModalProp, Prop,
+    RevealOptions, ScrollAlignment, ScrollProp, StatusBarSetting, StatusBarStyle, Viewability,
     element::TsTypes,
     geometry::{Bounds, Percentage, Points, point, size},
     mount::ModalConfig,
@@ -70,6 +70,49 @@ impl HostValue for ImageSource {
 
     fn ts_type(_: &mut TsTypes) -> String {
         "string | ImageAsset".into()
+    }
+}
+
+/// `ref.reveal(options)`: `{ vertical?, horizontal?, animated? }`, each
+/// missing one its default. None for an alignment that is not one, so the
+/// call throws rather than scrolling somewhere the app did not ask for.
+impl HostValue for RevealOptions {
+    fn decode<I: HostInput>(input: &I, cx: &mut HostCx) -> Option<Self> {
+        let mut options = RevealOptions::default();
+        if input.is_nullish() {
+            return Some(options);
+        }
+        if !input.is_object() {
+            return None;
+        }
+        let mut alignment = |key: &str, default: ScrollAlignment| match input.field(key) {
+            Some(value) if !value.is_nullish() => {
+                <ScrollAlignment as HostValue>::decode(&value, cx)
+            }
+            _ => Some(default),
+        };
+        options.vertical = alignment("vertical", options.vertical)?;
+        options.horizontal = alignment("horizontal", options.horizontal)?;
+        if let Some(animated) = input.field("animated").and_then(|a| a.as_bool()) {
+            options.animated = animated;
+        }
+        Some(options)
+    }
+
+    fn ts_type(types: &mut TsTypes) -> String {
+        let alignment = <ScrollAlignment as HostValue>::ts_type(types);
+        types.declare("RevealOptions", |_| {
+            format!(
+                "/** How `reveal` places a view in the scroll views around it. */\n\
+                 export interface RevealOptions {{\n  \
+                 /** Along vertical scroll views; `\"start\"` by default. */\n  \
+                 vertical?: {alignment};\n  \
+                 /** Along horizontal scroll views; `\"nearest\"` by default. */\n  \
+                 horizontal?: {alignment};\n  \
+                 /** Animate the scrolls; `true` by default. */\n  \
+                 animated?: boolean;\n}}"
+            )
+        })
     }
 }
 
@@ -194,7 +237,8 @@ impl HostValue for PanActivation {
 }
 
 /// `{ disabled, selected, checked: true | false | "mixed", busy, expanded,
-/// pressed: true | false | "mixed", current: true | false | "page" | ... }`.
+/// pressed: true | false | "mixed", current: true | false | "page" | ...,
+/// hasPopup, invalid }`.
 impl HostValue for AccessibilityState {
     fn decode<I: HostInput>(input: &I, _: &mut HostCx) -> Option<Self> {
         let flag = |key| input.field(key).and_then(|v| v.as_bool()).unwrap_or(false);
@@ -218,6 +262,7 @@ impl HostValue for AccessibilityState {
             expanded: input.field("expanded").and_then(|v| v.as_bool()),
             pressed: tristate("pressed"),
             has_popup: flag("hasPopup"),
+            invalid: flag("invalid"),
             // `false` and unknown words are no current item, as ARIA has it.
             current: match current.as_ref().and_then(|c| c.as_bool()) {
                 Some(true) => Some(AccessibilityCurrent::True),
@@ -245,7 +290,9 @@ impl HostValue for AccessibilityState {
              /** The current item of a set (ARIA's `aria-current`): a pagination's page, a wizard's step. */\n  \
              current?: boolean | \"page\" | \"step\" | \"location\" | \"date\" | \"time\";\n  \
              /** Opens a popup, a menu or a list (ARIA's `aria-haspopup`); `expanded` says whether it is open. */\n  \
-             hasPopup?: boolean;\n}"
+             hasPopup?: boolean;\n  \
+             /** The content does not pass the app's checks (ARIA's `aria-invalid`): a rejected field. */\n  \
+             invalid?: boolean;\n}"
                 .into()
         })
     }
@@ -631,15 +678,26 @@ pub(crate) fn scrollbar<I: HostInput>(input: &I, _: &mut HostCx) -> Option<Prop>
     Some(Prop::Scrollbar(match input.as_bool() {
         Some(shows) => shows.into(),
         None if input.is_object() => {
-            crate::ScrollbarSetting::Themed(std::sync::Arc::new(json_of(input)))
+            crate::ScrollbarSetting::Themed(std::sync::Arc::new(json_of(input, 0, &mut {
+                JSON_ENTRIES
+            })))
         }
         None => crate::ScrollbarSetting::Shown,
     }))
 }
 
+/// Deepest nesting [`json_of`] reads.
+const JSON_DEPTH: u32 = 64;
+/// Most array items and object fields [`json_of`] reads in all.
+const JSON_ENTRIES: usize = 1 << 20;
+
 /// `input` as JSON: what is neither a boolean, number, string, array nor
-/// object (a function) is `null`.
-fn json_of<I: HostInput>(input: &I) -> crate::JsonValue {
+/// object (a function) is `null`, and so is what is nested more than
+/// [`JSON_DEPTH`] deep or past `left` entries (of [`JSON_ENTRIES`]): the
+/// app's value is read natively, where neither the time budget nor the
+/// interpreter's stack limit applies, and one that holds itself would
+/// recurse until the engine thread's stack overflows.
+fn json_of<I: HostInput>(input: &I, depth: u32, left: &mut usize) -> crate::JsonValue {
     use crate::JsonValue;
     if let Some(b) = input.as_bool() {
         return JsonValue::Bool(b);
@@ -650,17 +708,32 @@ fn json_of<I: HostInput>(input: &I) -> crate::JsonValue {
     if let Some(s) = input.as_string() {
         return JsonValue::String(s);
     }
-    if input.as_list().is_some() {
-        return JsonValue::Array(input.items().iter().map(json_of).collect());
+    if depth >= JSON_DEPTH {
+        return JsonValue::Null;
+    }
+    if let Some(list) = input.as_list() {
+        let mut items = Vec::new();
+        for i in 0..list.len() {
+            if *left == 0 {
+                break;
+            }
+            *left -= 1;
+            if let Some(item) = list.item(i) {
+                items.push(json_of(&item, depth + 1, left));
+            }
+        }
+        return JsonValue::Array(items);
     }
     if input.is_object() {
-        return JsonValue::Object(
-            input
-                .entries()
-                .into_iter()
-                .map(|(k, v)| (k, json_of(&v)))
-                .collect(),
-        );
+        let mut fields = serde_json::Map::new();
+        for (key, value) in input.entries() {
+            if *left == 0 {
+                break;
+            }
+            *left -= 1;
+            fields.insert(key, json_of(&value, depth + 1, left));
+        }
+        return JsonValue::Object(fields);
     }
     JsonValue::Null
 }

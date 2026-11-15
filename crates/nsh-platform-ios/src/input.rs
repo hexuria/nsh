@@ -29,7 +29,7 @@ use objc2_ui_kit::{
     NSFontAttributeName, NSForegroundColorAttributeName, NSTextAlignment, UIColor, UIControl,
     UIControlEvents, UIEdgeInsets, UIKeyboardAppearance, UIKeyboardType, UILabel, UIResponder,
     UIReturnKeyType, UITextAutocapitalizationType, UITextAutocorrectionType, UITextField,
-    UITextView, UIView, UIViewAutoresizing,
+    UITextSmartDashesType, UITextSmartQuotesType, UITextView, UIView, UIViewAutoresizing,
 };
 
 use crate::{target::EventTarget, text};
@@ -139,12 +139,16 @@ define_class!(
         }
 
         /// A paste (the edit menu, Command+V): reported, and its text
-        /// inserted as `pasteBehavior` says.
+        /// inserted as `pasteBehavior` says, within `maxLength`.
         #[unsafe(method(paste:))]
         fn paste(&self, sender: Option<&AnyObject>) {
             if pasting(self.as_ref(), self.ivars()) {
-                // SAFETY: calling the superclass implementation.
-                let _: () = unsafe { msg_send![super(self), paste: sender] };
+                if self.ivars().max_length.get().is_some() {
+                    paste_text(self.as_ref(), &objc2_ui_kit::UIPasteboard::generalPasteboard());
+                } else {
+                    // SAFETY: calling the superclass implementation.
+                    let _: () = unsafe { msg_send![super(self), paste: sender] };
+                }
             }
         }
 
@@ -324,12 +328,16 @@ define_class!(
         }
 
         /// A paste (the edit menu, Command+V): reported, and its text
-        /// inserted as `pasteBehavior` says.
+        /// inserted as `pasteBehavior` says, within `maxLength`.
         #[unsafe(method(paste:))]
         fn paste(&self, sender: Option<&AnyObject>) {
             if pasting(self.as_ref(), self.ivars()) {
-                // SAFETY: calling the superclass implementation.
-                let _: () = unsafe { msg_send![super(self), paste: sender] };
+                if self.ivars().max_length.get().is_some() {
+                    paste_text(self.as_ref(), &objc2_ui_kit::UIPasteboard::generalPasteboard());
+                } else {
+                    // SAFETY: calling the superclass implementation.
+                    let _: () = unsafe { msg_send![super(self), paste: sender] };
+                }
             }
         }
 
@@ -536,15 +544,57 @@ pub(crate) fn test_paste(
     }
     // SAFETY: UIPasteboard's setter of items (type to value).
     let _: () = unsafe { msg_send![&board, setItems: &*NSArray::from_retained_slice(&items)] };
-    let inserts = pasting_from(view, ivars, &board);
-    // SAFETY: plain getters of the test's pasteboard.
-    if inserts && let Some(text) = unsafe { board.string() } {
-        // SAFETY: UIKeyInput's method, which both input classes implement.
-        let _: () = unsafe { msg_send![view, insertText: &*text] };
+    if pasting_from(view, ivars, &board) {
+        paste_text(view, &board);
     }
     // SAFETY: a plain getter; the test's pasteboard is not used again.
     objc2_ui_kit::UIPasteboard::removePasteboardWithName(&*unsafe { board.name() });
     Ok(())
+}
+
+/// Pastes `board`'s text into input `view`, cut to what `maxLength` leaves
+/// room for between composed character sequences, as a browser's
+/// `maxlength`. Not UIKit's `paste:`: a paste of it the delegate refuses
+/// leaves an undo step that crashes the app.
+fn paste_text(view: &UIView, board: &objc2_ui_kit::UIPasteboard) {
+    // SAFETY: a plain getter, read on the user's paste.
+    let (Some(text), Some((start, end))) = (unsafe { board.string() }, selection(view)) else {
+        return;
+    };
+    let range = NSRange::new(start as usize, (end - start) as usize);
+    let current = view
+        .downcast_ref::<Field>()
+        .and_then(|f| f.text())
+        .or_else(|| view.downcast_ref::<Area>().map(|a| a.text()))
+        .unwrap_or_default();
+    let room = max_length(view).map_or(usize::MAX, |max| {
+        (max as usize).saturating_sub(current.length() - range.length.min(current.length()))
+    });
+    let text = if room < text.length() {
+        let cut = text.rangeOfComposedCharacterSequenceAtIndex(room).location;
+        text.substringToIndex(cut)
+    } else {
+        text
+    };
+    if text.length() == 0 {
+        return;
+    }
+    let Some(target) = target_of(view) else {
+        return;
+    };
+    // `insertText:` skips the delegate, so it is asked first, as for any edit.
+    // SAFETY: the event target implements both delegates' methods.
+    let allows: Bool = unsafe {
+        if view.downcast_ref::<Field>().is_some() {
+            msg_send![&*target, textField: view, shouldChangeCharactersInRange: range, replacementString: &*text]
+        } else {
+            msg_send![&*target, textView: view, shouldChangeTextInRange: range, replacementText: &*text]
+        }
+    };
+    if allows.as_bool() {
+        // SAFETY: UIKeyInput's method, which both input classes implement.
+        let _: () = unsafe { msg_send![view, insertText: &*text] };
+    }
 }
 
 /// The ivars of input view `view` (a field or a text area).
@@ -864,7 +914,7 @@ fn inset(r: CGRect, i: UIEdgeInsets) -> CGRect {
 }
 
 /// True if replacing `range` of `current` with `replacement` keeps the
-/// text within `max` UTF-16 units (pasting may still be cut by the platform).
+/// text within `max` UTF-16 units.
 pub(crate) fn fits(
     current: &NSString,
     range: NSRange,
@@ -1271,6 +1321,7 @@ unsafe fn send<A: Copy>(view: &AnyObject, sel: Sel, value: A) {
 
 fn traits(view: &AnyObject, config: &InputConfig) {
     let keyboard = match config.keyboard {
+        KeyboardType::Default if config.visible_password() => UIKeyboardType::ASCIICapable,
         KeyboardType::Default => UIKeyboardType::Default,
         KeyboardType::Number => UIKeyboardType::NumberPad,
         // React Native's `numeric`: digits and a decimal separator.
@@ -1288,7 +1339,10 @@ fn traits(view: &AnyObject, config: &InputConfig) {
         ReturnKeyType::Search => UIReturnKeyType::Search,
         ReturnKeyType::Send => UIReturnKeyType::Send,
     };
+    // A visible password is typed as it is: never capitalized or corrected.
+    let password = config.visible_password();
     let capitalize = match config.auto_capitalize {
+        _ if password => UITextAutocapitalizationType::None,
         AutoCapitalize::None => UITextAutocapitalizationType::None,
         AutoCapitalize::Sentences => UITextAutocapitalizationType::Sentences,
         AutoCapitalize::Words => UITextAutocapitalizationType::Words,
@@ -1299,10 +1353,19 @@ fn traits(view: &AnyObject, config: &InputConfig) {
         KeyboardAppearance::Light => UIKeyboardAppearance::Light,
         KeyboardAppearance::Dark => UIKeyboardAppearance::Dark,
     };
-    let correct = if config.auto_correct {
+    let correct = if config.auto_correct && !password {
         UITextAutocorrectionType::Default
     } else {
         UITextAutocorrectionType::No
+    };
+    // Smart quotes and dashes are corrections too: off with `autoCorrect`.
+    let smart = if config.auto_correct && !password {
+        (
+            UITextSmartQuotesType::Default.0,
+            UITextSmartDashesType::Default.0,
+        )
+    } else {
+        (UITextSmartQuotesType::No.0, UITextSmartDashesType::No.0)
     };
     // SAFETY: UITextField and UITextView adopt UITextInputTraits; each
     // setter takes the NSInteger-backed enum (BOOL, or string) passed here.
@@ -1313,6 +1376,8 @@ fn traits(view: &AnyObject, config: &InputConfig) {
         send(view, sel!(setReturnKeyType:), return_key.0);
         send(view, sel!(setAutocapitalizationType:), capitalize.0);
         send(view, sel!(setAutocorrectionType:), correct.0);
+        send(view, sel!(setSmartQuotesType:), smart.0);
+        send(view, sel!(setSmartDashesType:), smart.1);
         let content_type =
             content_type(config.auto_fill).map_or(std::ptr::null(), |t| t as *const NSString);
         send(view, sel!(setTextContentType:), content_type);

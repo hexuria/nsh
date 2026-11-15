@@ -13,6 +13,7 @@ mod combobox;
 mod command;
 mod data_table;
 mod date_picker;
+mod dialog;
 mod diff;
 mod dock;
 mod editor;
@@ -27,6 +28,7 @@ mod hover_card;
 mod link;
 mod menu;
 mod menu_list;
+mod menu_room;
 mod number_input;
 mod otp_input;
 mod pagination;
@@ -43,6 +45,10 @@ mod slider;
 mod submenu;
 mod switch;
 mod tabs;
+#[cfg(feature = "term")]
+mod term;
+#[cfg(feature = "term")]
+mod term_cells;
 mod terminal;
 mod text_view;
 mod time_field;

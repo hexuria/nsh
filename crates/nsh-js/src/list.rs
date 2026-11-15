@@ -87,6 +87,7 @@ const OWN: &[&str] = &[
     "loadMoreThreshold",
     "loadMoreAtStartThreshold",
     "initialScrollIndex",
+    "initialScrollAtEnd",
     "onViewableItemsChange",
     "header",
     "footer",
@@ -102,6 +103,7 @@ pub(crate) const ITEMS_PROPS: &[&str] = &[
     "keyExtractor",
     "stickyHeaderIndices",
     "initialScrollIndex",
+    "initialScrollAtEnd",
     "onViewableItemsChange",
     "viewabilityConfig",
     "refreshing",
@@ -131,8 +133,11 @@ struct ListData {
     owner: u32,
     /// Cells by slot.
     cells: Vec<Option<Cell>>,
-    /// Owners of the header, footer and empty cells.
+    /// Owners of the header and footer cells.
     extras: Vec<u32>,
+    /// The owner of the empty cell while it shows: disposed with the list
+    /// (its root is not owned by the list's owner).
+    empty: Option<u32>,
     /// The viewable range reported last, and the latest.
     reported: (i64, i64),
     latest: (i64, i64),
@@ -262,6 +267,7 @@ pub(crate) fn render(cx: *mut JsContext, props: JsValue) -> Result<JsValue, JsVa
         owner: reactive::current_owner(cx),
         cells: Vec::new(),
         extras: Vec::new(),
+        empty: None,
         reported: (-1, -1),
         latest: (-1, -1),
         timer: None,
@@ -325,26 +331,29 @@ pub(crate) fn render(cx: *mut JsContext, props: JsValue) -> Result<JsValue, JsVa
         r.map_err(fail)?;
     }
     let initial = get(cx, props, "initialScrollIndex");
-    // SAFETY: an inline check and a conversion of a live value.
-    unsafe {
-        if qjs::JS_IsNumber(initial) {
+    let at_end = get(cx, props, "initialScrollAtEnd");
+    // SAFETY: these live values are read and released before queuing the op.
+    let initial_command = unsafe {
+        let command = if qjs::JS_ToBool(cx, at_end) > 0 {
+            Some(Command::ScrollToEnd { animated: false })
+        } else if qjs::JS_IsNumber(initial) {
             let mut index = 0f64;
             qjs::JS_ToFloat64(cx, &mut index, initial);
-            dom::push_op(
-                cx,
-                Op::Command {
-                    id,
-                    command: Command::ScrollToIndex {
-                        index: index.max(0.0) as u32,
-                        animated: false,
-                        view_position: Percentage(0.0),
-                        view_offset: Points::ZERO,
-                    },
-                },
-            )
-            .map_err(fail)?;
-        }
+            Some(Command::ScrollToIndex {
+                index: index.max(0.0) as u32,
+                animated: false,
+                view_position: Percentage(0.0),
+                view_offset: Points::ZERO,
+            })
+        } else {
+            None
+        };
         qjs::JS_FreeValue(cx, initial);
+        qjs::JS_FreeValue(cx, at_end);
+        command
+    };
+    if let Some(command) = initial_command {
+        dom::push_op(cx, Op::Command { id, command }).map_err(fail)?;
     }
     let ref_ = get(cx, props, "ref");
     // SAFETY: a live value, called untracked with the node.
@@ -392,7 +401,7 @@ unsafe extern "C" fn dispose(
     for cell in data.cells.iter().flatten() {
         reactive::dispose_owner(cx, cell.owner);
     }
-    for &owner in &data.extras {
+    for &owner in data.extras.iter().chain(&data.empty) {
         reactive::dispose_owner(cx, owner);
     }
     free_data(cx, *data);
@@ -803,6 +812,9 @@ unsafe extern "C" fn empty_run(
                     r
                 })
             });
+            if let Some(d) = lists(cx).map.borrow_mut().get_mut(&id) {
+                d.empty = Some(root);
+            }
             qjs::JS_SetPropertyUint32(cx, state, 0, qjs::JS_NewFloat64(root as f64));
             qjs::JS_SetPropertyUint32(cx, state, 1, cell_node);
             if let Err(e) = r {
@@ -813,6 +825,11 @@ unsafe extern "C" fn empty_run(
             let cell = qjs::JS_GetPropertyUint32(cx, state, 1);
             let mut root = 0f64;
             qjs::JS_ToFloat64(cx, &mut root, owner);
+            if let Some(id) = dom::node_id(cx, list)
+                && let Some(d) = lists(cx).map.borrow_mut().get_mut(&id)
+            {
+                d.empty = None;
+            }
             reactive::dispose_owner(cx, root as u32);
             let r = dom::remove_node(cx, list, cell);
             qjs::JS_FreeValue(cx, cell);
@@ -1307,6 +1324,9 @@ export interface ListProps<T> extends Omit<ViewProps, "children" | "ref">, Scrol
   separator?: ListSlot;
   /** Scrolls to this item before the first frame. */
   initialScrollIndex?: number;
+  /** Opens at the end before the first frame, following it while rows measure.
+   * Short content stays at the top. Takes precedence over initialScrollIndex. */
+  initialScrollAtEnd?: boolean;
   /** Key of an item in `onViewableItemsChange` tokens (default: `item.key`, `item.id`, or the index). */
   keyExtractor?: (item: T, index: number) => string;
   onViewableItemsChange?: (info: { viewableItems: ViewToken<T>[]; changed: ViewToken<T>[] }) => void;
@@ -1333,12 +1353,43 @@ export interface ListProps<T> extends Omit<ViewProps, "children" | "ref">, Scrol
 /** What an app passes to a Rust component that lays out a list of rows
  * (an `Items` prop): the data and the rows; the component decides the
  * layout. */
-export type ListItemsProps<T> = Pick<ListProps<T>, "each" | "children" | "keyExtractor" | "stickyHeaderIndices" | "initialScrollIndex" | "onViewableItemsChange" | "viewabilityConfig" | "refreshing" | "onRefresh" | "onLoadMore" | "loadMoreThreshold" | "header" | "footer" | "empty">;
+export type ListItemsProps<T> = Pick<ListProps<T>, "each" | "children" | "keyExtractor" | "stickyHeaderIndices" | "initialScrollIndex" | "initialScrollAtEnd" | "onViewableItemsChange" | "viewabilityConfig" | "refreshing" | "onRefresh" | "onLoadMore" | "loadMoreThreshold" | "header" | "footer" | "empty">;
 "#;
 
 #[cfg(test)]
 mod tests {
     use crate::{Host, HostOptions};
+
+    #[test]
+    fn initial_end_takes_precedence_and_false_preserves_the_index() {
+        let host = Host::with_options(HostOptions::default()).unwrap();
+        host.eval_source(r#"
+            import { List } from "nsh";
+            List({ each: [0], children: () => null, initialScrollAtEnd: true, initialScrollIndex: 0 });
+            List({ each: [0], children: () => null, initialScrollAtEnd: false, initialScrollIndex: 7 });
+            List({ each: [], children: () => null, initialScrollAtEnd: false });
+        "#).unwrap();
+        let mut ops = Vec::new();
+        host.take_ops(&mut ops);
+        let commands: Vec<_> = ops
+            .into_iter()
+            .filter_map(|op| match op {
+                nsh_core::Op::Command { command, .. } => Some(command),
+                _ => None,
+            })
+            .collect();
+        assert!(matches!(
+            commands.as_slice(),
+            [
+                nsh_core::Command::ScrollToEnd { animated: false },
+                nsh_core::Command::ScrollToIndex {
+                    index: 7,
+                    animated: false,
+                    ..
+                },
+            ]
+        ));
+    }
 
     #[test]
     fn cached_separators_keep_their_cell_owner() {

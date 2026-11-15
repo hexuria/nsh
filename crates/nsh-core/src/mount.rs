@@ -562,7 +562,8 @@ pub struct InputConfig {
     pub return_key: ReturnKeyType,
     /// Automatic capitalization.
     pub auto_capitalize: AutoCapitalize,
-    /// Autocorrection.
+    /// The system's corrections: spelling, smart quotes and dashes, text
+    /// replacement.
     pub auto_correct: bool,
     /// Several lines (return inserts a line break).
     pub multiline: bool,
@@ -617,6 +618,19 @@ impl InputConfig {
             None => SubmitBehavior::Submit,
         }
     }
+
+    /// A password shown as plain text: the input holds a password
+    /// ([`InputConfig::auto_fill`] `current-password` or `new-password`)
+    /// but is not `secure`, as after a "show password" toggle. Platforms
+    /// type it as it is: Android's visible password keyboard, iOS's ASCII
+    /// keyboard, never capitalized, suggested or corrected.
+    pub fn visible_password(&self) -> bool {
+        !self.secure
+            && matches!(
+                self.auto_fill,
+                crate::ops::AutoFill::Password | crate::ops::AutoFill::NewPassword
+            )
+    }
 }
 
 impl Default for InputConfig {
@@ -665,6 +679,10 @@ pub struct ImageOptions {
     /// `objectPosition`: where the image sits in its box once the resize
     /// mode has sized it ([`crate::ResizeMode::fit`]).
     pub position: crate::style::ObjectPosition,
+    /// The color an SVG source's `currentColor` paints with: the element's
+    /// text color, for an `svg()` the platform draws as an image (the web
+    /// runtime); `None` for an image, whose `currentColor` stays the SVG's.
+    pub current_color: Option<crate::style::Color>,
 }
 
 /// One instruction for the platform backend.
@@ -739,11 +757,13 @@ pub enum MountItem {
     },
     /// The area the view's descendants cover outside its bounds, in its
     /// own coordinates (it contains the bounds), while overflow is visible;
-    /// `None` when they stay inside. UIKit and Android only look for the
-    /// target of a touch inside a view's bounds: platforms look in the
-    /// descendants of views with an area too, so children placed outside
-    /// their parent (a dropdown under its field) can be touched. Sent only
-    /// when it changes; from layout frames (transforms are not included).
+    /// `None` when they stay inside. It takes in the descendants' hit
+    /// slop. UIKit and Android only look for the target of a touch inside a
+    /// view's bounds: platforms look in the descendants of views with an
+    /// area too, so children placed outside their parent (a dropdown under
+    /// its field) and the slop reaching out of it can be touched. Sent only
+    /// when it changes; from layout frames and hit slop (transforms are not
+    /// included).
     Overflow {
         /// View.
         id: NodeId,
@@ -848,7 +868,8 @@ pub enum MountItem {
     Keymap(std::sync::Arc<crate::keymap::Keymap>),
     /// The sticky cells of a list (replaces the previous set): each one
     /// is translated along the main axis by `clamp(offset - start, 0,
-    /// end - start)` on every scroll, natively.
+    /// end - start)` on every scroll, natively. The set is in the order
+    /// the cells stack, bottom to top (a built-in scroll bar last).
     StickyCells {
         /// The list.
         id: NodeId,

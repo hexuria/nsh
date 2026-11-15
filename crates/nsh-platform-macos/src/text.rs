@@ -1292,9 +1292,10 @@ pub(crate) struct DrawnText {
     pub(crate) layout: TextLayout,
     /// The content box in the view (inside padding and borders).
     pub(crate) content: nsh_core::Bounds<nsh_core::Points>,
-    /// It was last drawn in a layer narrower than its box (a view waiting
-    /// to be placed, `Mounter::unplaced`): its picture misses what passes
-    /// that layer, so it draws again once placed.
+    /// It was last drawn in a layer smaller than its box (a view waiting
+    /// to be placed, `Mounter::unplaced`, or animating up from a smaller
+    /// `LayoutAnimation` frame): its picture misses what passes that
+    /// layer, so it draws again as it grows.
     pub(crate) cut: std::cell::Cell<bool>,
     /// The selection of selectable text, kept across new content.
     selection: Option<Selection>,
@@ -1381,8 +1382,10 @@ pub(crate) fn selectable(state: &crate::view::ViewState) -> bool {
 }
 
 /// Draws a text view's text (in its content layer's `drawLayer:inContext:`;
-/// the context is y down).
-pub(crate) fn draw(cx: &CGContext, state: &crate::view::ViewState) {
+/// the context is y down). `layer` is that layer's size, which says whether
+/// the picture holds all of the text; the context's clip does not, as a
+/// redraw of a few recolored lines ([`damage`]) clips to them.
+pub(crate) fn draw(cx: &CGContext, state: &crate::view::ViewState, layer: CGSize) {
     use objc2_core_foundation::CGAffineTransform;
     let Some(drawn) = &state.text else { return };
     let Some(text) = drawn.layout.downcast::<CoreTextLayout>() else {
@@ -1390,10 +1393,13 @@ pub(crate) fn draw(cx: &CGContext, state: &crate::view::ViewState) {
     };
     let content = drawn.content;
     let c = Some(cx);
-    let drawn_width = CGContext::clip_bounding_box(c).size.width;
-    drawn
-        .cut
-        .set(drawn_width < (content.origin.x.0 + content.size.width.0) as CGFloat);
+    // A layer on its way to the box's size (a `LayoutAnimation`'s frames)
+    // counts as smaller even where its picture, in whole pixels, reaches
+    // the box: the text is drawn again at the size it stays at.
+    drawn.cut.set(
+        layer.width < (content.origin.x.0 + content.size.width.0) as CGFloat
+            || layer.height < (content.origin.y.0 + content.size.height.0) as CGFloat,
+    );
     CGContext::save_g_state(c);
     if drawn.text.has_backgrounds() {
         draw_backgrounds(cx, &drawn.text, text, content);
@@ -1405,8 +1411,11 @@ pub(crate) fn draw(cx: &CGContext, state: &crate::view::ViewState) {
         let alpha = (tint.0 & 0xff) as f32 / 255.0 * 0.3;
         let tint = Color((tint.0 & !0xff) | (alpha * 255.0).round() as u32);
         CGContext::set_fill_color_with_color(c, Some(&cg_color(tint)));
-        for rect in selection_rects(text, content, range) {
-            CGContext::fill_rect(c, rect);
+        // Hidden characters show no highlight, as nothing of them shows.
+        for shown in drawn.text.visible_ranges(range.0..range.1) {
+            for rect in selection_rects(text, content, (shown.start, shown.end)) {
+                CGContext::fill_rect(c, rect);
+            }
         }
     }
     // CoreText draws in a y-up space with the origin at the bottom of the
@@ -1935,8 +1944,8 @@ pub(crate) fn caret_at(state: &crate::view::ViewState, x: f32, y: f32) -> u32 {
 }
 
 /// The rectangles (view coordinates) the characters `start..end` of the
-/// text view with `state` cover, one per line (the test agent's spans).
-#[cfg(feature = "dev")]
+/// text view with `state` cover, one per line (the box of a selectable
+/// view's selection, the test agent's spans).
 pub(crate) fn range_rects(state: &crate::view::ViewState, start: u32, end: u32) -> Vec<CGRect> {
     let Some(drawn) = state.text.as_ref() else {
         return Vec::new();
@@ -2221,20 +2230,151 @@ pub(crate) fn selection_key(
 /// Copies the selection to the general pasteboard (the Edit menu's Copy).
 /// False if there is none.
 pub(crate) fn copy(surface: &crate::surface::Surface) -> bool {
-    let Some(text) = surface.selection.area.text().or_else(|| {
-        surface
-            .selection
-            .with_range()
-            .and_then(|v| selected_text(&v))
-    }) else {
+    write_selection(surface, &objc2_app_kit::NSPasteboard::generalPasteboard())
+}
+
+/// Puts the selected text on `board` (Copy, the Services menu). False if
+/// there is none.
+pub(crate) fn write_selection(
+    surface: &crate::surface::Surface,
+    board: &objc2_app_kit::NSPasteboard,
+) -> bool {
+    let Some(text) = selection_text(surface) else {
         return false;
     };
-    let board = objc2_app_kit::NSPasteboard::generalPasteboard();
     board.clearContents();
     // SAFETY: an immutable AppKit constant.
     let kind = unsafe { objc2_app_kit::NSPasteboardTypeString };
     board.setString_forType(&objc2_foundation::NSString::from_str(&text), kind);
     true
+}
+
+/// The selected text of the surface, if any.
+pub(crate) fn selection_text(surface: &crate::surface::Surface) -> Option<String> {
+    surface.selection.area.text().or_else(|| {
+        surface
+            .selection
+            .with_range()
+            .and_then(|v| selected_text(&v))
+    })
+}
+
+/// A secondary click on selectable text or in a selectable view: Copy
+/// (with a selection), Select All and, for selected text, Look Up, titled
+/// in AppKit's own words ([`appkit_title`]). The root view is a Services
+/// requestor for the selection (`validRequestorForSendType:returnType:`),
+/// available to AppKit Services. Context-menu plugins are enabled by
+/// default; their presentation depends on AppKit. Translate is not
+/// offered: `NSTextView`'s comes from a private framework, and the public
+/// translation UI is SwiftUI's only (`translationPresentation`). Returns
+/// once the menu closed.
+pub(crate) fn context_menu(surface: &crate::surface::Surface) {
+    use nsh_core::desktop::MenuRole;
+    use objc2::{MainThreadMarker, MainThreadOnly, sel};
+    use objc2_app_kit::{NSApplication, NSMenu, NSMenuItem, NSPasteboardTypeString};
+    use objc2_foundation::{NSArray, NSString};
+
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let app = NSApplication::sharedApplication(mtm);
+    let Some(event) = app.currentEvent() else {
+        return;
+    };
+    // SAFETY: an immutable AppKit constant.
+    let kind = unsafe { NSPasteboardTypeString };
+    // What the Services in the menu may ask the root view for.
+    app.registerServicesMenuSendTypes_returnTypes(&NSArray::from_slice(&[kind]), &NSArray::new());
+    let root = crate::input::event_root(surface);
+    let menu = NSMenu::new(mtm);
+    menu.setAutoenablesItems(false);
+    for (role, action, enabled) in [
+        (MenuRole::Copy, sel!(copy:), can_copy(surface)),
+        (MenuRole::SelectAll, sel!(selectAll:), true),
+    ] {
+        let title = appkit_title(role.label(), role.label());
+        // SAFETY: a new item with a valid selector.
+        let item = unsafe {
+            NSMenuItem::initWithTitle_action_keyEquivalent(
+                NSMenuItem::alloc(mtm),
+                &NSString::from_str(&title),
+                Some(action),
+                &NSString::new(),
+            )
+        };
+        // SAFETY: the root view answers both actions and outlives the menu.
+        unsafe { item.setTarget(Some(root.ns())) };
+        item.setEnabled(enabled);
+        menu.addItem(&item);
+    }
+    // Look Up (dictionary, Wikipedia, Siri Knowledge), the same panel as
+    // Force Click / Ctrl+Cmd+D.
+    if let Some(text) = selection_text(surface).filter(|t| !t.trim().is_empty()) {
+        menu.addItem(&NSMenuItem::separatorItem(mtm));
+        // SAFETY: a new item with a selector the root view implements.
+        let item = unsafe {
+            NSMenuItem::initWithTitle_action_keyEquivalent(
+                NSMenuItem::alloc(mtm),
+                &NSString::from_str(&look_up_title(&text, appkit_title)),
+                Some(sel!(nshLookUp:)),
+                &NSString::new(),
+            )
+        };
+        // SAFETY: the root view answers the action and outlives the menu.
+        unsafe { item.setTarget(Some(root.ns())) };
+        menu.addItem(&item);
+    }
+    NSMenu::popUpContextMenu_withEvent_forView(&menu, &event, root.ns());
+}
+
+/// The characters of a selection a Look Up title quotes, as many as
+/// `NSTextView`'s Look Up quotes.
+const LOOK_UP_QUOTED: usize = 30;
+
+/// The Look Up item's title for `text` (trimmed, its first
+/// [`LOOK_UP_QUOTED`] characters, then an ellipsis): AppKit's
+/// `Look Up “%@”` / `Look Up “%@…”`, which `localize` (key, English) turns
+/// into the app's language with the quote where that language puts it
+/// (Japanese: `“%@”を調べる`).
+fn look_up_title(text: &str, localize: impl Fn(&str, &str) -> String) -> String {
+    let text = text.trim();
+    let quoted: String = text.chars().take(LOOK_UP_QUOTED).collect();
+    // AppKit's keys spell the quotes and the ellipsis as `\U` escapes.
+    let (key, english) = if text.chars().count() > LOOK_UP_QUOTED {
+        (
+            "Look Up \\U201C%@\\U2026\\U201D",
+            "Look Up \u{201c}%@\u{2026}\u{201d}",
+        )
+    } else {
+        ("Look Up \\U201C%@\\U201D", "Look Up \u{201c}%@\u{201d}")
+    };
+    let template = localize(key, english);
+    let template = if template.contains("%@") {
+        template
+    } else {
+        english.to_owned()
+    };
+    template.replacen("%@", &quoted, 1)
+}
+
+/// An item title in AppKit's own words: its `MenuCommands` string for
+/// `key`, in the language AppKit shows the app's menus in (the app's
+/// localizations against the user's languages, as for `NSTextView`'s menu),
+/// or `english` where AppKit has none. Only the public `NSBundle` lookup.
+fn appkit_title(key: &str, english: &str) -> String {
+    use objc2_foundation::{NSBundle, NSString};
+    let english = NSString::from_str(english);
+    let Some(appkit) = NSBundle::bundleWithIdentifier(&NSString::from_str("com.apple.AppKit"))
+    else {
+        return english.to_string();
+    };
+    appkit
+        .localizedStringForKey_value_table(
+            &NSString::from_str(key),
+            Some(&english),
+            Some(&NSString::from_str("MenuCommands")),
+        )
+        .to_string()
 }
 
 /// Whether [`copy`] has a selection to copy.
@@ -2263,7 +2403,7 @@ fn selected_text(view: &crate::view::NshView) -> Option<String> {
     let state = view.state();
     let drawn = state.text.as_ref()?;
     let (a, b) = drawn.selection.as_ref()?.range.get()?;
-    Some(drawn.text.copied_text(a..b))
+    Some(drawn.text.copied_text(a..b)).filter(|t| !t.is_empty())
 }
 
 /// The selection from `anchor` (a range) to `caret`, by `unit`.
@@ -2464,6 +2604,11 @@ fn draw_glyphs(cx: &CGContext, line: &LaidLine, stretches: &mut Stretches<'_>) {
                 .get(kCTUnderlineStyleAttributeName)
                 .is_some();
             stretches.each(run, |range, style| {
+                // Nothing of a hidden run is drawn: not its color emoji,
+                // which keep their own colors, nor its underline.
+                if style.hidden {
+                    return;
+                }
                 if underlined {
                     let n = range.length as usize;
                     positions.clear();
@@ -2590,6 +2735,9 @@ fn draw_decorations(cx: &CGContext, line: &LaidLine, stretches: &mut Stretches<'
             }
             let mut positions = Vec::new();
             stretches.each(run, |range, span| {
+                if span.hidden {
+                    return;
+                }
                 positions.clear();
                 positions.resize(range.length as usize, CGPoint::new(0.0, 0.0));
                 run.positions(
@@ -2977,6 +3125,154 @@ mod tests {
             assert!(top >= lines[0].y.0 + lines[0].height.0 - 0.5, "{chip}");
             assert!(top + chip <= lines[2].y.0 + 0.5, "{chip}");
         }
+    }
+
+    /// A text drawn while its content layer is still at an earlier, smaller
+    /// frame (such as at the start of a `LayoutAnimation` that grows its
+    /// height) records `cut`, and clears it once drawn in a layer that
+    /// covers its whole content box.
+    #[test]
+    fn drawing_in_a_shorter_or_narrower_layer_marks_the_text_cut() {
+        use std::{cell::Cell, sync::Arc};
+
+        use nsh_core::{Bounds, Point, ViewKind};
+        use objc2_core_foundation::{CGFloat, CGPoint, CGRect, CGSize};
+        use objc2_core_graphics::{
+            CGBitmapContextCreate, CGColorSpace, CGContext, CGImageAlphaInfo, CGImageByteOrderInfo,
+            kCGColorSpaceSRGB,
+        };
+
+        let engine = CoreTextEngine::default();
+        let mut text = AttributedText::default();
+        text.push(
+            "Line one\nLine two\nLine three\nLine four",
+            ResolvedTextStyle {
+                font_size: Points(16.0),
+                line_height: Points(22.0),
+                ..ResolvedTextStyle::default()
+            },
+        );
+        let text = Arc::new(text);
+        let prepared = engine.prepare(&text);
+        let size = engine.measure(&prepared, Some(Points(200.0)));
+        let layout = engine.layout(&prepared, size);
+        let mut state = crate::view::ViewState::new(1, ViewKind::Text);
+        state.text = Some(super::DrawnText {
+            text,
+            layout,
+            content: Bounds::new(Point::default(), size),
+            cut: Cell::new(false),
+            selection: None,
+            area_range: Cell::new(None),
+        });
+
+        // Draws in a layer of `w` by `h`; `dirty` is the height a partial
+        // redraw (`setNeedsDisplayInRect`) clips to.
+        let draw_at = |w: usize, h: usize, dirty: Option<CGFloat>| {
+            // SAFETY: CoreGraphics allocates and owns the backing buffer.
+            let cx = unsafe {
+                let space = CGColorSpace::with_name(Some(kCGColorSpaceSRGB)).expect("sRGB");
+                CGBitmapContextCreate(
+                    std::ptr::null_mut(),
+                    w,
+                    h,
+                    8,
+                    w * 4,
+                    Some(&space),
+                    CGImageAlphaInfo::PremultipliedLast.0 | CGImageByteOrderInfo::Order32Big.0,
+                )
+            }
+            .expect("a bitmap context");
+            CGContext::translate_ctm(Some(&cx), 0.0, h as CGFloat);
+            CGContext::scale_ctm(Some(&cx), 1.0, -1.0);
+            if let Some(dirty) = dirty {
+                let part = CGRect::new(CGPoint::new(0.0, 0.0), CGSize::new(w as CGFloat, dirty));
+                CGContext::clip_to_rect(Some(&cx), part);
+            }
+            super::draw(&cx, &state, CGSize::new(w as CGFloat, h as CGFloat));
+            state.text.as_ref().unwrap().cut.get()
+        };
+
+        let full_w = size.width.0.ceil() as usize;
+        let full_h = size.height.0.ceil() as usize;
+        assert!(
+            draw_at(full_w, full_h / 2, None),
+            "shorter layer cuts the text"
+        );
+        assert!(
+            draw_at(full_w / 2, full_h, None),
+            "narrower layer cuts the text"
+        );
+        assert!(
+            !draw_at(full_w, full_h, None),
+            "full layer clears the cut mark"
+        );
+        // One recolored line drawn again in a layer that holds all of the
+        // text: the picture still covers it (`damage` stays partial).
+        assert!(
+            !draw_at(full_w, full_h, Some(22.0)),
+            "a partial redraw of a whole picture cuts nothing"
+        );
+    }
+}
+
+#[cfg(test)]
+mod selection_menu {
+    use super::{appkit_title, look_up_title};
+
+    /// The selection menu's keys are AppKit's: each one is in its
+    /// `MenuCommands` strings (a missing key would answer the fallback),
+    /// here in English, the test binary's only localization.
+    #[test]
+    fn the_selection_menu_titles_are_appkits_own() {
+        for (key, english) in [
+            ("Copy", "Copy"),
+            ("Select All", "Select All"),
+            ("Look Up \\U201C%@\\U201D", "Look Up \u{201c}%@\u{201d}"),
+            (
+                "Look Up \\U201C%@\\U2026\\U201D",
+                "Look Up \u{201c}%@\u{2026}\u{201d}",
+            ),
+        ] {
+            assert_eq!(appkit_title(key, "<none>"), english, "{key}");
+        }
+        assert_eq!(appkit_title("No Such Menu Command", "Fallback"), "Fallback");
+        assert_eq!(
+            look_up_title("  hello  ", appkit_title),
+            "Look Up \u{201c}hello\u{201d}"
+        );
+    }
+
+    /// Look Up quotes the first 30 characters, then an ellipsis, in the
+    /// order the language's template puts the quote.
+    #[test]
+    fn look_up_quotes_the_start_of_the_selection_where_the_language_puts_it() {
+        let japanese = |key: &str, _: &str| {
+            if key.contains("U2026") {
+                "\u{201c}%@\u{2026}\u{201d}を調べる".to_owned()
+            } else {
+                "\u{201c}%@\u{201d}を調べる".to_owned()
+            }
+        };
+        assert_eq!(
+            look_up_title("辞書", japanese),
+            "\u{201c}辞書\u{201d}を調べる"
+        );
+        let long = "abcdefghijklmnopqrstuvwxyz0123456789";
+        assert_eq!(
+            look_up_title(long, japanese),
+            "\u{201c}abcdefghijklmnopqrstuvwxyz0123\u{2026}\u{201d}を調べる"
+        );
+        let english = |_: &str, english: &str| english.to_owned();
+        assert_eq!(
+            look_up_title(&"x".repeat(30), english),
+            format!("Look Up \u{201c}{}\u{201d}", "x".repeat(30))
+        );
+        // A template without its placeholder keeps the English one.
+        assert_eq!(
+            look_up_title("word", |_: &str, _: &str| "Look Up".to_owned()),
+            "Look Up \u{201c}word\u{201d}"
+        );
     }
 }
 

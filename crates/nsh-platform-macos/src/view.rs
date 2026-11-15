@@ -60,7 +60,7 @@ use objc2_core_graphics::CGContext;
 use objc2_foundation::{
     NSArray, NSObject, NSObjectProtocol, NSPoint, NSRange, NSRect, NSSize, NSString,
 };
-use objc2_quartz_core::{CALayer, CALayerDelegate, CATransform3D, kCAGravityTopLeft};
+use objc2_quartz_core::{CALayer, CALayerDelegate, CATransform3D, kCAGravityBottomLeft};
 
 use crate::surface::{Surface, quiet};
 
@@ -167,7 +167,7 @@ pub(crate) struct ViewState {
 }
 
 impl ViewState {
-    fn new(id: NodeId, kind: ViewKind) -> Self {
+    pub(crate) fn new(id: NodeId, kind: ViewKind) -> Self {
         ViewState {
             id,
             kind,
@@ -413,10 +413,10 @@ define_class!(
                 CGContext::translate_ctm(c, -origin.x, -origin.y);
             } else if measuring && state.text.is_some() {
                 let start = std::time::Instant::now();
-                crate::text::draw(cx, &state);
+                crate::text::draw(cx, &state, layer.bounds().size);
                 crate::fps::painted("text", start.elapsed());
             } else {
-                crate::text::draw(cx, &state);
+                crate::text::draw(cx, &state, layer.bounds().size);
             }
             // What Core Animation redraws (all of it, or a canvas's part
             // that animated values changed), top down.
@@ -652,6 +652,12 @@ define_class!(
                 // The stops Tab reaches report it, as inputs do.
                 if view.id() != ROOT_ID {
                     surface.event(view.id(), nsh_core::EventKind::Focus, nsh_core::EventPayload::None);
+                    // A stop the keyboard or the app focuses scrolls into
+                    // view, as a field does; one a click focuses is
+                    // where the pointer is already, and stays.
+                    if !pressing(self.mtm()) {
+                        crate::scroll::reveal(&surface, &view);
+                    }
                 }
             }
             accepted
@@ -787,6 +793,58 @@ define_class!(
             }
         }
 
+        /// AppKit Services can take the selected text as plain text.
+        #[unsafe(method(validRequestorForSendType:returnType:))]
+        fn valid_requestor(
+            &self,
+            send: Option<&NSString>,
+            ret: Option<&NSString>,
+        ) -> *mut AnyObject {
+            // SAFETY: an immutable AppKit constant.
+            let text = unsafe { objc2_app_kit::NSPasteboardTypeString };
+            if ret.is_none()
+                && send.is_some_and(|t| t.isEqualToString(text))
+                && self.surface().is_some_and(|s| crate::text::can_copy(&s))
+            {
+                return self as *const Self as *mut AnyObject;
+            }
+            // SAFETY: NSResponder's own handling (asks the next responder).
+            unsafe { msg_send![super(self), validRequestorForSendType: send, returnType: ret] }
+        }
+
+        /// Look Up in a selection's context menu: the system dictionary /
+        /// knowledge panel for the selected text, at the mouse.
+        #[unsafe(method(nshLookUp:))]
+        fn look_up(&self, _sender: Option<&AnyObject>) {
+            let Some(text) = self.surface().and_then(|s| crate::text::selection_text(&s)) else {
+                return;
+            };
+            let Some(window) = self.window() else {
+                return;
+            };
+            let at = self.convertPoint_fromView(window.mouseLocationOutsideOfEventStream(), None);
+            let string = NSString::from_str(&text);
+            // SAFETY: a new attributed string from a valid NSString; the
+            // NSView method takes it and a point in view coordinates.
+            unsafe {
+                let attributed: *mut AnyObject = msg_send![objc2::class!(NSAttributedString), alloc];
+                let attributed: *mut AnyObject = msg_send![attributed, initWithString: &*string];
+                let _: () = msg_send![self, showDefinitionForAttributedString: attributed, atPoint: at];
+                let _: () = msg_send![attributed, release];
+            }
+        }
+
+        /// A service takes the selected text.
+        #[unsafe(method(writeSelectionToPasteboard:types:))]
+        fn write_selection_to_pasteboard(
+            &self,
+            board: &objc2_app_kit::NSPasteboard,
+            _types: &NSArray<NSString>,
+        ) -> bool {
+            self.surface()
+                .is_some_and(|s| crate::text::write_selection(&s, board))
+        }
+
         #[unsafe(method(keyDown:))]
         fn key_down(&self, event: &NSEvent) {
             let handled = self.keyboard_surface().is_some_and(|surface| {
@@ -878,7 +936,8 @@ define_class!(
             })
         }
 
-        // What VoiceOver reaches of the children ([`crate::access::reached`]).
+        // What VoiceOver reaches of the children ([`crate::access::reached`]),
+        // in the order they are on screen ([`crate::access::in_reading_order`]).
         #[unsafe(method_id(accessibilityChildren))]
         fn accessibility_children(&self) -> Option<Retained<NSArray>> {
             let reached = self
@@ -886,14 +945,49 @@ define_class!(
                 .state
                 .try_borrow()
                 .map_or(crate::access::Reached::All, |s| crate::access::reached(&s));
-            // SAFETY: NSView's own children.
             let all = || -> Option<Retained<NSArray>> {
-                unsafe { msg_send![super(self), accessibilityChildren] }
+                // SAFETY: NSView's own children.
+                let all = unsafe { msg_send![super(self), accessibilityChildren] };
+                crate::access::in_reading_order(&NshView(self.retain()), all)
             };
             match reached {
-                crate::access::Reached::All => all(),
+                crate::access::Reached::All => {
+                    crate::access::scroll_bar::with_bar(&NshView(self.retain()), all())
+                }
                 crate::access::Reached::Controls => Some(crate::access::controls(all())),
                 crate::access::Reached::None => Some(NSArray::new()),
+            }
+        }
+
+        // `AXInvalid` beside AppKit's attributes while the content is
+        // invalid ([`crate::access::invalid`]): NSAccessibility has no
+        // property for it, so it is answered here, as WebKit does.
+        #[unsafe(method_id(accessibilityAttributeNames))]
+        fn accessibility_attribute_names(&self) -> Retained<NSArray> {
+            // SAFETY: NSView's own attributes, from its NSAccessibility
+            // properties.
+            let names: Retained<NSArray> =
+                unsafe { msg_send![super(self), accessibilityAttributeNames] };
+            if self.ivars().state.try_borrow().is_ok_and(|s| crate::access::invalid(&s)) {
+                let name = NSString::from_str(crate::access::INVALID_ATTRIBUTE);
+                // SAFETY: an array of attribute names, which are strings.
+                unsafe { msg_send![&*names, arrayByAddingObject: &*name] }
+            } else {
+                names
+            }
+        }
+
+        #[unsafe(method_id(accessibilityAttributeValue:))]
+        fn accessibility_attribute_value(&self, attribute: &NSString) -> Option<Retained<AnyObject>> {
+            if attribute.to_string() == crate::access::INVALID_ATTRIBUTE {
+                let invalid =
+                    self.ivars().state.try_borrow().is_ok_and(|s| crate::access::invalid(&s));
+                let value = NSString::from_str(if invalid { "true" } else { "false" });
+                Some(Retained::into_super(Retained::into_super(value)))
+            } else {
+                // SAFETY: NSView's own answer, from its NSAccessibility
+                // properties.
+                unsafe { msg_send![super(self), accessibilityAttributeValue: attribute] }
             }
         }
 
@@ -922,6 +1016,19 @@ define_class!(
                 crate::access::content_value(&NshView(self.retain()))
                     .map(|name| Retained::into_super(Retained::into_super(NSString::from_str(&name))))
             })
+        }
+
+        // A scroll area's bar on its axis ([`crate::access::scroll_bar`]).
+        #[unsafe(method_id(accessibilityVerticalScrollBar))]
+        fn accessibility_vertical_scroll_bar(&self) -> Option<Retained<AnyObject>> {
+            crate::access::scroll_bar::bar(&NshView(self.retain()), true)
+                .map(|bar| bar.into_super().into_super().into_super())
+        }
+
+        #[unsafe(method_id(accessibilityHorizontalScrollBar))]
+        fn accessibility_horizontal_scroll_bar(&self) -> Option<Retained<AnyObject>> {
+            crate::access::scroll_bar::bar(&NshView(self.retain()), false)
+                .map(|bar| bar.into_super().into_super().into_super())
         }
 
         #[unsafe(method_id(accessibilityRows))]
@@ -1500,6 +1607,11 @@ impl NshView {
     /// are reported as the window's ([`crate::window`]).
     pub(crate) fn set_window_of(&self, surface: Weak<Surface>) {
         *self.ivars().window.borrow_mut() = surface;
+        // The root may already be attached: viewDidMoveToWindow ran
+        // before it belonged to this surface's window.
+        if self.ivars().window.borrow().strong_count() > 0 {
+            self.0.install_tracking();
+        }
     }
 
     /// From an AppKit view of ours, if it is one.
@@ -1808,10 +1920,13 @@ impl NshView {
         // costly: on the Stocks demo main-thread time per frame went from
         // 3.5 to 1.8 ms).
         layer.setDrawsAsynchronously(false);
-        // A text keeps its picture through another width of the same lines:
-        // never stretched. The rest draw again at their new size.
+        // A text keeps its picture through another size that still covers
+        // it: never stretched, pinned to the visual top left (under the
+        // flipped host layer Core Animation's vertical gravities are
+        // inverted, so `kCAGravityBottomLeft` is the top left). The rest
+        // draw again at their new size.
         if self.state().text.is_some() {
-            layer.setContentsGravity(unsafe { kCAGravityTopLeft });
+            layer.setContentsGravity(unsafe { kCAGravityBottomLeft });
         }
         layer.setContentsScale(self.backing_scale());
         // Above the decoration behind it (fills, gradients, inset
@@ -2022,6 +2137,9 @@ impl NshView {
             self.size_container();
             crate::native::resized(self);
             self.place_natives();
+            if self.kind() == ViewKind::Input {
+                crate::text_input::resized(self);
+            }
             let resized = self
                 .ivars()
                 .content
@@ -2204,6 +2322,26 @@ impl NshView {
             && !s.live.as_ref().is_some_and(|l| l.dying())
             // A screen under the top one, a modal leaving.
             && !self.ns().isHidden()
+    }
+
+    /// Whether the keyboard may reach it, as the headless driver's Tab
+    /// stops are views it shows: it has an area, and neither it nor a view
+    /// around it is `visibility: hidden`. Neither `display: none` (an empty
+    /// frame on each view it holds) nor `visibility: hidden` (hidden
+    /// layers) hides an NSView, so AppKit's key view loop still holds them.
+    pub(crate) fn seen_by_keys(&self) -> bool {
+        let size = self.state().frame.size;
+        if size.width <= Points(0.0) || size.height <= Points(0.0) {
+            return false;
+        }
+        let mut at = Some(self.clone());
+        while let Some(view) = at {
+            if view.state().style.hidden {
+                return false;
+            }
+            at = view.parent_view();
+        }
+        true
     }
 
     /// An object for `msg_send!` calls AppKit's bindings lack.
