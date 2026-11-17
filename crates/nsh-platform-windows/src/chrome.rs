@@ -1703,7 +1703,7 @@ pub(crate) fn fire_menu_keybinding(
         .clone()
         .ok_or("the application menu is unavailable")?;
     let (id, role) = resolve_menu_keybinding(&items, action_id, path)?;
-    choose(surface, id, role);
+    choose(surface, id, role, None);
     Ok(())
 }
 
