@@ -57,8 +57,9 @@
 //!   `/etc/timezone`'s;
 //! - the tray (`Tray.available()`): whether a panel hosts
 //!   StatusNotifierItems, that is whether `org.kde.StatusNotifierWatcher`
-//!   has an owner on the session bus: asked once at start, then followed
-//!   (a panel that starts, quits or restarts).
+//!   has an owner on the session bus: followed from the start (false
+//!   until the bus answers, so start-up waits on no round trip), through a
+//!   panel that starts, quits or restarts ([`watch_name`]).
 //!
 //! Safe area and keyboard height are zero: desktop windows have neither.
 //!
@@ -781,26 +782,36 @@ pub(crate) fn name_has_owner(name: &str) -> bool {
     .is_some_and(|(owned,)| owned)
 }
 
-/// Follows whether a panel hosts tray icons (`Tray.available()`): asked at
-/// once, so the first environment has it, then watched.
-fn watch_tray_host() {
-    let host = name_has_owner(crate::tray::WATCHER);
-    SYSTEM.with(|s| s.borrow_mut().tray_host = host);
-    // For the life of the process: its id is never given back.
+/// Follows whether `name` has an owner on the session bus: `changed` runs
+/// each time the answer differs from the last one (`known` at first: what
+/// the caller holds now, `None` when nothing). GLib answers a new watch on
+/// the main loop's next turns, also when the name is owned already, so
+/// this waits on no round trip. For the life of the process: the watch's
+/// id is never given back.
+pub(crate) fn watch_name(name: &str, known: Option<bool>, changed: impl Fn(bool) + 'static) {
+    let told = Cell::new(known);
+    let tell = Rc::new(move |up: bool| {
+        if told.replace(Some(up)) != Some(up) {
+            changed(up);
+        }
+    });
+    let vanished = tell.clone();
     gio::bus_watch_name(
         gio::BusType::Session,
-        crate::tray::WATCHER,
+        name,
         gio::BusNameWatcherFlags::NONE,
-        |_, _, _| tray_host(true),
-        |_, _| tray_host(false),
+        move |_, _, _| tell(true),
+        move |_, _| vanished(false),
     );
 }
 
-fn tray_host(on: bool) {
-    let changed = SYSTEM.with(|s| std::mem::replace(&mut s.borrow_mut().tray_host, on) != on);
-    if changed {
+/// Follows whether a panel hosts tray icons (`Tray.available()`): false
+/// until the bus answers, so start-up waits on no round trip.
+fn watch_tray_host() {
+    watch_name(crate::tray::WATCHER, Some(false), |on| {
+        SYSTEM.with(|s| s.borrow_mut().tray_host = on);
         system_changed();
-    }
+    });
 }
 
 /// Follows AT-SPI's `ScreenReaderEnabled` (Orca and the like set it).

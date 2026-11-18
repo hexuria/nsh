@@ -689,6 +689,11 @@ impl Builder<'_> {
     }
 }
 
+/// Whether the app set an application menu on `surface`.
+pub(crate) fn has_menu(surface: &Surface) -> bool {
+    surface.chrome.menu.borrow().is_some()
+}
+
 /// KDE's Global Menu came or went ([`crate::global_menu`]): the menu is
 /// exported to it again, or given back to the window's menu bar.
 pub(crate) fn menu_place_changed(surface: &Rc<Surface>) {
@@ -788,11 +793,11 @@ fn set_menu_bar(surface: &Rc<Surface>, model: Option<&gio::Menu>) {
 }
 
 /// The menu bar shows unless the title bar is hidden, the window is in
-/// full screen, or the menu is in KDE's Global Menu.
-fn show_menu_bar(surface: &Surface) {
+/// full screen, or its menu is in KDE's Global Menu.
+pub(crate) fn show_menu_bar(surface: &Surface) {
     let fullscreen = window(surface).is_some_and(|w| w.is_fullscreen());
     if let Some(bar) = &*surface.chrome.bar.borrow() {
-        bar.set_visible(!hidden(surface) && !fullscreen && !crate::global_menu::active());
+        bar.set_visible(!hidden(surface) && !fullscreen && !crate::global_menu::active(surface));
     }
 }
 

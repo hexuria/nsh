@@ -169,7 +169,7 @@ describe("the cart", () => {
 | `modules` | 无 | 按模块标识替换应用导入的原生模块的导出：见[替换原生模块](#替换原生模块)。仅限 headless 运行。 |
 | `url` | 无 | 启动应用的链接：应用认领了它的 scheme（`nsh.json` 的 `schemes`）时，`UrlScheme.on("open")` 会像从系统那里一样收到它（[UrlScheme](../modules/nsh.md#urlscheme)）。仅限 headless 运行。 |
 | `tray` | `true` | 系统是否显示应用的托盘图标（`Tray.available()`；非桌面平台无论此项如何都为 `false`）：`false` 模拟面板不承载托盘图标的桌面，例如没有 AppIndicator 扩展的 GNOME。仅限 headless 运行。 |
-| `globalMenu` | `false` | 应用菜单是否在桌面的全局菜单栏中（`Menu.inGlobalMenu()`）：`true` 模拟带全局菜单小部件的 KDE Plasma。仅限 headless 运行。 |
+| `globalMenu` | `false` | 应用菜单是否在桌面的全局菜单栏中（`Menu.inGlobalMenu()`）：`true` 模拟带全局菜单小部件的 KDE Plasma，因此只在 `platform: "linux"` 下生效（其他平台 `Menu.inGlobalMenu()` 始终为 `false`）。仅限 headless 运行。 |
 
 ### 扮演宿主应用
 

@@ -25,6 +25,11 @@
 //!   GTK makes the window's surface anew (it realizes it again).
 //! - While exported, GTK's `PopoverMenuBar` never shows (the menu is in the
 //!   panel); its shortcuts stay on the window.
+//! - **One export a thread**: with several surfaces (an app's window and an
+//!   embedded view), the export is the surface's that has a menu, the last
+//!   to set one when several do; a surface without a menu leaves it be
+//!   ([`left_to_another`]). Only the exporting surface hides its bar and
+//!   says `Menu.inGlobalMenu()`.
 //!
 //! Without the `global-menu` feature (no X11 or Wayland bindings), the
 //! window cannot be tied to the menu, so [`available`] is false.
@@ -84,25 +89,18 @@ fn registrar_up() -> bool {
     if let Some(up) = REGISTRAR_UP.get() {
         return up;
     }
+    // Asked at once (one round trip), so the first frame knows where the
+    // menu is; then followed.
     let up = crate::system::name_has_owner(REGISTRAR);
     REGISTRAR_UP.set(Some(up));
-    // For the life of the process: its id is never given back.
-    gio::bus_watch_name(
-        gio::BusType::Session,
-        REGISTRAR,
-        gio::BusNameWatcherFlags::NONE,
-        |_, _, _| registrar_changed(true),
-        |_, _| registrar_changed(false),
-    );
+    crate::system::watch_name(REGISTRAR, Some(up), registrar_changed);
     up
 }
 
 /// A Global Menu widget came or went: every surface places its menu again
 /// (exported and tied, or back in the window's bar).
 fn registrar_changed(up: bool) {
-    if REGISTRAR_UP.replace(Some(up)) == Some(up) {
-        return;
-    }
+    REGISTRAR_UP.set(Some(up));
     for surface in crate::system::surfaces() {
         crate::chrome::menu_place_changed(&surface);
     }
@@ -150,23 +148,51 @@ thread_local! {
     static REGISTRAR_UP: Cell<Option<bool>> = const { Cell::new(None) };
 }
 
-/// The menu is in the Global Menu: exported, and the window tied to it.
-/// The window then shows no menu bar, and `Menu.inGlobalMenu()` is true.
-pub(crate) fn active() -> bool {
+/// `surface`'s menu is in the Global Menu: exported, and its window tied
+/// to it. That window then shows no menu bar, and its `Menu.inGlobalMenu()`
+/// is true. The export is one per thread: another surface's window keeps
+/// its own bar.
+pub(crate) fn active(surface: &Surface) -> bool {
     available()
         && EXPORT.with(|e| {
-            e.borrow()
-                .as_ref()
-                .and_then(|x| x.tied.as_ref())
-                .is_some_and(|(_, tie)| !matches!(tie, Tie::None))
+            e.borrow().as_ref().is_some_and(|x| {
+                std::ptr::eq(x.surface.as_ptr(), surface)
+                    && x.tied
+                        .as_ref()
+                        .is_some_and(|(_, tie)| !matches!(tie, Tie::None))
+            })
         })
 }
 
 /// Tells the app where its menu is (`Menu.inGlobalMenu()`).
 fn report(surface: &Surface) {
     let mut env = surface.environment.get();
-    env.global_menu = active();
+    env.global_menu = active(surface);
     surface.set_environment(env);
+}
+
+/// The surface the export is for, while it lives.
+fn owner() -> Option<std::rc::Rc<Surface>> {
+    EXPORT.with(|e| e.borrow().as_ref().and_then(|x| x.surface.upgrade()))
+}
+
+/// A surface without a menu leaves the export to one that has a menu (an
+/// app's window beside an embedded view): were it to export its empty
+/// menu, the app's would leave the panel. True when `surface` is such a
+/// one; had it the export (its menu was just removed), the export goes to
+/// the first surface with a menu.
+fn left_to_another(surface: &std::rc::Rc<Surface>) -> bool {
+    let another = crate::system::surfaces()
+        .into_iter()
+        .find(|s| !std::rc::Rc::ptr_eq(s, surface) && crate::chrome::has_menu(s));
+    let Some(another) = another else {
+        return false;
+    };
+    if owner().is_some_and(|o| std::rc::Rc::ptr_eq(&o, surface)) {
+        drop(EXPORT.with(|e| e.borrow_mut().take()));
+        crate::chrome::menu_place_changed(&another);
+    }
+    true
 }
 
 /// Exports `items` (none: an empty menu) for `window`'s Global Menu, and
@@ -183,6 +209,12 @@ pub(crate) fn export(
         report(surface);
         return false;
     }
+    if items.is_none() && left_to_another(surface) {
+        report(surface);
+        return false;
+    }
+    // The surface that had the export, when it passes to this one.
+    let before = owner().filter(|o| !std::rc::Rc::ptr_eq(o, surface));
     let entries = tray::number(items.unwrap_or(&[]), true);
     let made = EXPORT.with(|e| {
         let mut e = e.borrow_mut();
@@ -211,6 +243,11 @@ pub(crate) fn export(
         tie(window);
     }
     report(surface);
+    if let Some(before) = before {
+        // Its menu left the panel: its window's bar shows again.
+        report(&before);
+        crate::chrome::show_menu_bar(&before);
+    }
     made
 }
 

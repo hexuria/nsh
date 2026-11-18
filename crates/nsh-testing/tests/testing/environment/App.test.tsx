@@ -49,6 +49,11 @@ test("a desktop has a tray and its own menu bar unless open says otherwise", asy
   // Off the desktops there is no tray, whatever the platform reports.
   const phone = await open("./App.tsx", { platform: "ios" });
   await phone.waitFor("Desktop: menu bar own, tray false");
+  // Only Linux has a global menu bar the menu moves to.
+  const mac = await open("./App.tsx", { platform: "macos", globalMenu: true });
+  await mac.waitFor("Desktop: menu bar own, tray true");
+  const pad = await open("./App.tsx", { platform: "ios", globalMenu: true });
+  await pad.waitFor("Desktop: menu bar own, tray false");
 });
 
 test("the regional preferences follow the system's", async () => {
