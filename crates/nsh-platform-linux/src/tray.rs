@@ -794,6 +794,21 @@ mod tests {
     }
 
     #[test]
+    fn an_event_group_reports_every_clicked_item_in_order() {
+        let event = |id: i32, name: &str| (id, name.to_owned(), 0i32.to_variant(), 0u32);
+        let events = vec![
+            event(3, "clicked"),
+            event(5, "hovered"),
+            event(7, "clicked"),
+        ];
+        let params = (events,).to_variant();
+        assert_eq!(params.type_().as_str(), "(a(isvu))");
+        let mut clicked = Vec::new();
+        dbusmenu_call(&[], 1, "EventGroup", &params, &mut |id| clicked.push(id));
+        assert_eq!(clicked, vec![3, 7]);
+    }
+
+    #[test]
     fn group_properties_obeys_dbusmenu_signature() {
         let args = (Vec::<i32>::new(), Vec::<String>::new()).to_variant();
         let response = menu_call("GetGroupProperties", &args).unwrap();

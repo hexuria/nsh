@@ -224,17 +224,19 @@ fn publish(surface: &std::rc::Rc<Surface>, entries: Vec<Entry>) -> Option<Export
     let registration = bus
         .register_object(MENU_PATH, &interface)
         .method_call(|_, _, _, _, method, params, invocation| {
-            let mut chosen = None;
+            // Every item an `EventGroup` clicked, in order (outside the
+            // borrow: `clicked` reads the export too).
+            let mut chosen = Vec::new();
             let reply = EXPORT.with(|e| {
                 let e = e.borrow();
                 let (entries, revision) = e
                     .as_ref()
                     .map_or((&[][..], 0), |x| (&x.entries[..], x.revision));
                 tray::dbusmenu_call(entries, revision, method, &params, &mut |id| {
-                    chosen = Some(id)
+                    chosen.push(id)
                 })
             });
-            if let Some(id) = chosen {
+            for id in chosen {
                 clicked(id);
             }
             invocation.return_value(reply.as_ref());
