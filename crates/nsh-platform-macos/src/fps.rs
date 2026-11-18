@@ -244,8 +244,10 @@ define_class!(
             // Window points grow right and up: moving right shrinks the
             // gap to the right edge, moving up shrinks the gap to the top.
             let place = (right - (at.x - start.x), top - (at.y - start.y));
-            PLACE.with(|p| p.set(Some(place)));
-            place_panel(self, place);
+            // Kept where it shows: a drag past an edge leaves it at the
+            // edge, for the next drag and the next layout.
+            let shown = place_panel(self, place);
+            PLACE.with(|p| p.set(Some(shown)));
         }
 
         #[unsafe(method(mouseUp:))]
@@ -278,10 +280,11 @@ fn toggle(key: u64) {
 }
 
 /// Puts the panel `(right, top)` points from its superview's top-right
-/// corner, kept inside the superview (not flipped: y grows upwards).
-fn place_panel(panel: &NSView, (right, top): (CGFloat, CGFloat)) {
+/// corner, kept inside the superview (not flipped: y grows upwards);
+/// returns where it is, as the distances from that corner.
+fn place_panel(panel: &NSView, (right, top): (CGFloat, CGFloat)) -> (CGFloat, CGFloat) {
     let Some(parent) = crate::view::superview(panel) else {
-        return;
+        return (right, top);
     };
     let bounds = parent.bounds();
     let size = panel.frame().size;
@@ -290,6 +293,10 @@ fn place_panel(panel: &NSView, (right, top): (CGFloat, CGFloat)) {
     let y = (bounds.size.height - size.height - top)
         .clamp(0.0, (bounds.size.height - size.height).max(0.0));
     panel.setFrameOrigin(NSPoint::new(x, y));
+    (
+        bounds.size.width - size.width - x,
+        bounds.size.height - size.height - y,
+    )
 }
 
 /// What the trace draws: frame costs (ms) and the budget (ms).
