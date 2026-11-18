@@ -13,12 +13,16 @@ repository.workspace = true
 workspace = true
 
 [features]
-default = ["js", "shader", "editor", "emoji-picker", "highlight", "math", "plot", "rich-editor", "term", "zlib", "crypto", "websocket", "updater", "svg", "net", "sound"]
+default = ["global-menu", "js", "shader", "editor", "emoji-picker", "highlight", "math", "plot", "rich-editor", "term", "zlib", "crypto", "websocket", "updater", "svg", "net", "sound"]
+# KDE Plasma's Global Menu: the application menu exported over D-Bus
+# (dbusmenu) and tied to the window with KWin's Wayland `appmenu` protocol
+# or the X11 registrar. Needs GTK built with its X11 and Wayland backends.
+global-menu = ["dep:gdk4-x11", "dep:gdk4-wayland", "dep:wayland-client", "dep:wayland-protocols-plasma"]
 # JS apps (bundles, signed packages); without it, the library only runs a
 # Rust app and links no QuickJS.
 js = ["nsh-engine/js-core"]
 # Development support: dev server client, log forwarding, error overlay.
-dev = ["js", "shader", "editor", "emoji-picker", "highlight", "math", "plot", "rich-editor", "term", "zlib", "crypto", "websocket", "updater", "dep:nsh-dev", "dep:nsh-testing", "svg", "net", "sound"]
+dev = ["global-menu", "js", "shader", "editor", "emoji-picker", "highlight", "math", "plot", "rich-editor", "term", "zlib", "crypto", "websocket", "updater", "dep:nsh-dev", "dep:nsh-testing", "svg", "net", "sound"]
 # GPUI-agent is linked only into development hosts, never release apps.
 dev-agent = ["dev", "dep:nsh-gpui-agent", "nsh-gpui-agent/dev-agent"]
 # Web views with WebKitGTK 6.0 (`libwebkitgtk-6.0-dev` to build,
@@ -95,3 +99,7 @@ nsh-gpui-agent = { workspace = true, optional = true }
 # 2.42: downloads (`WebKitDownload`), which the web view's destination
 # decisions use.
 webkit6 = { workspace = true, optional = true, features = ["v2_42"] }
+gdk4-x11 = { version = "0.11", optional = true }
+gdk4-wayland = { version = "0.11", features = ["wayland_crate"], optional = true }
+wayland-client = { version = "0.31", optional = true }
+wayland-protocols-plasma = { version = "0.3", features = ["client"], optional = true }

@@ -25,7 +25,7 @@
 //!   extension, Unity, MATE, Budgie) draw it right of the icon, whatever
 //!   `title_placement` says; the others show the icon alone.
 
-use std::{cell::RefCell, rc::Weak, sync::Arc};
+use std::{cell::RefCell, rc::Weak};
 
 use gtk4::{gdk, gio, glib, prelude::*};
 use nsh_core::{
@@ -40,11 +40,11 @@ const MENU_PATH: &str = "/MenuBar";
 const WATCHER: &str = "org.kde.StatusNotifierWatcher";
 const WATCHER_PATH: &str = "/StatusNotifierWatcher";
 const ITEM_INTERFACE: &str = "org.kde.StatusNotifierItem";
-const MENU_INTERFACE: &str = "com.canonical.dbusmenu";
+pub(crate) const MENU_INTERFACE: &str = "com.canonical.dbusmenu";
 /// The sizes the icon is sent at, in pixels: panels pick the nearest.
 const SIDES: [u32; 3] = [16, 24, 32];
 
-const XML: &str = r#"<node>
+pub(crate) const XML: &str = r#"<node>
   <interface name="org.kde.StatusNotifierItem">
     <property name="Category" type="s" access="read"/>
     <property name="Id" type="s" access="read"/>
@@ -120,14 +120,15 @@ const XML: &str = r#"<node>
   </interface>
 </node>"#;
 
-/// A menu entry as dbusmenu numbers it (the root is 0).
-struct Entry {
+/// A menu entry as dbusmenu numbers it (the root is 0). Also the
+/// application menu's, in the Global Menu ([`crate::global_menu`]).
+pub(crate) struct Entry {
     /// The parent's number.
     parent: i32,
     /// Its properties.
     props: glib::Variant,
     /// The action's id (0: none) and role, for a chosen item.
-    action: Option<(u32, Option<MenuRole>)>,
+    pub(crate) action: Option<(u32, Option<MenuRole>)>,
 }
 
 /// The tray, while the app has one.
@@ -171,7 +172,7 @@ pub(crate) fn set(surface: &std::rc::Rc<Surface>, tray: Option<&Tray>) {
         return;
     };
     let (app_id, app_name) = crate::notifications::app();
-    let mut entries = Some(number(&tray.menu));
+    let mut entries = Some(number(&tray.menu, false));
     let changed = TRAY.with(|t| {
         let mut t = t.borrow_mut();
         let Some(shown) = t.as_mut() else {
@@ -505,10 +506,18 @@ fn item_call(method: &str, params: &glib::Variant) -> Option<glib::Variant> {
 
 // --- dbusmenu -----------------------------------------------------------------------------
 
-/// Numbers `items` for dbusmenu, depth first.
-fn number(items: &Arc<[MenuItem]>) -> Vec<Entry> {
-    fn walk(items: &[MenuItem], parent: i32, out: &mut Vec<Entry>) {
+/// Numbers `items` for dbusmenu, depth first. `bar`: the application
+/// menu (the Global Menu): items carry their shortcuts, and the roles Linux
+/// has no use for are left out, as in the menu bar ([`crate::chrome`]).
+pub(crate) fn number(items: &[MenuItem], bar: bool) -> Vec<Entry> {
+    fn walk(items: &[MenuItem], parent: i32, bar: bool, out: &mut Vec<Entry>) {
         for item in items {
+            if bar
+                && let MenuItem::Action(a) = item
+                && crate::chrome::unsupported(a.role)
+            {
+                continue;
+            }
             let dict = glib::VariantDict::new(None);
             let mut action = None;
             let mut children: Option<&[MenuItem]> = None;
@@ -525,6 +534,9 @@ fn number(items: &Arc<[MenuItem]>) -> Vec<Entry> {
                     if let Some(checked) = a.checked {
                         dict.insert("toggle-type", "checkmark");
                         dict.insert("toggle-state", i32::from(checked));
+                    }
+                    if bar && let Some(keys) = a.shortcut.as_ref().and_then(shortcut_keys) {
+                        dict.insert("shortcut", vec![keys]);
                     }
                     action = Some((a.id, a.role));
                 }
@@ -547,13 +559,28 @@ fn number(items: &Arc<[MenuItem]>) -> Vec<Entry> {
             });
             let number = out.len() as i32;
             if let Some(children) = children {
-                walk(children, number, out);
+                walk(children, number, bar, out);
             }
         }
     }
     let mut out = Vec::new();
-    walk(items, 0, &mut out);
+    walk(items, 0, bar, &mut out);
     out
+}
+
+/// A shortcut as dbusmenu writes it: the modifiers, then the key's X keysym
+/// name (`["Control", "Shift", "n"]`), from its GTK accelerator.
+pub(crate) fn shortcut_keys(shortcut: &nsh_core::desktop::Shortcut) -> Option<Vec<String>> {
+    let accel = crate::chrome::accelerator(shortcut)?;
+    let mut keys = Vec::new();
+    let mut rest = accel.as_str();
+    while let Some(after) = rest.strip_prefix('<') {
+        let (name, tail) = after.split_once('>')?;
+        keys.push(name.to_owned());
+        rest = tail;
+    }
+    keys.push(rest.to_owned());
+    Some(keys)
 }
 
 /// A role's label, for an item that has none.
@@ -575,7 +602,7 @@ fn role_label(role: MenuRole) -> &'static str {
 }
 
 /// Entry `id`'s layout, `depth` levels of children deep (-1: all).
-fn layout(entries: &[Entry], id: i32, depth: i32) -> glib::Variant {
+pub(crate) fn layout(entries: &[Entry], id: i32, depth: i32) -> glib::Variant {
     let props = match id {
         0 => {
             let dict = glib::VariantDict::new(None);
@@ -603,7 +630,7 @@ fn layout(entries: &[Entry], id: i32, depth: i32) -> glib::Variant {
     ])
 }
 
-fn menu_property(name: &str) -> glib::Variant {
+pub(crate) fn menu_property(name: &str) -> glib::Variant {
     match name {
         "Version" => 3u32.to_variant(),
         "TextDirection" => "ltr".to_variant(),
@@ -614,48 +641,51 @@ fn menu_property(name: &str) -> glib::Variant {
 }
 
 fn menu_call(method: &str, params: &glib::Variant) -> Option<glib::Variant> {
+    TRAY.with(|t| {
+        let t = t.borrow();
+        let (entries, revision) = t
+            .as_ref()
+            .map_or((&[][..], 0), |s| (&s.entries[..], s.revision));
+        dbusmenu_call(entries, revision, method, params, &mut |id| clicked(id))
+    })
+}
+
+/// Answers a `com.canonical.dbusmenu` call on `entries` (at `revision`);
+/// `clicked` hears each entry chosen (call it back out of the bus call).
+pub(crate) fn dbusmenu_call(
+    entries: &[Entry],
+    revision: u32,
+    method: &str,
+    params: &glib::Variant,
+    clicked: &mut dyn FnMut(i32),
+) -> Option<glib::Variant> {
+    let entry = |id: i32| entries.get(usize::try_from(id).ok()?.checked_sub(1)?);
     match method {
         "GetLayout" => {
             let (parent, depth, _) = params.get::<(i32, i32, Vec<String>)>()?;
-            TRAY.with(|t| {
-                let t = t.borrow();
-                let (entries, revision) = t
-                    .as_ref()
-                    .map_or((&[][..], 0), |s| (&s.entries[..], s.revision));
-                Some(glib::Variant::tuple_from_iter([
-                    revision.to_variant(),
-                    layout(entries, parent, depth),
-                ]))
-            })
+            Some(glib::Variant::tuple_from_iter([
+                revision.to_variant(),
+                layout(entries, parent, depth),
+            ]))
         }
         "GetGroupProperties" => {
             let (ids, _) = params.get::<(Vec<i32>, Vec<String>)>()?;
-            TRAY.with(|t| {
-                let t = t.borrow();
-                let entries = t.as_ref().map_or(&[][..], |s| &s.entries[..]);
-                let found = ids.into_iter().filter_map(|id| {
-                    let e = entries.get(usize::try_from(id).ok()?.checked_sub(1)?)?;
-                    Some(glib::Variant::tuple_from_iter([
-                        id.to_variant(),
-                        e.props.clone(),
-                    ]))
-                });
-                let ty = glib::VariantTy::new("(ia{sv})").expect("a valid type");
+            let found = ids.into_iter().filter_map(|id| {
+                let e = entry(id)?;
                 Some(glib::Variant::tuple_from_iter([
-                    glib::Variant::array_from_iter_with_type(ty, found),
+                    id.to_variant(),
+                    e.props.clone(),
                 ]))
-            })
+            });
+            let ty = glib::VariantTy::new("(ia{sv})").expect("a valid type");
+            Some(glib::Variant::tuple_from_iter([
+                glib::Variant::array_from_iter_with_type(ty, found),
+            ]))
         }
         "GetProperty" => {
             let (id, name) = params.get::<(i32, String)>()?;
-            let value = TRAY.with(|t| {
-                let t = t.borrow();
-                let e = t
-                    .as_ref()?
-                    .entries
-                    .get(usize::try_from(id).ok()?.checked_sub(1)?)?;
-                glib::VariantDict::new(Some(&e.props)).lookup_value(&name, None)
-            });
+            let value = entry(id)
+                .and_then(|e| glib::VariantDict::new(Some(&e.props)).lookup_value(&name, None));
             Some((value.unwrap_or_else(|| "".to_variant()),).to_variant())
         }
         "Event" => {
@@ -705,6 +735,8 @@ fn clicked(id: i32) {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use nsh_core::desktop::MenuAction;
 
     use super::*;
@@ -722,6 +754,43 @@ mod tests {
             symbol: None,
             destructive: false,
         })
+    }
+
+    #[test]
+    fn the_application_menu_carries_shortcuts_and_leaves_out_mac_roles() {
+        let mut new = match action(3, "New Return…") {
+            MenuItem::Action(a) => a,
+            _ => unreachable!(),
+        };
+        new.shortcut = Some(nsh_core::desktop::Shortcut::parse("mod+shift+n", false).unwrap());
+        let mut about = match action(0, "") {
+            MenuItem::Action(a) => a,
+            _ => unreachable!(),
+        };
+        about.role = Some(MenuRole::HideOthers);
+        let items = vec![MenuItem::Action(new), MenuItem::Action(about)];
+        let bar = number(&items, true);
+        assert_eq!(bar.len(), 1);
+        let keys = glib::VariantDict::new(Some(&bar[0].props))
+            .lookup_value("shortcut", None)
+            .unwrap();
+        assert_eq!(keys.type_().as_str(), "aas");
+        assert_eq!(
+            keys.get::<Vec<Vec<String>>>().unwrap(),
+            vec![vec![
+                "Control".to_owned(),
+                "Shift".to_owned(),
+                "n".to_owned()
+            ]]
+        );
+        // The tray's menu stays as it was: no shortcuts, every item.
+        let tray = number(&items, false);
+        assert_eq!(tray.len(), 2);
+        assert!(
+            glib::VariantDict::new(Some(&tray[0].props))
+                .lookup_value("shortcut", None)
+                .is_none()
+        );
     }
 
     #[test]
@@ -784,7 +853,7 @@ mod tests {
             },
         ]
         .into();
-        let entries = number(&items);
+        let entries = number(&items, false);
         assert_eq!(entries.len(), 4);
         assert_eq!(entries[3].parent, 3);
         assert_eq!(entries[3].action.map(|a| a.0), Some(8));
