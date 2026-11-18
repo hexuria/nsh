@@ -3897,18 +3897,24 @@ mod tests {
                 role: None,
                 when: When::Auto,
                 icon: None,
+                symbol: None,
+                destructive: false,
             })
         };
         let application_menu: Arc<[MenuItem]> = vec![MenuItem::Submenu {
             label: "File".into(),
             enabled: true,
             icon: None,
+            symbol: None,
+            inline: false,
             items: vec![
                 action(19, "Save", "ctrl+s", true),
                 MenuItem::Submenu {
                     label: "Disabled".into(),
                     enabled: false,
                     icon: None,
+                    symbol: None,
+                    inline: false,
                     items: vec![action(20, "Hidden", "ctrl+h", true)],
                 },
                 action(21, "Unavailable", "ctrl+u", false),

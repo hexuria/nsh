@@ -759,6 +759,10 @@ mod tests {
             Err("unused test scene method".into())
         }
 
+        fn view_style(&self, _: &str) -> Result<Option<nsh_dev::protocol::ViewStyle>, String> {
+            Err("unused test scene method".into())
+        }
+
         fn input_id(&self, _: &str) -> Result<Option<NodeId>, String> {
             Ok(None)
         }
