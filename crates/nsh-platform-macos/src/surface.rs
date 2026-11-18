@@ -929,10 +929,17 @@ impl Surface {
     fn split(self: &Rc<Self>, batch: &MountBatch) -> Option<crate::pace::Plan> {
         let named = self.pacer.borrow().named_by(&batch.items);
         if !named.is_empty() {
+            // The flushed views are a batch of their own, which ends before
+            // `batch` begins. The text pictures the engine painted are
+            // `batch`'s: they are kept aside, as ending a batch drops those
+            // it holds.
+            let rasters = std::mem::take(&mut self.mounter.borrow_mut().rasters);
+            self.mounter.borrow_mut().begin_batch(&[]);
             let mut pacer = self.pacer.borrow_mut();
             crate::pace::flush(&mut pacer, &named, |items| self.apply_waiting(&items));
             drop(pacer);
             self.mounter.borrow_mut().end_batch(self);
+            self.mounter.borrow_mut().rasters = rasters;
         }
         let mounter = self.mounter.borrow();
         crate::pace::plan(&batch.items, |id| mounter.views.contains_key(&id))
