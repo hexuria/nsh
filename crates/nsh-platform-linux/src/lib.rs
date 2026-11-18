@@ -30,6 +30,7 @@ pub mod dev;
 mod file_drop;
 mod file_requests;
 mod fps;
+mod global_menu;
 mod global_shortcut;
 #[cfg(test)]
 mod gtk_test;
