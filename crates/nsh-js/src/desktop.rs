@@ -1045,6 +1045,8 @@ fn tray(cx: *mut JsContext) -> JsValue {
         let o = qjs::JS_NewObject(cx);
         let set = reactive::new_function(cx, c"set", set_tray, 1);
         qjs::JS_SetPropertyStr(cx, o, c"set".as_ptr(), set);
+        let available = crate::env::tray(cx);
+        qjs::JS_SetPropertyStr(cx, o, c"available".as_ptr(), available);
         o
     }
 }
@@ -1192,6 +1194,8 @@ fn menu(cx: *mut JsContext) -> JsValue {
         qjs::JS_SetPropertyStr(cx, o, c"popup".as_ptr(), pop);
         let bar = reactive::new_function(cx, c"setMenuBar", set_menu_bar, 1);
         qjs::JS_SetPropertyStr(cx, o, c"setMenuBar".as_ptr(), bar);
+        let global = crate::env::global_menu(cx);
+        qjs::JS_SetPropertyStr(cx, o, c"inGlobalMenu".as_ptr(), global);
         o
     }
 }
@@ -1567,6 +1571,14 @@ export interface MenuModule {
    * the menu closes, chosen or dismissed: a button that opened it can look
    * pressed until then. */
   popup(items: readonly (MenuItem | null | undefined | false)[], at?: Point): Promise<void>;
+  /** Whether the application menu is in the desktop's global menu bar
+   * rather than in the window (reactive): on Linux under KDE Plasma with a
+   * Global Menu widget, once the menu is exported to it and the window tied
+   * to it. It turns `false` when the widget goes (the window's menu bar
+   * shows again) and `true` when one comes. Always `false` elsewhere,
+   * macOS included, whose menu bar is the system's. An app that draws its
+   * own menu row in a hidden title bar leaves it out while this holds. */
+  inGlobalMenu(): boolean;
 }
 
 /** A click on the tray's icon. */
@@ -1621,6 +1633,12 @@ export interface TrayModule {
   /** Shows the icon, or changes it (in an `effect`, it follows the signals
    * it reads); `null` removes it. One per app. */
   set(options: TrayOptions | null): void;
+  /** Whether the system shows the app's icon (reactive): always on macOS
+   * and Windows; on Linux while a panel hosts StatusNotifierItems
+   * (Plasma, most panels; GNOME only with the AppIndicator extension).
+   * `false` off the desktops. Where it is `false`, a window hidden to the
+   * tray could not be brought back: minimize it instead. */
+  available(): boolean;
 }
 
 /** Keystrokes the app hears whichever app has the keyboard. */

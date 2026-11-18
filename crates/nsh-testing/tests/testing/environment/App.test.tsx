@@ -41,6 +41,16 @@ test("the defaults are a light iPhone in en-US", async () => {
   expect(app.shows("Regional: h12 7 us fahrenheit")).toBe(true);
 });
 
+test("a desktop has a tray and its own menu bar unless open says otherwise", async () => {
+  const linux = await open("./App.tsx", { platform: "linux" });
+  await linux.waitFor("Desktop: menu bar own, tray true");
+  const plasma = await open("./App.tsx", { platform: "linux", tray: false, globalMenu: true });
+  await plasma.waitFor("Desktop: menu bar global, tray false");
+  // Off the desktops there is no tray, whatever the platform reports.
+  const phone = await open("./App.tsx", { platform: "ios" });
+  await phone.waitFor("Desktop: menu bar own, tray false");
+});
+
 test("the regional preferences follow the system's", async () => {
   const app = await open("./App.tsx", { locale: "en_GB", localeSettings: { firstDayOfWeek: 7 } });
   expect(app.shows("Regional: h23 7 uk celsius")).toBe(true);

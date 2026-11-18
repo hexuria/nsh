@@ -3786,6 +3786,8 @@ fn ui_environment(env: &Environment, window: Size<Points>) -> nsh_core::element:
         web_views: env.web_views,
         webview_requests: env.webview_requests,
         shaders: env.shaders,
+        tray: env.tray,
+        global_menu: env.global_menu,
     }
 }
 

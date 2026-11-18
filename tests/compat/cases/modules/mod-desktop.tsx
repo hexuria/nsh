@@ -3,12 +3,14 @@
 // `titleBar()` is all 0, `windowState()` is null and `displays()` empty;
 // the main window is the only one (`currentWindow()`, `windows()`,
 // `Window.get`), its requests and `set` are callable and do nothing,
+// the menu is in no global menu bar and no tray icon shows
+// (`Menu.inGlobalMenu()`, `Tray.available()`),
 // `<Window>` renders nothing and `Window.open` throws
 // `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM`; the app and menu functions are
 // callable and do nothing, so an app that calls them runs on. Its script
 // checks each.
 import { Text, View, signal } from "nsh";
-import { Application, Menu, Window, currentWindow, displays, focusedWindow, isAvailable, titleBar, windowState, windows } from "nsh/desktop";
+import { Application, Menu, Tray, Window, currentWindow, displays, focusedWindow, isAvailable, titleBar, windowState, windows } from "nsh/desktop";
 
 function App() {
   const main = currentWindow();
@@ -19,6 +21,7 @@ function App() {
       <Text>{`Desktop: ${isAvailable}`}</Text>
       <Text>{`Title bar: ${titleBar().height} ${titleBar().left} ${titleBar().right}`}</Text>
       <Text>{`Window state: ${windowState()} displays ${displays().length}`}</Text>
+      <Text>{`Global menu: ${Menu.inGlobalMenu()} tray ${Tray.available()}`}</Text>
       <Text>{`Calls: ${calls()}`}</Text>
       <Text>{`Popup: ${popup()}`}</Text>
       <Text>{`Current: ${main.id} ${main.main} ${main.parent} state ${main.state()}`}</Text>

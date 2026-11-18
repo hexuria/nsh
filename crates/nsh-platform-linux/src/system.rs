@@ -54,7 +54,11 @@
 //!   systemd's `timedated` keeps it (`org.freedesktop.timedate1`'s
 //!   `Timezone` on the system bus, live: a change of the setting comes as
 //!   a property change), else the zone `/etc/localtime` links to, else
-//!   `/etc/timezone`'s.
+//!   `/etc/timezone`'s;
+//! - the tray (`Tray.available()`): whether a panel hosts
+//!   StatusNotifierItems, that is whether `org.kde.StatusNotifierWatcher`
+//!   has an owner on the session bus: asked once at start, then followed
+//!   (a panel that starts, quits or restarts).
 //!
 //! Safe area and keyboard height are zero: desktop windows have neither.
 //!
@@ -194,6 +198,8 @@ struct System {
     overlays: Vec<Overlay>,
     /// The menus' style sheet, in the app's colors ([`crate::menu_style`]).
     menu_style: Option<gtk::CssProvider>,
+    /// A panel hosts tray icons (the StatusNotifierWatcher is on the bus).
+    tray_host: bool,
 }
 
 thread_local! {
@@ -299,6 +305,7 @@ fn install() {
     watch_time_zone();
     watch_clock_format();
     watch_sleep();
+    watch_tray_host();
 }
 
 /// Whether the system is in dark mode (the portal's answer, or GTK's
@@ -436,6 +443,7 @@ fn update(surface: &Surface, appearance: Appearance) {
     env.safe_area = Edges::default();
     env.keyboard_height = px(0.0);
     env.lifecycle = lifecycle(surface);
+    env.tray = SYSTEM.with(|s| s.borrow().tray_host);
     surface.set_environment(env);
     // Images decoded for the old scale (a Wayland fractional scale arrives
     // after the first frame) decode again at the new one.
@@ -746,6 +754,50 @@ fn portal_scheme(value: &glib::Variant) {
         let mut s = s.borrow_mut();
         std::mem::replace(&mut s.portal_dark, dark) != dark
     });
+    if changed {
+        system_changed();
+    }
+}
+
+/// Whether `name` has an owner on the session bus, asked at once (one
+/// round trip, at most a second).
+pub(crate) fn name_has_owner(name: &str) -> bool {
+    let Ok(bus) = gio::bus_get_sync(gio::BusType::Session, gio::Cancellable::NONE) else {
+        return false;
+    };
+    bus.call_sync(
+        Some("org.freedesktop.DBus"),
+        "/org/freedesktop/DBus",
+        "org.freedesktop.DBus",
+        "NameHasOwner",
+        Some(&(name,).to_variant()),
+        Some(glib::VariantTy::new("(b)").expect("a valid type")),
+        gio::DBusCallFlags::NONE,
+        1000,
+        gio::Cancellable::NONE,
+    )
+    .ok()
+    .and_then(|reply| reply.get::<(bool,)>())
+    .is_some_and(|(owned,)| owned)
+}
+
+/// Follows whether a panel hosts tray icons (`Tray.available()`): asked at
+/// once, so the first environment has it, then watched.
+fn watch_tray_host() {
+    let host = name_has_owner(crate::tray::WATCHER);
+    SYSTEM.with(|s| s.borrow_mut().tray_host = host);
+    // For the life of the process: its id is never given back.
+    gio::bus_watch_name(
+        gio::BusType::Session,
+        crate::tray::WATCHER,
+        gio::BusNameWatcherFlags::NONE,
+        |_, _, _| tray_host(true),
+        |_, _| tray_host(false),
+    );
+}
+
+fn tray_host(on: bool) {
+    let changed = SYSTEM.with(|s| std::mem::replace(&mut s.borrow_mut().tray_host, on) != on);
     if changed {
         system_changed();
     }

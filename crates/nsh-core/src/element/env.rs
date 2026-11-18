@@ -115,6 +115,12 @@ pub struct Environment {
     /// The platform draws shader views
     /// ([`crate::platform::Environment::shaders`]).
     pub shaders: bool,
+    /// The system shows the app's tray icon
+    /// ([`crate::platform::Environment::tray`]).
+    pub tray: bool,
+    /// The application menu is in the desktop's global menu bar
+    /// ([`crate::platform::Environment::global_menu`]).
+    pub global_menu: bool,
 }
 
 impl Environment {
@@ -169,6 +175,8 @@ impl Default for Environment {
             web_views: true,
             webview_requests: false,
             shaders: true,
+            tray: true,
+            global_menu: false,
         }
     }
 }

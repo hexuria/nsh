@@ -1,11 +1,17 @@
 //! The application menu in KDE Plasma's Global Menu (the "Global Menu"
 //! applet or widget of a panel, at the top of the screen).
 //!
-//! - **When**: `XDG_CURRENT_DESKTOP` names KDE, `NSH_GLOBAL_MENU` is not
-//!   `0`, and `com.canonical.AppMenu.Registrar` (kded's appmenu module, there
-//!   while a Global Menu is in a panel) has an owner on the session bus.
-//!   Asked once per process ([`available`]). Elsewhere nothing here runs and
-//!   the menu stays the window's ([`crate::chrome`]).
+//! - **When**: `XDG_CURRENT_DESKTOP` names KDE and `NSH_GLOBAL_MENU` is not
+//!   `0` (asked once per process), while `com.canonical.AppMenu.Registrar`
+//!   (kded's appmenu module, there while a Global Menu is in a panel) has an
+//!   owner on the session bus: asked when first needed, then watched, so a
+//!   widget added or removed while the app runs moves the menu to the panel
+//!   or back to the window ([`available`], [`crate::chrome::menu_place_changed`]).
+//!   Elsewhere nothing here runs and the menu stays the window's
+//!   ([`crate::chrome`]).
+//! - **What the app sees**: `Menu.inGlobalMenu()`
+//!   ([`nsh_core::platform::Environment::global_menu`]) is true while the
+//!   menu is exported and the window tied to it.
 //! - **What**: the menu set with `setApplicationMenu` is exported as a
 //!   `com.canonical.dbusmenu` object (`/com/canonical/menu/nsh`) on the
 //!   app's session bus connection, numbered and answered as the tray's menu
@@ -23,7 +29,11 @@
 //! Without the `global-menu` feature (no X11 or Wayland bindings), the
 //! window cannot be tied to the menu, so [`available`] is false.
 
-use std::{cell::RefCell, rc::Weak, sync::OnceLock};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Weak,
+    sync::OnceLock,
+};
 
 use gtk4::{self as gtk, gdk, gio, glib, prelude::*};
 use nsh_core::desktop::MenuItem;
@@ -54,45 +64,61 @@ pub(crate) fn rule(
     kde && registrar()
 }
 
-/// Whether `name` has an owner on the session bus.
-fn has_owner(name: &str) -> bool {
-    let Ok(bus) = gio::bus_get_sync(gio::BusType::Session, gio::Cancellable::NONE) else {
-        return false;
-    };
-    bus.call_sync(
-        Some("org.freedesktop.DBus"),
-        "/org/freedesktop/DBus",
-        "org.freedesktop.DBus",
-        "NameHasOwner",
-        Some(&(name,).to_variant()),
-        Some(glib::VariantTy::new("(b)").expect("a valid type")),
-        gio::DBusCallFlags::NONE,
-        1000,
-        gio::Cancellable::NONE,
-    )
-    .ok()
-    .and_then(|reply| reply.get::<(bool,)>())
-    .is_some_and(|(owned,)| owned)
-}
-
-/// The Global Menu takes the application menu in this process.
-pub(crate) fn available() -> bool {
+/// KDE, no opt-out, built with the feature: whether to look for a Global
+/// Menu at all (asked once per process).
+fn wanted() -> bool {
     static ANSWER: OnceLock<bool> = OnceLock::new();
     *ANSWER.get_or_init(|| {
         cfg!(feature = "global-menu")
             && rule(
                 std::env::var("XDG_CURRENT_DESKTOP").ok().as_deref(),
                 std::env::var("NSH_GLOBAL_MENU").ok().as_deref(),
-                || has_owner(REGISTRAR),
+                || true,
             )
     })
+}
+
+/// Whether the registrar is on the bus: asked the first time, then
+/// followed ([`registrar_changed`]).
+fn registrar_up() -> bool {
+    if let Some(up) = REGISTRAR_UP.get() {
+        return up;
+    }
+    let up = crate::system::name_has_owner(REGISTRAR);
+    REGISTRAR_UP.set(Some(up));
+    // For the life of the process: its id is never given back.
+    gio::bus_watch_name(
+        gio::BusType::Session,
+        REGISTRAR,
+        gio::BusNameWatcherFlags::NONE,
+        |_, _, _| registrar_changed(true),
+        |_, _| registrar_changed(false),
+    );
+    up
+}
+
+/// A Global Menu widget came or went: every surface places its menu again
+/// (exported and tied, or back in the window's bar).
+fn registrar_changed(up: bool) {
+    if REGISTRAR_UP.replace(Some(up)) == Some(up) {
+        return;
+    }
+    for surface in crate::system::surfaces() {
+        crate::chrome::menu_place_changed(&surface);
+    }
+}
+
+/// The Global Menu takes the application menu in this process now.
+pub(crate) fn available() -> bool {
+    wanted() && registrar_up()
 }
 
 /// The menu while exported.
 struct Export {
     surface: Weak<Surface>,
     bus: gio::DBusConnection,
-    _registration: gio::RegistrationId,
+    /// The dbusmenu object, unregistered when the export ends.
+    registration: Option<gio::RegistrationId>,
     entries: Vec<Entry>,
     revision: u32,
     /// The window surface the menu is tied to, and how.
@@ -110,13 +136,37 @@ enum Tie {
     None,
 }
 
-thread_local! {
-    static EXPORT: RefCell<Option<Export>> = const { RefCell::new(None) };
+impl Drop for Export {
+    fn drop(&mut self) {
+        if let Some(id) = self.registration.take() {
+            let _ = self.bus.unregister_object(id);
+        }
+    }
 }
 
-/// The menu is in the Global Menu: the window shows no menu bar.
+thread_local! {
+    static EXPORT: RefCell<Option<Export>> = const { RefCell::new(None) };
+    /// The registrar is on the bus (`None`: not asked yet).
+    static REGISTRAR_UP: Cell<Option<bool>> = const { Cell::new(None) };
+}
+
+/// The menu is in the Global Menu: exported, and the window tied to it.
+/// The window then shows no menu bar, and `Menu.inGlobalMenu()` is true.
 pub(crate) fn active() -> bool {
-    available() && EXPORT.with(|e| e.borrow().is_some())
+    available()
+        && EXPORT.with(|e| {
+            e.borrow()
+                .as_ref()
+                .and_then(|x| x.tied.as_ref())
+                .is_some_and(|(_, tie)| !matches!(tie, Tie::None))
+        })
+}
+
+/// Tells the app where its menu is (`Menu.inGlobalMenu()`).
+fn report(surface: &Surface) {
+    let mut env = surface.environment.get();
+    env.global_menu = active();
+    surface.set_environment(env);
 }
 
 /// Exports `items` (none: an empty menu) for `window`'s Global Menu, and
@@ -127,6 +177,10 @@ pub(crate) fn export(
     items: Option<&[MenuItem]>,
 ) -> bool {
     if !available() {
+        // The widget went (or never was): the export ends, the window's
+        // menu bar takes the menu.
+        drop(EXPORT.with(|e| e.borrow_mut().take()));
+        report(surface);
         return false;
     }
     let entries = tray::number(items.unwrap_or(&[]), true);
@@ -156,6 +210,7 @@ pub(crate) fn export(
     if made {
         tie(window);
     }
+    report(surface);
     made
 }
 
@@ -191,7 +246,7 @@ fn publish(surface: &std::rc::Rc<Surface>, entries: Vec<Entry>) -> Option<Export
     Some(Export {
         surface: std::rc::Rc::downgrade(surface),
         bus,
-        _registration: registration,
+        registration: Some(registration),
         entries,
         revision: 1,
         tied: None,

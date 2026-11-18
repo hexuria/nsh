@@ -1,6 +1,7 @@
 import { mount, signal, Text, View } from "nsh";
 import { reduceMotion } from "nsh";
 import { colorScheme, lifecycle, locale, localeSettings, platform, wakeCount, windowSize } from "nsh";
+import { Menu, Tray } from "nsh/desktop";
 
 // Whether `Intl`'s local time is in the zone it names, read again when the
 // device's zone changes (a test's, which moves no local time): formatting in
@@ -37,6 +38,7 @@ function App() {
   return (
     <View style={{ flex: 1 }}>
       <Text>{`Scheme: ${colorScheme()}`}</Text>
+      <Text>{`Desktop: menu bar ${Menu.inGlobalMenu() ? "global" : "own"}, tray ${Tray.available()}`}</Text>
       <Text>{`Locale: ${locale()}`}</Text>
       <Text>{`Motion: ${reduceMotion() ? "reduced" : "full"}`}</Text>
       <Text>{`OS: ${platform.os}`}</Text>
