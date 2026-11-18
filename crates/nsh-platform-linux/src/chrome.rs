@@ -689,6 +689,14 @@ impl Builder<'_> {
     }
 }
 
+/// KDE's Global Menu came or went ([`crate::global_menu`]): the menu is
+/// exported to it again, or given back to the window's menu bar.
+pub(crate) fn menu_place_changed(surface: &Rc<Surface>) {
+    if let Some(window) = window(surface) {
+        install_menu(surface, &window);
+    }
+}
+
 /// Installs the application menu on `window`: its actions, shortcuts and
 /// the menu bar (or removes them).
 fn install_menu(surface: &Rc<Surface>, window: &gtk::Window) {

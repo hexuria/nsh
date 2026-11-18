@@ -242,6 +242,8 @@ impl AppView {
             // report Command: Ctrl stands in for it, and labels say so.
             ctrl_for_command: OS == nsh_core::platform::Os::MacOs
                 && !options.capabilities.command_key,
+            // A terminal shows no tray icon (`Tray.available()`).
+            tray: false,
             ..Default::default()
         };
         let clipboard = options

@@ -200,6 +200,7 @@ tap id:case-mod-desktop
 expect Desktop: false
 expect Title bar: 0 0 0
 expect Window state: null displays 0
+expect Global menu: false tray false
 expect Current: main true null state null
 expect Windows: main focused null get true null
 absent Inside a window

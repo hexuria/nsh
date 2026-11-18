@@ -57,9 +57,11 @@ enum Part {
     WakeCount,
     HorizontalSizeClass,
     VerticalSizeClass,
+    GlobalMenu,
+    Tray,
 }
 
-const PARTS: usize = 20;
+const PARTS: usize = 22;
 
 /// The environment's part of a context's state.
 pub(crate) struct Env {
@@ -199,6 +201,9 @@ pub(crate) fn init(cx: *mut JsContext) {
         } else if i == Part::PerfStats as usize {
             // No stats until the monitor measured a second.
             qjs::JS_NULL
+        } else if i == Part::GlobalMenu as usize || i == Part::Tray as usize {
+            // Booleans from the start: false until the platform reports.
+            boolean(false)
         } else {
             UNDEFINED
         };
@@ -600,6 +605,14 @@ pub(crate) fn set_environment(cx: *mut JsContext, next: &Environment) -> Result<
     if changed(&|p| p.shaders == next.shaders) {
         writes.push((Part::Shaders, boolean(next.shaders)));
     }
+    if changed(&|p| p.global_menu == next.global_menu) {
+        writes.push((Part::GlobalMenu, boolean(next.global_menu)));
+    }
+    // Only the desktops have a tray.
+    let tray = |e: &Environment| e.tray && e.os.is_desktop();
+    if changed(&|p| tray(p) == tray(next)) {
+        writes.push((Part::Tray, boolean(tray(next))));
+    }
     if changed(&|p| p.window_state == next.window_state) {
         writes.push((
             Part::WindowState,
@@ -704,6 +717,18 @@ pub(crate) fn title_bar(cx: *mut JsContext) -> JsValue {
 /// The displays the platform reported last.
 pub(crate) fn display_list(cx: *mut JsContext) -> Vec<Display> {
     env(cx).displays.borrow().clone()
+}
+
+/// `Menu.inGlobalMenu` (owned): whether the application menu is in the
+/// desktop's global menu bar ([`Environment::global_menu`]), reactive.
+pub(crate) fn global_menu(cx: *mut JsContext) -> JsValue {
+    accessor(cx, Part::GlobalMenu)
+}
+
+/// `Tray.available` (owned): whether the system shows the app's tray icon
+/// ([`Environment::tray`]; false off the desktops), reactive.
+pub(crate) fn tray(cx: *mut JsContext) -> JsValue {
+    accessor(cx, Part::Tray)
 }
 
 /// The main window's state accessor (owned): `WindowRef.state()` of the

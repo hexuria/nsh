@@ -975,6 +975,8 @@ fn initial_environment() -> Environment {
         web_views: cfg!(feature = "webview"),
         // wgpu, until it finds no GPU.
         shaders: nsh_engine::shader::LINKED,
+        // The embedding app owns the tray; `Tray.set` does nothing here.
+        tray: false,
         ..Environment::default()
     }
 }
