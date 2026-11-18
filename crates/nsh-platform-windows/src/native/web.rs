@@ -558,6 +558,10 @@ pub(crate) struct WebItem {
     default_agent: RefCell<Option<String>>,
     /// The HTML served at its base URL (`baseUrl`).
     html: RefCell<Option<(String, Arc<str>)>>,
+    /// The folder of the `file://` page the app loaded here (`/C:/a/b/`),
+    /// which its top-level navigations may stay in ([`file_navigation`]);
+    /// `None` for any other page.
+    file: RefCell<Option<String>>,
     /// The document requests are watched (for `html`).
     serving: Cell<bool>,
     /// Where the last frame put it.
@@ -612,6 +616,7 @@ impl WebItem {
             scroll_script: Rc::default(),
             default_agent: RefCell::new(None),
             html: RefCell::new(None),
+            file: RefCell::new(None),
             serving: Cell::new(false),
             at: Cell::new(None),
             bounds: Cell::new(None),
@@ -1562,6 +1567,9 @@ impl WebItem {
         {
             return true;
         }
+        if let Some(allowed) = file_navigation(self.file.borrow().as_deref(), url) {
+            return allowed;
+        }
         let Some(surface) = self.surface.upgrade() else {
             return false;
         };
@@ -1672,6 +1680,10 @@ impl WebItem {
             }
             let navigate = scripts_changed || old.as_ref().is_none_or(|o| o.source != p.source);
             if navigate {
+                *self.file.borrow_mut() = match &p.source {
+                    WebSource::Uri(uri) => file_read_scope(uri).map(str::to_owned),
+                    _ => None,
+                };
                 let result = match &p.source {
                     WebSource::Uri(uri) => {
                         self.html.borrow_mut().take();
@@ -2443,6 +2455,102 @@ impl WebItem {
     }
 }
 
+/// Whether a top-level navigation to `url` may go ahead as a file page:
+/// `Some` for a `file:` URL, allowed only when it names a file in `folder`,
+/// the folder of the `file://` page the app itself loaded in this web view
+/// ([`file_read_scope`]), which the `webview` grant (web hosts) cannot name;
+/// never through a `.` or `..` segment, and never in a web view that loaded
+/// no file. `None` for any other URL, which the grant decides. Windows paths
+/// compare case-insensitively.
+fn file_navigation(folder: Option<&str>, url: &str) -> Option<bool> {
+    if !is_file_url(url) {
+        return None;
+    }
+    Some(folder.is_some_and(|dir| {
+        local_file_path(url).is_some_and(|path| {
+            !has_dot_segment(path)
+                && path
+                    .get(..dir.len())
+                    .is_some_and(|start| start.eq_ignore_ascii_case(dir))
+        })
+    }))
+}
+
+fn is_file_url(url: &str) -> bool {
+    url.get(..5)
+        .is_some_and(|s| s.eq_ignore_ascii_case("file:"))
+}
+
+/// The path of a local `file://` URL (`/C:/a/b.html`), without query or
+/// fragment: `None` for any other URL and for a file on another host (a
+/// share). `file:///a` and `file://localhost/a` are the same file.
+fn local_file_path(url: &str) -> Option<&str> {
+    const SCHEME: &str = "file://";
+    if !url
+        .get(..SCHEME.len())
+        .is_some_and(|s| s.eq_ignore_ascii_case(SCHEME))
+    {
+        return None;
+    }
+    let rest = &url[SCHEME.len()..];
+    let slash = rest.find('/')?;
+    let host = &rest[..slash];
+    if !(host.is_empty() || host.eq_ignore_ascii_case("localhost")) {
+        return None;
+    }
+    let path = &rest[slash..];
+    Some(path.split(['?', '#']).next().unwrap_or(path))
+}
+
+/// Whether `path` has a `.` or `..` segment, written out or percent-encoded
+/// (`%2e`, `..%2f`), which could name a folder above the one it seems to. A
+/// backslash separates segments too, as it does in a Windows path.
+fn has_dot_segment(path: &str) -> bool {
+    percent_decoded(path)
+        .split(|&b| b == b'/' || b == b'\\')
+        .any(|segment| segment == b"." || segment == b"..")
+}
+
+fn percent_decoded(s: &str) -> Vec<u8> {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = |b: u8| (b as char).to_digit(16);
+        if bytes[i] == b'%'
+            && let (Some(h), Some(l)) = (
+                bytes.get(i + 1).copied().and_then(hex),
+                bytes.get(i + 2).copied().and_then(hex),
+            )
+        {
+            out.push((h * 16 + l) as u8);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    out
+}
+
+/// The folder path (`/C:/a/b/`) a `file://` page's web view may navigate in:
+/// the file's own folder and what is under it, nothing above. `None` for any
+/// other URL, for a file on another host, for a file at the root of a drive
+/// or of the file system (whose folder is the whole disk), and for a path
+/// with a `.` or `..` segment.
+fn file_read_scope(uri: &str) -> Option<&str> {
+    let path = local_file_path(uri)?;
+    if has_dot_segment(path) {
+        return None;
+    }
+    let end = path.rfind('/')? + 1;
+    let folder = &path[..end];
+    let drive_root = folder.len() == 4
+        && folder.as_bytes()[1].is_ascii_alphabetic()
+        && folder.as_bytes()[2] == b':';
+    (end > 1 && !drive_root).then_some(folder)
+}
+
 /// True when `a` and `b` name the same document (fragments aside; a URL
 /// with no path is its root's).
 fn same_document(a: &str, b: &str) -> bool {
@@ -3012,6 +3120,92 @@ fn interrupt_message(reason: i32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The folder a file page may navigate in is its own, never a drive's
+    /// root or above it (on any spelling).
+    #[test]
+    fn a_file_page_reads_its_own_folder_and_nothing_wider() {
+        assert_eq!(
+            file_read_scope("file:///C:/Users/x/Temp/print-1/2551Q/sheet.html"),
+            Some("/C:/Users/x/Temp/print-1/2551Q/")
+        );
+        assert_eq!(file_read_scope("FILE:///C:/x/a.pdf#page=2"), Some("/C:/x/"));
+        assert_eq!(
+            file_read_scope("file://localhost/C:/x/a.pdf"),
+            Some("/C:/x/")
+        );
+        assert_eq!(
+            file_read_scope("file:///C:/x/a.pdf?/b/c"),
+            Some("/C:/x/"),
+            "a slash after the path is no folder"
+        );
+        assert_eq!(
+            file_read_scope("file:///C:/x/..a/b..pdf"),
+            Some("/C:/x/..a/"),
+            "dots in a name are a name"
+        );
+        for uri in [
+            "file:///C:/a.pdf",
+            "file:///c:/",
+            "file:///a.pdf",
+            "file://server/share/a.pdf",
+            "file://localhost",
+            "file:///C:/x/../../a.pdf",
+            "file:///C:/x/./a.pdf",
+            "file:///C:/x/%2e%2e/a.pdf",
+            "file:///C:/x/..%5C..%5Ca.pdf",
+            "file:///C:/x/..\\a.pdf",
+            "https://example.com/a.pdf",
+            "about:blank",
+            "",
+        ] {
+            assert_eq!(file_read_scope(uri), None, "{uri}");
+        }
+    }
+
+    /// A web view opens only files in the folder of the file page its app loaded there; any other URL is the grant's.
+    #[test]
+    fn a_web_view_opens_only_files_in_the_folder_it_was_given() {
+        let dir = Some("/C:/Users/x/Temp/print-1/2551Q/");
+        for url in [
+            "file:///C:/Users/x/Temp/print-1/2551Q/sheet.html",
+            "file:///C:/Users/x/Temp/print-1/2551Q/sheet.html#p2",
+            "file:///c:/users/X/temp/PRINT-1/2551q/sheet.html",
+            "file://localhost/C:/Users/x/Temp/print-1/2551Q/sheet.html",
+            "file:///C:/Users/x/Temp/print-1/2551Q/sub/page.html",
+        ] {
+            assert_eq!(file_navigation(dir, url), Some(true), "same folder: {url}");
+        }
+        for url in [
+            "file:///C:/Users/x/Temp/print-1/a.html",
+            "file:///C:/Windows/win.ini",
+            "file://server/C:/Users/x/Temp/print-1/2551Q/sheet.html",
+            "file:///C:/Users/x/Temp/print-1/2551Q/../x.html",
+            "file:///C:/Users/x/Temp/print-1/2551Q/%2e%2e/x.html",
+            "file:///C:/Users/x/Temp/print-1/2551Q/..%5Cx.html",
+            "file:///C:/Users/x/Temp/print-1/2551Qx/sheet.html",
+        ] {
+            assert_eq!(
+                file_navigation(dir, url),
+                Some(false),
+                "outside the folder: {url}"
+            );
+        }
+        assert_eq!(
+            file_navigation(None, "file:///C:/Users/x/a.html"),
+            Some(false),
+            "a web view that loaded no file"
+        );
+        // Not a file: the grant decides.
+        for url in [
+            "https://example.com/a",
+            "about:blank",
+            "data:text/html,x",
+            "javascript:alert(1)",
+        ] {
+            assert_eq!(file_navigation(dir, url), None, "{url}");
+        }
+    }
 
     #[test]
     fn escapes_js_strings() {
