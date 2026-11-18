@@ -860,6 +860,10 @@ fn role_name(role: Ax) -> &'static str {
         Ax::Region => "region",
         Ax::Navigation => "navigation",
         Ax::TreeItem => "treeitem",
+        // As the shared adapter names a scroll view (`nsh-testing`).
+        Ax::ScrollArea => "scroll",
+        Ax::Dialog => "dialog",
+        Ax::AlertDialog => "alertdialog",
         // The window's own buttons, a view standing for each.
         Ax::CloseButton | Ax::MinimizeButton | Ax::ZoomButton => "button",
     }
