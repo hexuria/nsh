@@ -605,8 +605,11 @@ pub(crate) fn set_environment(cx: *mut JsContext, next: &Environment) -> Result<
     if changed(&|p| p.shaders == next.shaders) {
         writes.push((Part::Shaders, boolean(next.shaders)));
     }
-    if changed(&|p| p.global_menu == next.global_menu) {
-        writes.push((Part::GlobalMenu, boolean(next.global_menu)));
+    // Only Linux has a global menu bar the menu moves to (KDE Plasma's);
+    // macOS's is the platform's own.
+    let global_menu = |e: &Environment| e.global_menu && e.os == Os::Linux;
+    if changed(&|p| global_menu(p) == global_menu(next)) {
+        writes.push((Part::GlobalMenu, boolean(global_menu(next))));
     }
     // Only the desktops have a tray.
     let tray = |e: &Environment| e.tray && e.os.is_desktop();

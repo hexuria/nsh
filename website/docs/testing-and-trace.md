@@ -180,7 +180,7 @@ options as the test gives them: one the target's platform cannot honor makes `op
 | `modules` | none | Stand-ins for exports of the native modules the app imports, by specifier: see [Faking native modules](#faking-native-modules). Headless runs only. |
 | `url` | none | The link that launched the app: `UrlScheme.on("open")` gets it when the app claims its scheme (`nsh.json` `schemes`), as from the system ([UrlScheme](../modules/nsh.md#urlscheme)). Headless runs only. |
 | `tray` | `true` | Whether the system shows the app's tray icon (`Tray.available()`, `false` off the desktops whatever this says): `false` plays a desktop whose panels host none, such as GNOME without the AppIndicator extension. Headless runs only. |
-| `globalMenu` | `false` | Whether the application menu is in the desktop's global menu bar (`Menu.inGlobalMenu()`): `true` plays KDE Plasma with a Global Menu widget. Headless runs only. |
+| `globalMenu` | `false` | Whether the application menu is in the desktop's global menu bar (`Menu.inGlobalMenu()`): `true` plays KDE Plasma with a Global Menu widget, so it only shows on `platform: "linux"` (elsewhere `Menu.inGlobalMenu()` stays `false`). Headless runs only. |
 
 ### Playing the host app
 
