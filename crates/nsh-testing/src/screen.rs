@@ -466,6 +466,8 @@ fn semantic_role(role: AccessibilityRole, kind: Option<ViewKind>, pressable: boo
         AccessibilityRole::TreeItem => "treeitem",
         AccessibilityRole::MenuItemCheckbox => "menuitemcheckbox",
         AccessibilityRole::MenuItemRadio => "menuitemradio",
+        AccessibilityRole::Dialog => "dialog",
+        AccessibilityRole::AlertDialog => "alertdialog",
     }
 }
 
