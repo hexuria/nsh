@@ -32,7 +32,9 @@
 //!   key decision ([`crate::key_focus::press`]) after the app's own
 //!   bindings (`keymap::claims`) and the focused view's raw keys and
 //!   capture, and before its defaults, so a capture takes a menu key. The
-//!   editing roles' keys stay the text field's. Context menus are
+//!   editing roles' keys stay the text field's. Under KDE Plasma with a
+//!   Global Menu the menu is exported to it instead of the bar
+//!   ([`crate::global_menu`]). Context menus are
 //!   `gtk::PopoverMenu`s with a group of their own (`nshpopup`); their
 //!   grabs keep the window's key controller from seeing releases, so the
 //!   popovers watch their own ([`crate::key_focus::observe_popovers`]).
@@ -514,7 +516,7 @@ pub(crate) fn begin_move(surface: &Surface, event: &gdk::Event) {
 // --- Menus ------------------------------------------------------------------------------
 
 /// The roles Linux has no use for.
-fn unsupported(role: Option<MenuRole>) -> bool {
+pub(crate) fn unsupported(role: Option<MenuRole>) -> bool {
     matches!(
         role,
         Some(MenuRole::About | MenuRole::Hide | MenuRole::HideOthers | MenuRole::ShowAll)
@@ -698,6 +700,8 @@ fn install_menu(surface: &Rc<Surface>, window: &gtk::Window) {
     let c = &surface.chrome;
     *c.menu_shortcuts.borrow_mut() = None;
     let menu = c.menu.borrow().clone();
+    // KDE Plasma's Global Menu, when there is one, shows the menu in its panel.
+    crate::global_menu::export(surface, window, menu.as_deref());
     let Some(items) = menu else {
         window.insert_action_group("nsh", None::<&gio::ActionGroup>);
         set_menu_bar(surface, None);
@@ -780,12 +784,12 @@ fn set_menu_bar(surface: &Rc<Surface>, model: Option<&gio::Menu>) {
     show_menu_bar(surface);
 }
 
-/// The menu bar shows unless the title bar is hidden or the window is in
-/// full screen.
+/// The menu bar shows unless the title bar is hidden, the window is in
+/// full screen, or the menu is in KDE's Global Menu.
 fn show_menu_bar(surface: &Surface) {
     let fullscreen = window(surface).is_some_and(|w| w.is_fullscreen());
     if let Some(bar) = &*surface.chrome.bar.borrow() {
-        bar.set_visible(!hidden(surface) && !fullscreen);
+        bar.set_visible(!hidden(surface) && !fullscreen && !crate::global_menu::active());
     }
 }
 
