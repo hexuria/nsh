@@ -39,7 +39,10 @@ pub enum Input {
 
 /// The `eventNumber` of the mouse events [`crate::synth`] makes. A real
 /// event that happens to carry it counts as synthesized: the safe way round.
-pub(crate) const SYNTH_EVENT: isize = 0x6e_73_68;
+/// It fits in 15 bits: macOS 26 hands a posted event back with its number
+/// cut to a signed 16-bit one, and a wider mark never matched.
+pub(crate) const SYNTH_EVENT: isize = 0x73_68;
+const _: () = assert!(SYNTH_EVENT > 0 && SYNTH_EVENT <= 0x7fff);
 
 type Listener = Rc<dyn Fn(Input)>;
 
