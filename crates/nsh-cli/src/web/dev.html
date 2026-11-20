@@ -67,11 +67,19 @@
       if (supplied.length !== 1) return null;
       const key = supplied[0].slice("gpui-agent=".length);
       if (!/^[0-9a-f]{32}$/.test(key)) return null;
-      sessionStorage.setItem("nsh-agent-key", key);
+      try {
+        sessionStorage.setItem("nsh-agent-key", key);
+      } catch {
+        return key;
+      }
       return key;
     }
-    const key = sessionStorage.getItem("nsh-agent-key");
-    return key && /^[0-9a-f]{32}$/.test(key) ? key : null;
+    try {
+      const key = sessionStorage.getItem("nsh-agent-key");
+      return key && /^[0-9a-f]{32}$/.test(key) ? key : null;
+    } catch {
+      return null;
+    }
   }
   let AGENT = globalThis.__nshAgentKey ?? fromHash();
   if (typeof AGENT !== "string" || !/^[0-9a-f]{32}$/.test(AGENT)) AGENT = null;
