@@ -193,13 +193,18 @@ fn application_focus(mtm: MainThreadMarker, native: &mut Option<Box<dyn Native>>
         })
         .expect("secondary window");
     main.makeKeyAndOrderFront(None);
-    #[allow(deprecated)]
-    app.activateIgnoringOtherApps(true);
-    until("the surface's key window", || main.isKeyWindow());
-    let active = app.isActive();
-    assert_eq!(call(native, |native| native.app_focused()), active);
-    if !active {
-        println!("native_agent: application activation is not observable in this session");
+    app.activate();
+    main.makeKeyWindow();
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while !(app.isActive() && main.isKeyWindow()) && Instant::now() < deadline {
+        NSRunLoop::currentRunLoop().runUntilDate(&NSDate::dateWithTimeIntervalSinceNow(0.005));
+    }
+    let focused = app.isActive() && (main.isKeyWindow() || secondary.isKeyWindow());
+    assert_eq!(call(native, |native| native.app_focused()), focused);
+    if !focused {
+        println!(
+            "native_agent: application activation or key status is not observable in this session"
+        );
     }
     secondary.orderOut(None);
     main.orderOut(None);
@@ -209,6 +214,7 @@ fn application_focus(mtm: MainThreadMarker, native: &mut Option<Box<dyn Native>>
     assert!(!call(native, |native| native.app_focused()));
     secondary.orderFront(None);
     main.makeKeyAndOrderFront(None);
+    main.makeKeyWindow();
     println!("native_agent: application_focus");
 }
 
@@ -221,6 +227,7 @@ fn targeted_key_and_group_rejection(
     let child = node(&model, "child");
     let group = node(&model, "group");
     main.makeKeyAndOrderFront(None);
+    main.makeKeyWindow();
     let view = find(root, "child").expect("mounted child");
     call(native, move |native| native.focus_node(child)).unwrap();
     assert!(
@@ -297,6 +304,7 @@ pub(super) fn run() {
     main.setContentView(Some(&surface.view()));
     surface.load(platform::App::Rust(platform::Root::of::<Windows>()));
     main.makeKeyAndOrderFront(None);
+    app.activate();
     until("the secondary control", || {
         model
             .semantic_tree()
@@ -307,6 +315,8 @@ pub(super) fn run() {
     until("the secondary window", || {
         model.window_root("agent-secondary").unwrap().is_some()
     });
+    // Embedded windows do not use run_app's key-window lifecycle.
+    main.makeKeyWindow();
     application_focus(mtm, &mut native, &main);
     second_window_hit_test(&model, &mut native);
     targeted_key_and_group_rejection(model, &mut native, &main, &surface.view());
