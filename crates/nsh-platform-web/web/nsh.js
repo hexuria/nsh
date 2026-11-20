@@ -1816,12 +1816,12 @@ class Player {
     if (event.event === "key") {
       const target = document.activeElement;
       if (!target) return;
-      const key = new KeyboardEvent(event.phase === "down" ? "keydown" : "keyup", {
+      const keyEvent = new KeyboardEvent(event.phase === "down" ? "keydown" : "keyup", {
         key: event.key, code: event.code, shiftKey: event.shift, ctrlKey: event.ctrl,
         altKey: event.alt, metaKey: event.meta, bubbles: true, composed: true, cancelable: true,
       });
-      target.dispatchEvent(key);
-      if (event.phase !== "down" || key.defaultPrevented || document.activeElement !== target) return;
+      target.dispatchEvent(keyEvent);
+      if (event.phase !== "down" || keyEvent.defaultPrevented || document.activeElement !== target) return;
       const input = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
       const contenteditable = target.isContentEditable;
       if (!input && !contenteditable) return;
