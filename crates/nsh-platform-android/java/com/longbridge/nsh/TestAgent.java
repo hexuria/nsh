@@ -2,8 +2,11 @@ package com.longbridge.nsh;
 
 import android.app.Activity;
 import android.app.Dialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.ContextWrapper;
+import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -14,6 +17,7 @@ import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.view.Choreographer;
+import android.view.InputDevice;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -22,6 +26,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.TextView;
 
@@ -393,6 +398,60 @@ final class TestAgent {
             if (a == null) return false;
             a.onBackPressed();
             return true;
+        });
+        return done != null && done;
+    }
+
+    /** Requests the device orientation. */
+    static boolean rotate(NshView host, boolean landscape) {
+        Boolean done = onMain(() -> {
+            Activity activity = SystemUi.activity(host.getContext());
+            if (activity == null || activity.isFinishing()) return false;
+            activity.setRequestedOrientation(landscape
+                    ? ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                    : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+            return true;
+        });
+        return done != null && done;
+    }
+
+    /** Shows the keyboard for the focused input, or hides it from this window. */
+    static boolean keyboard(NshView host, boolean shown) {
+        Boolean done = onMain(() -> {
+            if (shown) {
+                View focus = focused(host);
+                if (!(focus instanceof EditText) || !(focus.getParent() instanceof InputBox)) return false;
+                ((InputBox) focus.getParent()).showKeyboard();
+                return true;
+            }
+            View focus = focused(host);
+            InputMethodManager manager = (InputMethodManager)
+                    host.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (manager == null) return false;
+            manager.hideSoftInputFromWindow(
+                    focus == null ? host.getWindowToken() : focus.getWindowToken(), 0);
+            return true;
+        });
+        return done != null && done;
+    }
+
+    /** Pastes plain text into the focused input and restores the clipboard. */
+    static boolean paste(NshView host, String text) {
+        Boolean done = onMain(() -> {
+            View focus = focused(host);
+            if (!(focus instanceof EditText) || !(focus.getParent() instanceof InputBox)) return false;
+            ClipboardManager clipboard = (ClipboardManager)
+                    host.getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard == null) return false;
+            ClipData previous = clipboard.getPrimaryClip();
+            try {
+                clipboard.setPrimaryClip(ClipData.newPlainText("text", text));
+                return ((EditText) focus).onTextContextMenuItem(android.R.id.paste);
+            } finally {
+                if (previous == null && Build.VERSION.SDK_INT >= 28) clipboard.clearPrimaryClip();
+                else if (previous == null) clipboard.setPrimaryClip(ClipData.newPlainText("", ""));
+                else clipboard.setPrimaryClip(previous);
+            }
         });
         return done != null && done;
     }

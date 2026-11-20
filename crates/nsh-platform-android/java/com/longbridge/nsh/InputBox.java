@@ -872,7 +872,7 @@ final class InputBox extends FrameLayout implements Node {
      * false and nothing comes up. Ask again once the view is ready, with
      * no show flags (as React Native does), so the keyboard still rises.
      */
-    private void showKeyboard() {
+    void showKeyboard() {
         InputMethodManager imm = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
         if (imm == null) return;
         if (imm.showSoftInput(edit, 0)) return;

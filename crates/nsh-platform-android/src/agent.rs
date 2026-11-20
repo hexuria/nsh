@@ -488,6 +488,63 @@ impl Native for AndroidNative {
         }
     }
 
+    fn rotate(&self, landscape: bool) -> Result<(), String> {
+        let done = self.call(|env, class, view| {
+            env.call_static_method(
+                class,
+                "rotate",
+                "(Lcom/longbridge/nsh/NshView;Z)Z",
+                &[
+                    JValue::Object(view),
+                    JValue::Bool(if landscape { 1 } else { 0 }),
+                ],
+            )?
+            .z()
+        });
+        done.then_some(())
+            .ok_or_else(|| "Android could not change the requested orientation".into())
+    }
+
+    fn keyboard(&self, shown: bool) -> Result<(), String> {
+        let done = self.call(|env, class, view| {
+            env.call_static_method(
+                class,
+                "keyboard",
+                "(Lcom/longbridge/nsh/NshView;Z)Z",
+                &[
+                    JValue::Object(view),
+                    JValue::Bool(if shown { 1 } else { 0 }),
+                ],
+            )?
+            .z()
+        });
+        if done {
+            Ok(())
+        } else if shown {
+            Err("no input has the focus".into())
+        } else {
+            Err("Android could not hide the keyboard".into())
+        }
+    }
+
+    fn paste(&self, content: &nsh_core::PasteEvent) -> Result<(), String> {
+        if !content.html.is_empty() || !content.files.is_empty() || !content.uris.is_empty() {
+            return Err("Android paste supports plain text only".into());
+        }
+        let done = self.call(|env, class, view| {
+            let text = env.new_string(&content.text)?;
+            env.call_static_method(
+                class,
+                "paste",
+                "(Lcom/longbridge/nsh/NshView;Ljava/lang/String;)Z",
+                &[JValue::Object(view), JValue::Object(&text)],
+            )?
+            .z()
+        });
+        done.then_some(())
+            .ok_or_else(|| "Android paste dispatch failed".into())
+    }
+
     fn answer_dialog(&self, button: Option<&str>) -> Result<(), String> {
         let Some(text) = button else {
             // Closing it without a button is the back button's.

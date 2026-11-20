@@ -1357,7 +1357,7 @@ pub trait Native: Send + Sync {
         let _ = content;
         Err(
             "pasting in tests is not supported on this platform yet: run the test headless, \
-             or on macOS, iOS or the web"
+             or on macOS, iOS, Android or the web"
                 .into(),
         )
     }
@@ -1459,6 +1459,16 @@ pub trait Native: Send + Sync {
     /// Goes back as the user does (a back gesture, the back button,
     /// Escape): an error when the platform has none.
     fn back(&self) -> Result<(), String>;
+    /// Requests portrait or landscape orientation.
+    fn rotate(&self, landscape: bool) -> Result<(), String> {
+        let _ = landscape;
+        Err("rotate is not supported on this platform".into())
+    }
+    /// Shows or hides the software keyboard.
+    fn keyboard(&self, shown: bool) -> Result<(), String> {
+        let _ = shown;
+        Err("keyboard is not supported on this platform".into())
+    }
     /// Goes forward in the browser's history: the web's; the other
     /// platforms have no forward.
     fn forward(&self) -> Result<(), String> {
@@ -1994,9 +2004,24 @@ impl Agent {
         self.hold_long_press(owner, at, hold)
     }
 
+    /// Pastes `text` into input node `id`, focusing it first when needed.
+    pub fn paste_node(&self, id: NodeId, text: &str) -> Result<(), String> {
+        self.paste(&format!("view:{id}"), &nsh_core::PasteEvent::new(text))
+    }
+
     /// The system's back gesture or button, on platforms that have one.
     pub fn back(&self) -> Result<(), String> {
         self.native.back().and_then(|()| self.settled())
+    }
+
+    /// Requests portrait or landscape orientation.
+    pub fn rotate(&self, landscape: bool) -> Result<(), String> {
+        self.native.rotate(landscape).and_then(|()| self.settled())
+    }
+
+    /// Shows or hides the software keyboard.
+    pub fn keyboard(&self, shown: bool) -> Result<(), String> {
+        self.native.keyboard(shown).and_then(|()| self.settled())
     }
 
     /// Focuses input `id`, types `text`, and waits for the resulting state.
