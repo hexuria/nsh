@@ -238,6 +238,7 @@ fn acts(op: &Op) -> bool {
             | Op::WaitUntil { .. }
             | Op::Assert { .. }
             | Op::Screenshot { .. }
+            | Op::Blob { .. }
             | Op::Keybindings
     )
 }
@@ -618,6 +619,8 @@ fn hello() -> HelloInfo {
         bundle_id: None,
         executable: None,
         features: vec![],
+        framework: Some("nsh".into()),
+        device: None,
     };
     gpui_agent::discovery::fill_hello_identity(&mut hello);
     hello

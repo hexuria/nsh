@@ -100,6 +100,54 @@ impl NshAgentHost {
                 .key_node(self.node_id(target)?, key)
                 .map(|()| DispatchResult::empty()),
             Op::Invoke { name, args } => self.invoke(name, args),
+            Op::Press { .. }
+            | Op::Scroll { .. }
+            | Op::Hover { .. }
+            | Op::Drag { .. }
+            | Op::Viewport { .. } => {
+                // The dispatcher has already checked a press's fingerprint;
+                // the remaining fields are the `invoke` arguments.
+                let op = match op {
+                    Op::Press { target, x, y, .. } => Op::Press {
+                        target: target.clone(),
+                        x: *x,
+                        y: *y,
+                        expect_fingerprint: None,
+                    },
+                    other => other.clone(),
+                };
+                match op.legacy_invoke() {
+                    Some(Op::Invoke { name, args }) => self.invoke(&name, &args),
+                    _ => Err(gpui_agent::unsupported_op("this operation")),
+                }
+            }
+            Op::LongPress {
+                target,
+                x,
+                y,
+                duration_ms,
+            } => {
+                let hold = duration_ms.map(|ms| std::time::Duration::from_millis(ms.min(10_000)));
+                match (target, x, y) {
+                    (Some(target), _, _) => {
+                        self.agent.long_press_node(self.node_id(target)?, hold)?
+                    }
+                    (None, Some(x), Some(y)) => self
+                        .agent
+                        .long_press_at(Point::new(Points(*x as f32), Points(*y as f32)), hold)?,
+                    _ => return Err("long_press needs target or x and y".into()),
+                }
+                Ok(DispatchResult::empty())
+            }
+            Op::System {
+                action: gpui_agent::SystemAction::Back,
+                ..
+            } => self.agent.back().map(|()| DispatchResult::empty()),
+            Op::Swipe {
+                target,
+                direction,
+                distance,
+            } => self.swipe(target.as_deref(), *direction, *distance),
             Op::Keybinding { .. } => {
                 let bindings = self.keybindings();
                 let entry =
@@ -133,7 +181,9 @@ impl AgentHost for NshAgentHost {
             },
             bundle_id: None,
             executable: None,
-            features: Vec::new(),
+            features: self.features(),
+            framework: Some("nsh".into()),
+            device: Some(self.device()),
         }
     }
 
@@ -245,6 +295,88 @@ impl AgentHost for NshAgentHost {
 }
 
 impl NshAgentHost {
+    /// The feature-gated operations this platform's agent delivers. A
+    /// phone has no pointer to hover and no window to resize; a swipe is a
+    /// touch gesture.
+    fn features(&self) -> Vec<String> {
+        let names: &[&str] = match self.platform {
+            PlatformKind::Mobile => &[
+                "press",
+                "scroll",
+                "drag",
+                "swipe",
+                "long_press",
+                "system.back",
+            ],
+            _ => &["press", "scroll", "hover", "drag", "viewport"],
+        };
+        names.iter().map(|name| (*name).to_string()).collect()
+    }
+
+    fn device(&self) -> gpui_agent::DeviceInfo {
+        let viewport = self.agent.native_viewport();
+        let (width, height) = (f64::from(viewport.width.0), f64::from(viewport.height.0));
+        let known = width > 0.0 && height > 0.0;
+        let form_factor = match self.platform {
+            PlatformKind::Mobile => "phone",
+            PlatformKind::Web => "browser",
+            _ => "desktop",
+        };
+        let orientation = if width > height {
+            "landscape"
+        } else {
+            "portrait"
+        };
+        gpui_agent::DeviceInfo {
+            form_factor: Some(form_factor.into()),
+            width: known.then_some(width),
+            height: known.then_some(height),
+            orientation: known.then(|| orientation.into()),
+            input: Some("trusted".into()),
+            ..Default::default()
+        }
+    }
+
+    /// A swipe is a touch drag: across the node, or from the centre of the
+    /// surface when no node is named.
+    fn swipe(
+        &self,
+        target: Option<&str>,
+        direction: gpui_agent::SwipeDirection,
+        distance: Option<f64>,
+    ) -> Result<DispatchResult, String> {
+        let viewport = self.agent.native_viewport();
+        let (width, height) = (viewport.width.0, viewport.height.0);
+        let horizontal = matches!(
+            direction,
+            gpui_agent::SwipeDirection::Left | gpui_agent::SwipeDirection::Right
+        );
+        let distance = match distance {
+            Some(distance) if distance.is_finite() && distance > 0.0 => distance as f32,
+            Some(_) => return Err("swipe distance must be finite and positive".into()),
+            None => (if horizontal { width } else { height }) * 0.4,
+        };
+        let delta = match direction {
+            gpui_agent::SwipeDirection::Up => Point::new(Points(0.0), Points(-distance)),
+            gpui_agent::SwipeDirection::Down => Point::new(Points(0.0), Points(distance)),
+            gpui_agent::SwipeDirection::Left => Point::new(Points(-distance), Points(0.0)),
+            gpui_agent::SwipeDirection::Right => Point::new(Points(distance), Points(0.0)),
+        };
+        match target {
+            Some(target) => self
+                .agent
+                .drag_node_by(self.node_id(target)?, None, delta)?,
+            None => {
+                let from = Point::new(Points(width / 2.0), Points(height / 2.0));
+                self.agent.drag_at(
+                    from,
+                    Point::new(Points(from.x.0 + delta.x.0), Points(from.y.0 + delta.y.0)),
+                )?;
+            }
+        }
+        Ok(DispatchResult::empty())
+    }
+
     fn invoke(&self, name: &str, args: &serde_json::Value) -> Result<DispatchResult, String> {
         let target = |name: &str| {
             args.get(name)
@@ -816,16 +948,36 @@ mod tests {
         }
     }
 
+    type DragRecords = Arc<std::sync::Mutex<Vec<(Point<Points>, Point<Points>)>>>;
+
     /// Available, the text of a masked input, not laid out.
-    struct SnapshotNative(bool, Option<String>, bool);
+    struct SnapshotNative {
+        available: bool,
+        input: Option<String>,
+        viewport_unlaid: bool,
+        presses: Arc<std::sync::Mutex<Vec<Point<Points>>>>,
+        drags: DragRecords,
+    }
+
+    impl SnapshotNative {
+        fn new(available: bool, input: Option<String>, viewport_unlaid: bool) -> Self {
+            Self {
+                available,
+                input,
+                viewport_unlaid,
+                presses: Arc::default(),
+                drags: Arc::default(),
+            }
+        }
+    }
 
     impl Native for SnapshotNative {
         fn available(&self) -> bool {
-            self.0
+            self.available
         }
 
         fn laid_out(&self) -> Result<(), String> {
-            if self.2 {
+            if self.viewport_unlaid {
                 Err("the viewport is not laid out yet".into())
             } else {
                 Ok(())
@@ -849,14 +1001,25 @@ mod tests {
             Size::new(Points(50.0), Points(50.0))
         }
 
-        fn press(&self, _: Point<Points>) {}
+        fn hit_at(&self, _: Point<Points>) -> Result<Option<NodeId>, String> {
+            Ok(Some(3))
+        }
+
+        fn press(&self, at: Point<Points>) {
+            self.presses.lock().unwrap().push(at);
+        }
+
         fn long_press(&self, _: Point<Points>, _: std::time::Duration) {}
         fn scroll(&self, _: Point<Points>, _: Point<Points>) {}
-        fn drag(&self, _: Point<Points>, _: Point<Points>) {}
+
+        fn drag(&self, from: Point<Points>, to: Point<Points>) {
+            self.drags.lock().unwrap().push((from, to));
+        }
+
         fn type_text(&self, _: &str) {}
         fn key(&self, _: nsh_testing::agent::Key) {}
         fn input_text(&self, id: NodeId) -> Option<String> {
-            (id == 3).then(|| self.1.clone()).flatten()
+            (id == 3).then(|| self.input.clone()).flatten()
         }
         fn back(&self) -> Result<(), String> {
             Ok(())
@@ -880,7 +1043,7 @@ mod tests {
     }
 
     fn snapshot_host_with_availability(scene: SnapshotScene, available: bool) -> NshAgentHost {
-        snapshot_host_with_native(scene, SnapshotNative(available, None, false))
+        snapshot_host_with_native(scene, SnapshotNative::new(available, None, false))
     }
 
     fn snapshot_host_with_native(scene: SnapshotScene, native: SnapshotNative) -> NshAgentHost {
@@ -961,7 +1124,7 @@ mod tests {
             }
             let mut host = snapshot_host_with_native(
                 SnapshotScene(Ok(nodes), 1, Default::default()),
-                SnapshotNative(true, Some(secret.into()), false),
+                SnapshotNative::new(true, Some(secret.into()), false),
             );
             let snapshot = host.snapshot();
             let input = &snapshot.nodes[0].children[1];
@@ -1011,7 +1174,7 @@ mod tests {
     fn snapshot_is_not_ready_while_the_viewport_is_not_laid_out() {
         let host = snapshot_host_with_native(
             SnapshotScene(Ok(sample_nodes()), 1, Default::default()),
-            SnapshotNative(true, None, true),
+            SnapshotNative::new(true, None, true),
         );
         let snapshot = host.snapshot();
         assert!(!snapshot.ready);
@@ -1022,7 +1185,7 @@ mod tests {
     fn hello_is_not_ready_while_the_viewport_is_not_laid_out() {
         let host = snapshot_host_with_native(
             SnapshotScene(Ok(sample_nodes()), 1, Default::default()),
-            SnapshotNative(true, None, true),
+            SnapshotNative::new(true, None, true),
         );
         assert!(!host.hello().ready);
     }
@@ -1042,6 +1205,79 @@ mod tests {
             })
             .unwrap_err();
         assert!(error.contains("unavailable"));
+    }
+
+    #[test]
+    fn hello_lists_the_gated_operations_the_platform_delivers() {
+        let host = snapshot_host_with_native(
+            SnapshotScene(Ok(sample_nodes()), 1, Default::default()),
+            SnapshotNative::new(true, None, false),
+        );
+        let hello = host.hello();
+        assert_eq!(hello.framework.as_deref(), Some("nsh"));
+        for feature in ["press", "scroll", "drag"] {
+            assert!(hello.features.iter().any(|name| name == feature));
+        }
+        let lists = |name: &str| hello.features.iter().any(|feature| feature == name);
+        match hello.platform {
+            PlatformKind::Mobile => assert!(lists("swipe") && !lists("hover")),
+            _ => assert!(lists("hover") && !lists("swipe")),
+        }
+    }
+
+    #[test]
+    fn a_press_operation_reaches_the_agent_like_the_invoke_it_replaces() {
+        let mut nodes = sample_nodes();
+        let visible = nodes.iter_mut().find(|node| node.id == 3).unwrap();
+        visible.enabled = true;
+        visible.pressable = true;
+        let presses = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut native = SnapshotNative::new(true, None, false);
+        native.presses = presses.clone();
+        let mut host =
+            snapshot_host_with_native(SnapshotScene(Ok(nodes), 1, Default::default()), native);
+
+        host.dispatch(&Op::Press {
+            target: Some("visible".into()),
+            x: None,
+            y: None,
+            expect_fingerprint: None,
+        })
+        .unwrap();
+
+        assert_eq!(
+            *presses.lock().unwrap(),
+            vec![Point::new(Points(10.0), Points(10.0))]
+        );
+    }
+
+    #[test]
+    fn mobile_swipe_dispatch_reaches_native_drag() {
+        let mut nodes = sample_nodes();
+        nodes.iter_mut().find(|node| node.id == 3).unwrap().enabled = true;
+        let drags = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut native = SnapshotNative::new(true, None, false);
+        native.drags = drags.clone();
+        let agent = Arc::new(Agent::requiring_native_hit_test(
+            Arc::new(SnapshotScene(Ok(nodes), 1, Default::default())),
+            Box::new(native),
+        ));
+        let mut host = NshAgentHost::new("test", PlatformKind::Mobile, agent).unwrap();
+
+        host.dispatch(&Op::Swipe {
+            target: Some("visible".into()),
+            direction: gpui_agent::SwipeDirection::Down,
+            distance: Some(20.0),
+        })
+        .unwrap();
+
+        assert_eq!(
+            *drags.lock().unwrap(),
+            vec![(
+                Point::new(Points(10.0), Points(10.0)),
+                Point::new(Points(10.0), Points(30.0)),
+            )]
+        );
     }
 
     #[test]
