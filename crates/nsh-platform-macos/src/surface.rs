@@ -878,14 +878,18 @@ impl Surface {
                     model.error(message.to_string());
                 }
                 #[cfg(feature = "dev-agent")]
-                self.agent_model.error(message.to_string());
+                if self.agent_worker.borrow().is_some() {
+                    self.agent_model.error(message.to_string());
+                }
                 if let Some(f) = &*self.on_error.borrow() {
                     f(&message);
                 }
             }
             Message::Frame => {
                 #[cfg(feature = "dev-agent")]
-                self.agent_model.frame();
+                if self.agent_worker.borrow().is_some() {
+                    self.agent_model.frame();
+                }
                 self.js_frame.set(true);
             }
             Message::HotUpdateFailed => {
@@ -976,7 +980,9 @@ impl Surface {
         crate::access::batch_applied();
         crate::window::batch_applied(self);
         #[cfg(feature = "dev-agent")]
-        self.agent_model.apply(batch);
+        if self.agent_worker.borrow().is_some() {
+            self.agent_model.apply(batch);
+        }
         #[cfg(feature = "dev")]
         if let Some(model) = &*self.test_model.borrow() {
             model.apply(batch);
