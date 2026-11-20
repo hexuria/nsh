@@ -91,6 +91,11 @@ jobs:
           cache: macos-dev-host
       - name: Clippy
         run: cargo clippy -p nsh-platform-macos -p nsh-macos-host -p nsh-macos-app --all-targets --features nsh-platform-macos/dev -- -D warnings
+      - name: Native agent checks
+        timeout-minutes: 15
+        run: |
+          GPUI_AGENT=0 NSH_NATIVE_AGENT_CHECK_ONLY=1 cargo test -p nsh-platform-macos --features dev-agent --test native -- --ignored
+          NSH_AGENT_LISTENER_CHECK_ONLY=1 cargo test -p nsh-platform-macos --features dev-agent --test native -- --ignored
 
   check:
     needs: changed
