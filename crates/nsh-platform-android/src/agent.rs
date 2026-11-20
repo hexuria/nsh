@@ -228,6 +228,21 @@ impl Native for AndroidNative {
         }
     }
 
+    /// The focused input's node id, if one has focus.
+    fn focused(&self) -> Option<NodeId> {
+        let focused: Option<i32> = self.call(|env, class, view| {
+            env.call_static_method(
+                class,
+                "focusedNode",
+                "(Lcom/longbridge/nsh/NshView;)I",
+                &[JValue::Object(view)],
+            )?
+            .i()
+            .map(Some)
+        });
+        focused.filter(|id| *id >= 0).map(|id| id as NodeId)
+    }
+
     fn bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
         let b = self.floats("bounds", "(Lcom/longbridge/nsh/NshView;I)[F", Some(id))?;
         let d = self.density;

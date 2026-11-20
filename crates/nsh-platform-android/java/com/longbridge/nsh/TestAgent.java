@@ -107,6 +107,22 @@ final class TestAgent {
         }, HIT_FAILED);
     }
 
+    /** The focused input's node id, or {@link #HIT_NONE}. */
+    static int focusedNode(NshView host) {
+        return onMain(() -> {
+            View focus = focused(host);
+            for (View view = focus; view != null; view = view.getParent() instanceof View
+                    ? (View) view.getParent() : null) {
+                for (int i = 0; i < host.mounter().views.size(); i++) {
+                    if (host.mounter().views.valueAt(i) == view) {
+                        return view instanceof InputBox ? host.mounter().views.keyAt(i) : HIT_NONE;
+                    }
+                }
+            }
+            return HIT_NONE;
+        }, HIT_FAILED);
+    }
+
     /**
      * The innermost view that takes a touch at ({@code x}, {@code y}) of
      * {@code v}, node or not: {@link TouchTracker#deepest} with foreign
