@@ -111,6 +111,10 @@ impl DevSession {
                 (None, Some(error))
             }
         };
+        #[cfg(feature = "dev-agent")]
+        {
+            ui.borrow_mut().agent_error = agent_error;
+        }
         let tested = Arc::new(MainThreadBound::new(view.clone(), mtm));
         let tester = nsh_testing::agent::Tester::new(move |model| {
             let tested = tested.clone();
@@ -164,16 +168,6 @@ impl DevSession {
         match started {
             Ok(client) => {
                 let client = Arc::new(client);
-                #[cfg(feature = "dev-agent")]
-                if let Some(error) = agent_error {
-                    client.log(
-                        nsh_dev::protocol::LogLevel::Error,
-                        "nsh_platform_ios::dev",
-                        &format!(
-                            "cannot start GPUI agent; continuing development without it: {error}"
-                        ),
-                    );
-                }
                 tester.set_client(&client);
                 *CLIENT.lock().unwrap_or_else(|e| e.into_inner()) = Arc::downgrade(&client);
                 Some(DevSession {
@@ -283,6 +277,8 @@ impl Drop for DevAgent {
 
 #[derive(Default)]
 struct DevUi {
+    #[cfg(feature = "dev-agent")]
+    agent_error: Option<String>,
     /// Build the app runs (loaded, or reached by hot updates): the server
     /// run it came from and its number.
     running: Option<(u64, u64)>,
@@ -343,7 +339,19 @@ fn device_name(mtm: MainThreadMarker) -> String {
 fn handle(view: &Rc<Inner>, ui: &Rc<RefCell<DevUi>>, event: DevEvent) {
     let container = &view.container;
     match event {
-        DevEvent::Connected => hide_status(ui),
+        DevEvent::Connected => {
+            hide_status(ui);
+            #[cfg(feature = "dev-agent")]
+            {
+                let error = ui.borrow().agent_error.clone();
+                if let Some(error) = error {
+                    log::error!(
+                        "cannot start GPUI agent; continuing development without it: {error}"
+                    );
+                    show_error(ui, container, "GPUI agent unavailable", &error, false);
+                }
+            }
+        }
         DevEvent::Disconnected => {
             show_status(ui, container, "Dev server disconnected — reconnecting…")
         }
