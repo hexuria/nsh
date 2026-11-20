@@ -1697,13 +1697,79 @@ class Player {
       return;
     }
     if (event.event === "key") {
-      document.activeElement?.dispatchEvent(new KeyboardEvent(
-        event.phase === "down" ? "keydown" : "keyup",
-        {
-          key: event.key, code: event.code, shiftKey: event.shift, ctrlKey: event.ctrl,
-          altKey: event.alt, metaKey: event.meta, bubbles: true, composed: true,
-        },
-      ));
+      const target = document.activeElement;
+      if (!target) return;
+      const key = new KeyboardEvent(event.phase === "down" ? "keydown" : "keyup", {
+        key: event.key, code: event.code, shiftKey: event.shift, ctrlKey: event.ctrl,
+        altKey: event.alt, metaKey: event.meta, bubbles: true, composed: true, cancelable: true,
+      });
+      target.dispatchEvent(key);
+      if (event.phase !== "down" || key.defaultPrevented || document.activeElement !== target) return;
+      const input = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+      const contenteditable = target.isContentEditable;
+      if (!input && !contenteditable) return;
+      if ((event.ctrl || event.meta) && event.key.toLowerCase() === "a") {
+        if (input) {
+          target.select();
+        } else {
+          const selection = window.getSelection();
+          if (selection) {
+            const range = document.createRange();
+            range.selectNodeContents(target);
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+        }
+        return;
+      }
+      if (event.key === "Backspace") {
+        document.execCommand("delete");
+        return;
+      }
+      if (event.key === "Delete") {
+        document.execCommand("forwardDelete");
+        return;
+      }
+      if (event.key === "Enter" && (target instanceof HTMLTextAreaElement || contenteditable)) {
+        document.execCommand("insertLineBreak");
+        return;
+      }
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      if (input) {
+        const value = target.value;
+        const start = target.selectionStart ?? value.length;
+        const end = target.selectionEnd ?? start;
+        const backward = target.selectionDirection === "backward";
+        const anchor = start === end ? start : backward ? end : start;
+        let position = start === end ? start : backward ? start : end;
+        if (!event.shift && start !== end && event.key === "ArrowLeft") {
+          position = start;
+        } else if (!event.shift && start !== end && event.key === "ArrowRight") {
+          position = end;
+        } else if (event.key === "ArrowLeft") {
+          position = Math.max(0, position - 1);
+        } else if (event.key === "ArrowRight") {
+          position = Math.min(value.length, position + 1);
+        } else if (event.key === "Home") {
+          position = Math.max(0, value.lastIndexOf("\n", position - 1) + 1);
+        } else {
+          const nextLine = value.indexOf("\n", position);
+          position = nextLine < 0 ? value.length : nextLine;
+        }
+        if (event.shift) {
+          const direction = position < anchor ? "backward" : position > anchor ? "forward" : "none";
+          target.setSelectionRange(Math.min(anchor, position), Math.max(anchor, position), direction);
+        } else {
+          target.setSelectionRange(position, position);
+        }
+      } else {
+        const selection = window.getSelection();
+        if (typeof selection?.modify === "function") {
+          const direction = event.key === "ArrowLeft" || event.key === "Home" ? "backward" : "forward";
+          const granularity = event.key === "Home" || event.key === "End" ? "lineboundary" : "character";
+          selection.modify(event.shift ? "extend" : "move", direction, granularity);
+        }
+      }
       return;
     }
     if (event.event === "insert_text") {
