@@ -83,10 +83,9 @@ fn wait_for_button(client: &mut AgentClient, name: &str) -> String {
 }
 
 pub(super) fn run() {
-    assert!(
-        cfg!(debug_assertions),
-        "the agent listener checks require a debug build"
-    );
+    if !cfg!(debug_assertions) {
+        panic!("the agent listener checks require a debug build");
+    }
     let reserved = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = reserved.local_addr().unwrap();
     drop(reserved);
