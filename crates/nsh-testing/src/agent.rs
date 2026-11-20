@@ -4685,6 +4685,52 @@ mod tests {
     }
 
     #[test]
+    fn canvas_max_id_does_not_make_a_missing_native_hit_actionable() {
+        use nsh_core::geometry::Size;
+
+        let bounds = Bounds::new(point(px(0.0), px(0.0)), size(px(20.0), px(20.0)));
+        let nodes = vec![
+            semantic_node(1, None, false, SemanticTarget::View),
+            semantic_node(4, Some(1), true, SemanticTarget::View),
+            semantic_node(
+                NodeId::MAX,
+                Some(4),
+                false,
+                SemanticTarget::Canvas { owner: 4, bounds },
+            ),
+        ];
+        assert!(is_descendant_or_same(
+            NodeId::MAX,
+            4,
+            &mounted_parents(&nodes)
+        ));
+        for hit in [None, Some(4)] {
+            let presses = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let agent = Agent::requiring_native_hit_test(
+                target_scene(nodes.clone()),
+                Box::new(GateNative {
+                    bounds: [(4, bounds)].into(),
+                    text_bounds: Default::default(),
+                    hit: Ok(hit),
+                    hits: Arc::new(Mutex::new(Vec::new())),
+                    presses: presses.clone(),
+                    pressed_at: Arc::new(Mutex::new(Vec::new())),
+                    typed: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                    viewport: Size::new(px(100.0), px(100.0)),
+                }),
+            );
+            let result = agent.press_node(NodeId::MAX);
+            if hit.is_none() {
+                assert!(result.unwrap_err().contains("has no native hit"));
+                assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 0);
+            } else {
+                result.unwrap();
+                assert_eq!(presses.load(std::sync::atomic::Ordering::Relaxed), 1);
+            }
+        }
+    }
+
+    #[test]
     fn synthetic_canvas_and_text_targets_use_precise_native_geometry() {
         let canvas_bounds = Bounds::new(point(px(60.0), px(20.0)), size(px(10.0), px(10.0)));
         let canvas_node = semantic_node(

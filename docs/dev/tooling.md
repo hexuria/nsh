@@ -849,6 +849,23 @@ server binds to `127.0.0.1:17421` by default. A requested viewport resizes only 
 must fit the device window; it does not change the device resolution. Screenshot names are relative `.png` files in
 the app's cache on the device, not host paths.
 
+#### iOS Simulator GPUI-agent development
+
+The simulator development host enables `nsh-platform-ios/dev-agent` and serves the shared
+`nsh-gpui-agent` adapter as `PlatformKind::Mobile`. See [iOS development](ios.md) for the lifecycle and token handoff.
+
+```sh
+export GPUI_AGENT_TOKEN="$(openssl rand -hex 32)"
+GPUI_AGENT=1 nsh run examples/gallery --target ios &
+gpui-agent hello
+gpui-agent snapshot --pretty
+gpui-agent screenshot --inline --out gallery.png
+```
+
+No port forwarding is needed: the simulator shares the Mac's loopback network. Only the opt-in and loopback address
+are launch environment variables; the token is a private, one-use file in the app's data container. Release builds,
+physical devices and Mac Catalyst do not serve this simulator attach endpoint.
+
 #### Web GPUI-agent development
 
 ```sh
