@@ -23,6 +23,8 @@ cargo test -p nsh-platform-macos --test native -- --ignored # desktop session re
 NSH_MODAL_FOCUS_CHECK_ONLY=1 cargo test -p nsh-platform-macos --test native -- --ignored
 # Native agent window picking, named clicks and targeted keyboard focus:
 NSH_NATIVE_AGENT_CHECK_ONLY=1 cargo test -p nsh-platform-macos --features dev-agent --test native -- --ignored
+# Production agent listener startup, authenticated presses, reload and shutdown:
+NSH_AGENT_LISTENER_CHECK_ONLY=1 cargo test -p nsh-platform-macos --features dev-agent --test native -- --ignored
 # Mounting rows that are not virtualized, measured alone (tests/native/mount.rs):
 NSH_MOUNT_BENCH_ONLY=1 cargo test --release -p nsh-platform-macos --test native -- --ignored
 ```
@@ -31,11 +33,23 @@ Features: `js` (default; JS apps; without it the crate only runs Rust apps and l
 server client, log forwarding, the error overlay: `dev.rs`). The runtime needs macOS 14 (`NSView`'s display links).
 
 The native agent checks use the same single AppKit test binary and require a desktop
-session. With `dev-agent` they also run in its full `--ignored` suite. The checks
-exercise the real mounted model through selector-based presses and targeted keys;
-they do not start a protocol server or require an agent token. Application focus
-is compared with AppKit's observed activation and key-window state; a session that
-cannot activate the app reports that limitation.
+session. With `dev-agent` the adapter checks also run in its full `--ignored` suite.
+They exercise the real mounted model through selector-based presses and targeted
+keys, without a protocol server. Application focus is compared with AppKit's
+observed activation and key-window state; a session that cannot activate the app
+reports that limitation.
+
+The separate `NSH_AGENT_LISTENER_CHECK_ONLY=1` process case requires a debug build
+with `dev-agent` and without `gpui-agent-server`. It configures a random token and
+an ephemeral loopback address before constructing the AppView, starting the real
+shared protocol listener. It checks hello, authentication, snapshots and a native
+button press, then remounts through `AppView::load` (the same operation used by
+the dev host's Cmd+R). Reload replaces the engine and mounted content and resets
+the agent model; it keeps the Surface and its listener worker. A fresh connection
+on the same address must see the new generation. Dropping the AppView and closing
+its window must refuse connections within two seconds, with a watchdog bounding
+main-thread destruction as well as the connection wait. Ordinary native cases
+clear `GPUI_AGENT` before creating surfaces.
 
 ## GPUI-agent development tooling
 

@@ -12,6 +12,14 @@
 //! ```sh
 //! NSH_MOUNT_BENCH_ONLY=1 cargo test --release -p nsh-platform-macos --test native -- --ignored
 //! ```
+#[cfg(all(
+    target_os = "macos",
+    feature = "dev-agent",
+    not(feature = "gpui-agent-server")
+))]
+mod agent_listener;
+#[cfg(all(target_os = "macos", feature = "dev-agent"))]
+mod agent_support;
 #[cfg(target_os = "macos")]
 mod canvas_bounds;
 #[cfg(target_os = "macos")]
@@ -72,7 +80,14 @@ fn main() {
     } else {
         #[cfg(target_os = "macos")]
         {
-            if std::env::var_os("NSH_NATIVE_AGENT_CHECK_ONLY").is_some() {
+            if std::env::var_os("NSH_AGENT_LISTENER_CHECK_ONLY").is_some() {
+                #[cfg(all(feature = "dev-agent", not(feature = "gpui-agent-server")))]
+                agent_listener::run();
+                #[cfg(any(not(feature = "dev-agent"), feature = "gpui-agent-server"))]
+                panic!(
+                    "the agent listener checks require --features dev-agent without gpui-agent-server"
+                );
+            } else if std::env::var_os("NSH_NATIVE_AGENT_CHECK_ONLY").is_some() {
                 #[cfg(feature = "dev-agent")]
                 native_agent::run();
                 #[cfg(not(feature = "dev-agent"))]

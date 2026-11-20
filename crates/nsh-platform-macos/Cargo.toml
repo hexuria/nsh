@@ -101,6 +101,8 @@ nsh-gpui-agent = { workspace = true, optional = true }
 gpui-agent = { workspace = true, optional = true }
 
 [dev-dependencies]
+getrandom = { workspace = true }
+gpui-agent = { workspace = true }
 # Exercise standalone engine replacement through a real development session.
 nsh-dev = { workspace = true, features = ["server"] }
 
