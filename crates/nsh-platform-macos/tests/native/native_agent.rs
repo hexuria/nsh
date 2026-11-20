@@ -197,6 +197,25 @@ fn second_window_hit_test(model: &Model, native: &mut Option<Box<dyn Native>>) {
     println!("native_agent: second_window_hit_test");
 }
 
+fn foreign_native_view_has_no_node(native: &mut Option<Box<dyn Native>>, main: &NSWindow) {
+    let mtm = MainThreadMarker::from(main);
+    let content = main.contentView().unwrap();
+    let wrapper = NSView::initWithFrame(NSView::alloc(mtm), content.frame());
+    main.setContentView(Some(&wrapper));
+    wrapper.addSubview(&content);
+    content.setFrame(wrapper.bounds());
+    let foreign = NSView::initWithFrame(NSView::alloc(mtm), wrapper.bounds());
+    wrapper.addSubview(&foreign);
+    let hit = call(native, |native| {
+        native.target_window(ROOT_ID).unwrap();
+        native.hit_at(nsh_core::geometry::point(px(40.0), px(40.0)))
+    });
+    foreign.removeFromSuperview();
+    main.setContentView(Some(&content));
+    assert_eq!(hit.unwrap(), None);
+    println!("native_agent: foreign_native_view_has_no_node");
+}
+
 fn secondary_window(mtm: MainThreadMarker) -> Retained<NSWindow> {
     NSApplication::sharedApplication(mtm)
         .windows()
@@ -360,6 +379,7 @@ pub(super) fn run() {
     main.makeKeyWindow();
     application_focus(mtm, &mut native, &main);
     second_window_hit_test(&model, &mut native);
+    foreign_native_view_has_no_node(&mut native, &main);
     let agent =
         targeted_key_and_group_rejection(model.clone(), &mut native, &main, &surface.view());
     named_click_changes_only_secondary(agent, model, &secondary_window(mtm));

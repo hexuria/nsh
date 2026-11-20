@@ -396,7 +396,7 @@ impl Native for MacNative {
                 }
                 current = crate::view::superview(&native);
             }
-            Some(NodeId::MAX)
+            None
         })
         .ok_or_else(|| "the window is gone".to_owned())
     }
