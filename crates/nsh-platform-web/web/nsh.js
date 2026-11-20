@@ -1083,6 +1083,7 @@ class Player {
     this.removals = [];
     this.images = new Map();
     this.syntheticPointerDown = null;
+    this.syntheticPointerTarget = null;
     // Browser blob URLs of the in-memory images (`data:` URIs, blobs) the
     // views show, by the source's URI (`image_bytes`).
     this.inlineImages = new Map();
@@ -1641,6 +1642,37 @@ class Player {
         up: ["pointerup", "mouseup"],
       }[event.phase];
       if (!names) throw new Error(`unknown pointer phase ${event.phase}`);
+      if (event.phase === "move" && this.syntheticPointerTarget !== target) {
+        const previous = this.syntheticPointerTarget;
+        const path = (element) => {
+          const ancestors = [];
+          for (let parent = element; parent; parent = parent.parentElement) ancestors.push(parent);
+          return ancestors;
+        };
+        const previousPath = previous ? path(previous) : [];
+        const targetPath = path(target);
+        const boundary = (element, pointerName, mouseName, relatedTarget, bubbles) => {
+          const init = {
+            button: 0, buttons: event.buttons, clientX: event.x, clientY: event.y, relatedTarget,
+            bubbles, composed: true, cancelable: bubbles,
+          };
+          element.dispatchEvent(new PointerEvent(pointerName, {
+            ...init, pointerType: "mouse", pointerId: 1,
+          }));
+          element.dispatchEvent(new MouseEvent(mouseName, init));
+        };
+        if (previous) {
+          boundary(previous, "pointerout", "mouseout", target, true);
+          for (const element of previousPath.filter((item) => !targetPath.includes(item))) {
+            boundary(element, "pointerleave", "mouseleave", target, false);
+          }
+        }
+        boundary(target, "pointerover", "mouseover", previous, true);
+        for (const element of targetPath.filter((item) => !previousPath.includes(item)).reverse()) {
+          boundary(element, "pointerenter", "mouseenter", previous, false);
+        }
+        this.syntheticPointerTarget = target;
+      }
       const pointer = new PointerEvent(names[0], {
         pointerType: "mouse", pointerId: 1, button: 0, buttons: event.buttons,
         clientX: event.x, clientY: event.y, bubbles: true, composed: true, cancelable: true,
