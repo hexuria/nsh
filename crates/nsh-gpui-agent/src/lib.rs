@@ -317,29 +317,24 @@ impl NshAgentHost {
         let viewport = self.agent.native_viewport();
         let (width, height) = (f64::from(viewport.width.0), f64::from(viewport.height.0));
         let known = width > 0.0 && height > 0.0;
-        let mut device = gpui_agent::DeviceInfo::default();
-        device.form_factor = Some(
-            match self.platform {
-                PlatformKind::Mobile => "phone",
-                PlatformKind::Web => "browser",
-                _ => "desktop",
-            }
-            .into(),
-        );
-        if known {
-            device.width = Some(width);
-            device.height = Some(height);
-            device.orientation = Some(
-                if width > height {
-                    "landscape"
-                } else {
-                    "portrait"
-                }
-                .into(),
-            );
+        let form_factor = match self.platform {
+            PlatformKind::Mobile => "phone",
+            PlatformKind::Web => "browser",
+            _ => "desktop",
+        };
+        let orientation = if width > height {
+            "landscape"
+        } else {
+            "portrait"
+        };
+        gpui_agent::DeviceInfo {
+            form_factor: Some(form_factor.into()),
+            width: known.then_some(width),
+            height: known.then_some(height),
+            orientation: known.then(|| orientation.into()),
+            input: Some("trusted".into()),
+            ..Default::default()
         }
-        device.input = Some("trusted".into());
-        device
     }
 
     /// A swipe is a touch drag: across the node, or from the centre of the
@@ -953,13 +948,15 @@ mod tests {
         }
     }
 
+    type DragRecords = Arc<std::sync::Mutex<Vec<(Point<Points>, Point<Points>)>>>;
+
     /// Available, the text of a masked input, not laid out.
     struct SnapshotNative {
         available: bool,
         input: Option<String>,
         viewport_unlaid: bool,
         presses: Arc<std::sync::Mutex<Vec<Point<Points>>>>,
-        drags: Arc<std::sync::Mutex<Vec<(Point<Points>, Point<Points>)>>>,
+        drags: DragRecords,
     }
 
     impl SnapshotNative {

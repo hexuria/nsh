@@ -2844,14 +2844,24 @@ impl Screen {
     /// The view the selector names, for a long press: it, or its nearest
     /// ancestor that hears long presses or presses.
     pub(crate) fn long_pressable(&self, selector: &Selector) -> Pick {
+        let matches = self.resolve(selector);
+        let listens = |view: &View| {
+            view.events.contains(EventKind::LongPress)
+                || view.events.contains(EventKind::Press)
+                || view.events.contains(EventKind::Touch)
+        };
+        if !matches.is_empty()
+            && matches.iter().all(|id| {
+                let target = self.up_to(*id, listens);
+                target.is_some_and(|target| self.disabled_from(*id, Some(target)))
+            })
+        {
+            return Pick::Disabled;
+        }
         self.pick(selector, |id| {
             // A view watching touches hears a held finger too (a context
             // menu's trigger).
-            let target = self.up_to(id, |v| {
-                v.events.contains(EventKind::LongPress)
-                    || v.events.contains(EventKind::Press)
-                    || v.events.contains(EventKind::Touch)
-            })?;
+            let target = self.up_to(id, listens)?;
             (!self.disabled_from(id, Some(target))).then_some(target)
         })
     }
