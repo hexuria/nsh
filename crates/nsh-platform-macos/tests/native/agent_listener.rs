@@ -163,6 +163,18 @@ pub(super) fn run() {
             .expect_ok(Op::Hello)
             .expect("hello after reload on the same address");
         wait_for_button(&mut client, "Generation 1: pressed false");
+        let tree = client
+            .snapshot()
+            .expect("snapshot after reload")
+            .tree
+            .expect("snapshot tree after reload");
+        let stale: Vec<_> = tree
+            .flatten()
+            .into_iter()
+            .filter(|node| node.name.starts_with("Generation 0"))
+            .map(|node| node.name.clone())
+            .collect();
+        assert!(stale.is_empty(), "the reload kept old nodes: {stale:?}");
     });
     println!("agent_listener: reload on the same address with a new connection");
 
