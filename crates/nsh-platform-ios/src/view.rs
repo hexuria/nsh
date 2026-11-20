@@ -317,7 +317,7 @@ impl Inner {
         if let Some(surface) = &state.surface {
             // The engine restarts, so the agent's scene starts empty too.
             #[cfg(feature = "dev-agent")]
-            if let Some(dev) = this.dev().as_ref() {
+            if let Some(dev) = &state.dev {
                 dev.reset_agent_scene();
             }
             return surface.reload(app);
