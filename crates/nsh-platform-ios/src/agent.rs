@@ -374,7 +374,7 @@ impl Native for IosNative {
                     }
                     current = native.superview();
                 }
-                Some(NodeId::MAX)
+                None
             })
             .ok_or_else(|| "native surface is unavailable".to_owned())
         })
