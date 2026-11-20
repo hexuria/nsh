@@ -1495,11 +1495,13 @@ thread_local! {
     /// frame, a grid's next window) sets most of its labels as before, and
     /// setting them (a font, an attributed string, a line each) cost more
     /// than drawing them.
-    static TYPESET: RefCell<(
-        FxHashMap<crate::text::FontKey, CFRetained<objc2_core_text::CTFont>>,
-        FxHashMap<(crate::text::FontKey, Box<str>), Typeset>,
-    )> = RefCell::default();
+    static TYPESET: RefCell<(FontTable, TypesetTable)> = RefCell::default();
 }
+
+/// [`TYPESET`]'s fonts, by font key.
+type FontTable = FxHashMap<crate::text::FontKey, CFRetained<objc2_core_text::CTFont>>;
+/// [`TYPESET`]'s set texts, by font key and text.
+type TypesetTable = FxHashMap<(crate::text::FontKey, Box<str>), Typeset>;
 
 /// `text` set in one line in `style`'s font (kept: [`TYPESET`]).
 fn typeset(text: &str, style: &nsh_core::ResolvedTextStyle) -> Typeset {
