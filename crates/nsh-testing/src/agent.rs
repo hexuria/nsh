@@ -1357,7 +1357,7 @@ pub trait Native: Send + Sync {
         let _ = content;
         Err(
             "pasting in tests is not supported on this platform yet: run the test headless, \
-             or on macOS, iOS or the web"
+             or on macOS, iOS, Android or the web"
                 .into(),
         )
     }
@@ -1459,6 +1459,16 @@ pub trait Native: Send + Sync {
     /// Goes back as the user does (a back gesture, the back button,
     /// Escape): an error when the platform has none.
     fn back(&self) -> Result<(), String>;
+    /// Requests portrait or landscape orientation.
+    fn rotate(&self, landscape: bool) -> Result<(), String> {
+        let _ = landscape;
+        Err("rotate is not supported on this platform".into())
+    }
+    /// Shows or hides the software keyboard.
+    fn keyboard(&self, shown: bool) -> Result<(), String> {
+        let _ = shown;
+        Err("keyboard is not supported on this platform".into())
+    }
     /// Goes forward in the browser's history: the web's; the other
     /// platforms have no forward.
     fn forward(&self) -> Result<(), String> {
@@ -1995,12 +2005,27 @@ impl Agent {
         self.hold_long_press(owner, at, hold)
     }
 
+    /// Pastes `text` into input node `id`, focusing it first when needed.
+    pub fn paste_node(&self, id: NodeId, text: &str) -> Result<(), String> {
+        self.paste(&format!("view:{id}"), &nsh_core::PasteEvent::new(text))
+    }
+
     /// The system's back gesture or button, on platforms that have one.
     pub fn back(&self) -> Result<(), String> {
         self.native.back().and_then(|()| self.settled())
     }
 
-    /// Focuses input `id`, types `text`, and waits for the resulting state.
+    /// Requests portrait or landscape orientation.
+    pub fn rotate(&self, landscape: bool) -> Result<(), String> {
+        self.native.rotate(landscape).and_then(|()| self.settled())
+    }
+
+    /// Shows or hides the software keyboard.
+    pub fn keyboard(&self, shown: bool) -> Result<(), String> {
+        self.native.keyboard(shown).and_then(|()| self.settled())
+    }
+
+    /// Types `text` into input `id`, focusing it first when needed, and waits for the resulting state.
     pub fn type_node(&self, id: NodeId, text: &str) -> Result<(), String> {
         let at = self.node_point(id)?;
         let node = self
@@ -2012,7 +2037,9 @@ impl Agent {
         if !node.input {
             return Err(format!("node {id} is not a text input"));
         }
-        self.native.press(at);
+        if self.native.focused() != Some(id) {
+            self.native.press(at);
+        }
         self.native.type_text(text);
         self.settled()
     }
@@ -3688,6 +3715,100 @@ mod tests {
         fn quit(&self) {}
     }
 
+    #[derive(Default)]
+    struct SystemActionRecords {
+        calls: Mutex<Vec<&'static str>>,
+        presses: Mutex<Vec<Point<Points>>>,
+        pastes: Mutex<Vec<String>>,
+        typed_text: Mutex<Vec<String>>,
+        rotations: Mutex<Vec<bool>>,
+        keyboards: Mutex<Vec<bool>>,
+    }
+
+    struct SystemActionNative {
+        bounds: std::collections::HashMap<NodeId, Bounds<Points>>,
+        viewport: Size<Points>,
+        focused: Option<NodeId>,
+        records: Arc<SystemActionRecords>,
+        rotate_error: Option<&'static str>,
+        keyboard_error: Option<&'static str>,
+    }
+
+    impl Native for SystemActionNative {
+        fn bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
+            self.bounds.get(&id).copied()
+        }
+        fn viewport(&self) -> Size<Points> {
+            self.viewport
+        }
+        fn press(&self, at: Point<Points>) {
+            self.records.calls.lock().unwrap().push("press");
+            self.records.presses.lock().unwrap().push(at);
+        }
+        fn long_press(&self, _: Point<Points>, _: Duration) {}
+        fn scroll(&self, _: Point<Points>, _: Point<Points>) {}
+        fn drag(&self, _: Point<Points>, _: Point<Points>) {}
+        fn type_text(&self, text: &str) {
+            self.records.calls.lock().unwrap().push("type");
+            self.records
+                .typed_text
+                .lock()
+                .unwrap()
+                .push(text.to_string());
+        }
+        fn key(&self, _: Key) {}
+        fn input_text(&self, _: NodeId) -> Option<String> {
+            None
+        }
+        fn focused(&self) -> Option<NodeId> {
+            self.focused
+        }
+        fn paste(&self, content: &nsh_core::PasteEvent) -> Result<(), String> {
+            self.records.calls.lock().unwrap().push("paste");
+            self.records
+                .pastes
+                .lock()
+                .unwrap()
+                .push(content.text.clone());
+            Ok(())
+        }
+        fn back(&self) -> Result<(), String> {
+            Ok(())
+        }
+        fn answer_dialog(&self, _: Option<&str>) -> Result<(), String> {
+            Ok(())
+        }
+        fn animating(&self) -> bool {
+            false
+        }
+        fn screenshot(&self) -> Result<Vec<u8>, String> {
+            Err("unsupported".into())
+        }
+        fn resize(&self, _: Points, _: Points) -> Result<(), String> {
+            Ok(())
+        }
+        fn set_dark(&self, _: bool) -> Result<(), String> {
+            Ok(())
+        }
+        fn quit(&self) {}
+        fn rotate(&self, landscape: bool) -> Result<(), String> {
+            self.records.calls.lock().unwrap().push("rotate");
+            self.records.rotations.lock().unwrap().push(landscape);
+            match self.rotate_error {
+                Some(error) => Err(error.into()),
+                None => Ok(()),
+            }
+        }
+        fn keyboard(&self, shown: bool) -> Result<(), String> {
+            self.records.calls.lock().unwrap().push("keyboard");
+            self.records.keyboards.lock().unwrap().push(shown);
+            match self.keyboard_error {
+                Some(error) => Err(error.into()),
+                None => Ok(()),
+            }
+        }
+    }
+
     impl GateNative {
         fn record(&self, action: &'static str, at: Option<Point<Points>>) {
             if let Some(windows) = &self.windows {
@@ -3736,6 +3857,152 @@ mod tests {
         }
         model.apply(&MountBatch { items });
         model
+    }
+
+    fn system_action_agent(
+        input: bool,
+        focused: Option<NodeId>,
+        rotate_error: Option<&'static str>,
+        keyboard_error: Option<&'static str>,
+    ) -> (Agent, Arc<SystemActionRecords>) {
+        use nsh_core::{EventMask, InputConfig, MountItem, ViewKind, ViewProps};
+
+        let model = Arc::new(Model::default());
+        let mut events = EventMask::default();
+        events.set(EventKind::Press, true);
+        let props = ViewProps {
+            test_id: Some("target".into()),
+            ..ViewProps::default()
+        };
+        let frame = Bounds::new(point(px(20.0), px(0.0)), size(px(60.0), px(100.0)));
+        let mut items = vec![
+            MountItem::Create {
+                id: 2,
+                kind: if input {
+                    ViewKind::Input
+                } else {
+                    ViewKind::View
+                },
+            },
+            MountItem::Frame { id: 2, frame },
+            MountItem::Insert {
+                parent: 1,
+                child: 2,
+                before: None,
+            },
+            MountItem::Events { id: 2, events },
+            MountItem::ViewProps {
+                id: 2,
+                props: Box::new(props),
+            },
+        ];
+        if input {
+            items.push(MountItem::Input {
+                id: 2,
+                config: Box::new(InputConfig::default()),
+            });
+        }
+        model.apply(&MountBatch { items });
+
+        let records = Arc::new(SystemActionRecords::default());
+        let native = SystemActionNative {
+            bounds: [(2, frame)].into(),
+            viewport: size(px(100.0), px(100.0)),
+            focused,
+            records: records.clone(),
+            rotate_error,
+            keyboard_error,
+        };
+        (Agent::new(model, Box::new(native)), records)
+    }
+
+    #[test]
+    fn paste_node_preserves_focus_and_passes_text_to_native() {
+        let (agent, records) = system_action_agent(true, Some(2), None, None);
+
+        agent.paste_node(2, "replacement").unwrap();
+
+        assert_eq!(*records.calls.lock().unwrap(), vec!["paste"]);
+        assert!(records.presses.lock().unwrap().is_empty());
+        assert_eq!(
+            *records.pastes.lock().unwrap(),
+            vec!["replacement".to_string()]
+        );
+    }
+
+    #[test]
+    fn paste_node_focuses_an_unfocused_input_before_pasting() {
+        let (agent, records) = system_action_agent(true, None, None, None);
+
+        agent.paste_node(2, "replacement").unwrap();
+
+        assert_eq!(*records.calls.lock().unwrap(), vec!["press", "paste"]);
+        assert_eq!(
+            *records.presses.lock().unwrap(),
+            vec![point(px(50.0), px(50.0))]
+        );
+        assert_eq!(
+            *records.pastes.lock().unwrap(),
+            vec!["replacement".to_string()]
+        );
+    }
+
+    #[test]
+    fn type_node_keeps_focus_on_a_focused_input() {
+        let (agent, records) = system_action_agent(true, Some(2), None, None);
+
+        agent.type_node(2, "typed text").unwrap();
+
+        assert_eq!(*records.calls.lock().unwrap(), vec!["type"]);
+        assert!(records.presses.lock().unwrap().is_empty());
+        assert_eq!(
+            *records.typed_text.lock().unwrap(),
+            vec!["typed text".to_string()]
+        );
+    }
+
+    #[test]
+    fn type_node_focuses_an_unfocused_input_before_typing() {
+        let (agent, records) = system_action_agent(true, None, None, None);
+
+        agent.type_node(2, "typed text").unwrap();
+
+        assert_eq!(*records.calls.lock().unwrap(), vec!["press", "type"]);
+        assert_eq!(
+            *records.presses.lock().unwrap(),
+            vec![point(px(50.0), px(50.0))]
+        );
+        assert_eq!(
+            *records.typed_text.lock().unwrap(),
+            vec!["typed text".to_string()]
+        );
+    }
+
+    #[test]
+    fn paste_node_rejects_non_input_without_pasting() {
+        let (agent, records) = system_action_agent(false, None, None, None);
+
+        assert!(agent.paste_node(2, "replacement").is_err());
+
+        assert!(records.calls.lock().unwrap().is_empty());
+        assert!(records.pastes.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn rotate_and_keyboard_forward_arguments_and_errors() {
+        let (agent, records) = system_action_agent(
+            false,
+            None,
+            Some("rotation failed"),
+            Some("keyboard failed"),
+        );
+
+        assert_eq!(agent.rotate(true).unwrap_err(), "rotation failed");
+        assert_eq!(agent.keyboard(false).unwrap_err(), "keyboard failed");
+
+        assert_eq!(*records.rotations.lock().unwrap(), vec![true]);
+        assert_eq!(*records.keyboards.lock().unwrap(), vec![false]);
+        assert_eq!(*records.calls.lock().unwrap(), vec!["rotate", "keyboard"]);
     }
 
     fn two_window_agent() -> (Agent, Arc<WindowRecords>) {
