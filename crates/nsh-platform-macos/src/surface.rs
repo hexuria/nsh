@@ -296,6 +296,12 @@ pub(crate) struct Surface {
     /// The model of a test session's app (`nsh test --target`).
     #[cfg(feature = "dev")]
     test_model: RefCell<Option<std::sync::Arc<nsh_testing::agent::Model>>>,
+    #[cfg(feature = "dev-agent")]
+    agent_model: Arc<nsh_testing::agent::Model>,
+    #[cfg(feature = "dev-agent")]
+    agent_alive: Arc<AtomicBool>,
+    #[cfg(feature = "dev-agent")]
+    agent_worker: RefCell<Option<nsh_gpui_agent::WorkerHandle>>,
     /// Batches applied so far: the gpui-agent waits for them to stop
     /// coming ([`Surface::activity`]).
     #[cfg(feature = "gpui-agent")]
@@ -447,6 +453,12 @@ impl Surface {
             cosmetic_frames: Cell::new(0),
             #[cfg(feature = "dev")]
             test_model: RefCell::default(),
+            #[cfg(feature = "dev-agent")]
+            agent_model: Arc::default(),
+            #[cfg(feature = "dev-agent")]
+            agent_alive: Arc::new(AtomicBool::new(true)),
+            #[cfg(feature = "dev-agent")]
+            agent_worker: RefCell::default(),
             #[cfg(feature = "gpui-agent")]
             batches: Cell::new(0),
             link: RefCell::new(None),
@@ -491,12 +503,49 @@ impl Surface {
         });
         root.set_surface(Rc::downgrade(&surface));
         crate::keyboard::install(&surface);
+        // The private server owns the listener when both features are enabled.
+        #[cfg(all(
+            feature = "dev-agent",
+            not(feature = "gpui-agent-server"),
+            debug_assertions
+        ))]
+        surface.start_agent();
         surface
     }
 
     /// The surface's key ([`Surface::with_key`]).
     pub(crate) fn key(&self) -> u64 {
         self.key
+    }
+
+    #[cfg(all(
+        feature = "dev-agent",
+        not(feature = "gpui-agent-server"),
+        debug_assertions
+    ))]
+    fn start_agent(&self) {
+        let agent = Arc::new(nsh_testing::agent::Agent::requiring_native_hit_test(
+            self.agent_model.clone(),
+            Box::new(crate::agent::MacNative::attached(
+                self.key,
+                self.agent_alive.clone(),
+            )),
+        ));
+        let host = match nsh_gpui_agent::NshAgentHost::new(
+            "Native Shell",
+            nsh_gpui_agent::PlatformKind::Desktop,
+            agent,
+        ) {
+            Ok(host) => host,
+            Err(_) => {
+                log::error!("cannot construct the GPUI-agent development host");
+                return;
+            }
+        };
+        match nsh_gpui_agent::start_from_env(host) {
+            Ok(worker) => *self.agent_worker.borrow_mut() = worker,
+            Err(_) => log::error!("invalid GPUI_AGENT development configuration"),
+        }
     }
 
     /// The surface with `key`, for callbacks that must be `Send`.
@@ -582,6 +631,8 @@ impl Surface {
 
     /// Stops the app and removes its views.
     pub(crate) fn stop(&self) {
+        #[cfg(feature = "dev-agent")]
+        self.agent_model.reset();
         // The confirmation and policy belong to the engine being replaced,
         // not its successor. Approval takes the request before stopping.
         crate::app::set_quit_request_options(self.key, Default::default());
@@ -826,11 +877,17 @@ impl Surface {
                 if let Some(model) = &*self.test_model.borrow() {
                     model.error(message.to_string());
                 }
+                #[cfg(feature = "dev-agent")]
+                self.agent_model.error(message.to_string());
                 if let Some(f) = &*self.on_error.borrow() {
                     f(&message);
                 }
             }
-            Message::Frame => self.js_frame.set(true),
+            Message::Frame => {
+                #[cfg(feature = "dev-agent")]
+                self.agent_model.frame();
+                self.js_frame.set(true);
+            }
             Message::HotUpdateFailed => {
                 if let Some(f) = &*self.on_hot_update_failed.borrow() {
                     f();
@@ -918,6 +975,8 @@ impl Surface {
         }
         crate::access::batch_applied();
         crate::window::batch_applied(self);
+        #[cfg(feature = "dev-agent")]
+        self.agent_model.apply(batch);
         #[cfg(feature = "dev")]
         if let Some(model) = &*self.test_model.borrow() {
             model.apply(batch);
@@ -1569,6 +1628,11 @@ impl Surface {
 
 impl Drop for Surface {
     fn drop(&mut self) {
+        #[cfg(feature = "dev-agent")]
+        {
+            self.agent_alive.store(false, Ordering::Release);
+            self.agent_worker.get_mut().take();
+        }
         let key = self.key;
         if let Some(link) = self.link.borrow_mut().take() {
             link.link.invalidate();

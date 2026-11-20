@@ -4276,6 +4276,7 @@ dependencies = [
  "nsh-core",
  "nsh-dev",
  "nsh-engine",
+ "nsh-gpui-agent",
  "nsh-platform-apple",
  "nsh-testing",
  "objc2",

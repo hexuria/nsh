@@ -15,6 +15,34 @@ NSH 应用也能作为原生 Mac 应用运行。macOS 后端用 AppKit 视图和
 
 macOS 后端的行为是桌面应用：鼠标、触控板和键盘输入，可调整大小的窗口，覆盖窗口的对话框和菜单栏。
 
+## GPUI-agent 开发工具
+
+debug TSX 开发宿主通过 `nsh-platform-macos/dev-agent` 使用共享适配器。
+启动前设置：
+
+```sh
+export GPUI_AGENT=1
+export GPUI_AGENT_ADDR=127.0.0.1:17421
+export GPUI_AGENT_TOKEN="$(openssl rand -hex 32)"
+nsh run examples/gallery/App.tsx --target macos
+```
+
+保持宿主运行，在另一个终端使用相同的环境变量：
+
+```sh
+gpui-agent hello
+gpui-agent snapshot --pretty
+gpui-agent click <target-id>
+gpui-agent screenshot --inline --out gallery.png
+```
+
+从快照中选择目标 ID。桌面适配器支持原生点击、滚动、悬停、拖动、调整视口和内联 PNG 截图。
+必须提供令牌，监听地址仅限回环地址；不要把令牌写入日志或提交到仓库。
+重新加载会重置语义模型，关闭 surface 会停止 worker。打包应用不启用此功能，
+优化构建的开发宿主也不会启动共享监听器。Rust-root 应用使用自己的 runner，而非此 TSX 宿主。
+现有 `gpui-agent`、`gpui-agent-server` 功能和进程内 API 保持不变；
+同时启用 `gpui-agent-server` 时，仅启动原有私有服务器。
+
 ## 环境要求
 
 - 运行应用的机器需要 **macOS 14** 及以上，或应用指定的更高版本（见[最低系统版本](./packaging.md#最低系统版本)）。

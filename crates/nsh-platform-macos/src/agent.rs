@@ -10,7 +10,10 @@
 use std::{
     cell::RefCell,
     rc::Rc,
-    sync::Mutex,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -63,6 +66,7 @@ struct Click {
 /// The surface the agent acts on, by key (its calls must be `Send`).
 pub(crate) struct MacNative {
     key: u64,
+    available: Option<Arc<AtomicBool>>,
     /// The last left button press, which the next one may follow.
     last_click: Mutex<Option<Click>>,
     /// The window pointer input goes to, by its root node.
@@ -73,8 +77,21 @@ impl MacNative {
     pub(crate) fn new(key: u64) -> Self {
         MacNative {
             key,
+            available: None,
             last_click: Mutex::new(None),
             target: Mutex::new(ROOT_ID),
+        }
+    }
+
+    #[cfg(all(
+        feature = "dev-agent",
+        not(feature = "gpui-agent-server"),
+        debug_assertions
+    ))]
+    pub(crate) fn attached(key: u64, available: Arc<AtomicBool>) -> Self {
+        Self {
+            available: Some(available),
+            ..Self::new(key)
         }
     }
 
@@ -342,6 +359,38 @@ fn within(frame: NSRect, area: NSRect) -> NSPoint {
 }
 
 impl Native for MacNative {
+    fn available(&self) -> bool {
+        self.available
+            .as_ref()
+            .is_none_or(|alive| alive.load(Ordering::Acquire))
+    }
+
+    fn hit_at(&self, at: Point<Points>) -> Result<Option<NodeId>, String> {
+        self.on_main(move |surface, window| {
+            let Some(content) = window.contentView() else {
+                return None;
+            };
+            let point = synth::to_window(window, f64::from(at.x.0), f64::from(at.y.0));
+            let point = match crate::view::superview(&content) {
+                Some(parent) => parent.convertPoint_fromView(point, None),
+                None => point,
+            };
+            let mut current = Some(content.hitTest(point)?);
+            let mounter = surface.mounter.borrow();
+            while let Some(native) = current {
+                if let Some(view) = crate::view::NshView::from_ns(&native)
+                    && let Some(owner) = mounter.views.get(&view.id())
+                    && std::ptr::eq::<NSView>(owner.ns(), &*native)
+                {
+                    return Some(view.id());
+                }
+                current = crate::view::superview(&native);
+            }
+            Some(NodeId::MAX)
+        })
+        .ok_or_else(|| "the window is gone".to_owned())
+    }
+
     fn bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
         self.on_main(|surface, _| {
             let mounter = surface.mounter.borrow();

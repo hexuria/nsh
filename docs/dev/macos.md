@@ -28,6 +28,38 @@ NSH_MOUNT_BENCH_ONLY=1 cargo test --release -p nsh-platform-macos --test native 
 Features: `js` (default; JS apps; without it the crate only runs Rust apps and links no QuickJS) and `dev` (the dev
 server client, log forwarding, the error overlay: `dev.rs`). The runtime needs macOS 14 (`NSView`'s display links).
 
+## GPUI-agent development tooling
+
+The debug TSX development host includes the shared `nsh-gpui-agent` adapter
+through `nsh-platform-macos/dev-agent`. Opt in before launching the app:
+
+```sh
+export GPUI_AGENT=1
+export GPUI_AGENT_ADDR=127.0.0.1:17421
+export GPUI_AGENT_TOKEN="$(openssl rand -hex 32)"
+nsh run examples/gallery/App.tsx --target macos
+```
+
+Keep the host running and use the same environment in another terminal:
+
+```sh
+gpui-agent hello
+gpui-agent snapshot --pretty
+gpui-agent click <target-id>
+gpui-agent screenshot --inline --out gallery.png
+```
+
+Choose a target ID from the snapshot. The desktop adapter supports native press,
+scroll, hover, drag, viewport resizing and inline PNG screenshots. The token is
+required and the listener accepts only loopback addresses. Keep tokens out of logs
+and checked-in files. Reloading resets the semantic model; closing the surface stops
+its worker. Packaged apps do not enable this feature, and optimized development
+hosts do not start the shared listener. Rust-root apps use their own runner rather
+than this TSX development host.
+
+The existing `gpui-agent` and `gpui-agent-server` features and in-process APIs are
+unchanged. If `gpui-agent-server` is also enabled, only the private server starts.
+
 ## Dialog fades
 
 Closing a modal restores the previous keyboard focus inside the remaining scope when no other control has
