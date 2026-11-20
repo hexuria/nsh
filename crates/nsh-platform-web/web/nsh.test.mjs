@@ -3069,6 +3069,76 @@ test("a new run drops a push waiting for its turn", (t) => {
   assert.equal(player.pageUrlPush, false);
 });
 
+test("synthetic keys reject keys without an implemented effect", () => {
+  class Input {
+    dispatchEvent(event) {
+      dispatched.push(event.type);
+    }
+  }
+  class Textarea {}
+  class KeyEvent {
+    constructor(type) {
+      this.type = type;
+      this.defaultPrevented = false;
+    }
+  }
+  const { player } = fakePlayer();
+  const dispatched = [];
+  const commands = [];
+  const field = new Input();
+  Object.assign(field, {
+    isContentEditable: false,
+    select() {},
+    value: "",
+  });
+  const saved = {
+    document: globalThis.document,
+    HTMLInputElement: globalThis.HTMLInputElement,
+    HTMLTextAreaElement: globalThis.HTMLTextAreaElement,
+    KeyboardEvent: globalThis.KeyboardEvent,
+  };
+  globalThis.HTMLInputElement = Input;
+  globalThis.HTMLTextAreaElement = Textarea;
+  globalThis.KeyboardEvent = KeyEvent;
+  globalThis.document = {
+    activeElement: field,
+    execCommand(command) {
+      commands.push(command);
+      return true;
+    },
+  };
+  try {
+    const synthesize = (key, modifiers = {}) => player.synthesize({
+      event: "key",
+      phase: "down",
+      key,
+      code: key,
+      shift: false,
+      ctrl: false,
+      alt: false,
+      meta: false,
+      ...modifiers,
+    });
+    for (const key of ["a", "Tab", "ArrowUp", "ArrowDown"]) {
+      assert.throws(
+        () => synthesize(key),
+        { message: `key ${JSON.stringify(key)} cannot be synthesized; use type for text` },
+      );
+    }
+    assert.deepEqual(dispatched, []);
+
+    assert.doesNotThrow(() => synthesize("Enter"));
+    assert.doesNotThrow(() => synthesize("Backspace"));
+    assert.deepEqual(dispatched, ["keydown", "keydown"]);
+    assert.deepEqual(commands, ["delete"]);
+  } finally {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete globalThis[name];
+      else globalThis[name] = value;
+    }
+  }
+});
+
 test("a key event without `key` falls back to its code instead of throwing", () => {
   assert.equal(keyCode({ code: "KeyA" }), 97);
   assert.equal(keyCode({ key: null, code: "Digit3" }), 51);

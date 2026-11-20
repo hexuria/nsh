@@ -1815,17 +1815,34 @@ class Player {
     }
     if (event.event === "key") {
       const target = document.activeElement;
-      if (!target) return;
+      const input = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+      const contenteditable = target?.isContentEditable;
+      const key = event.key;
+      const macOS = globalThis.navigator?.platform?.startsWith("Mac") ?? false;
+      const wordModifier = macOS
+        ? event.alt && !event.ctrl && !event.meta
+        : event.ctrl && !event.alt && !event.meta;
+      const lineModifier = macOS && event.meta && !event.ctrl && !event.alt;
+      const wordAction = wordModifier
+        && ["Backspace", "Delete", "ArrowLeft", "ArrowRight"].includes(key);
+      const lineAction = lineModifier && ["Backspace", "ArrowLeft", "ArrowRight"].includes(key);
+      const caretKeys = ["Backspace", "Delete", "ArrowLeft", "ArrowRight", "Home", "End"];
+      const editable = input || contenteditable;
+      const selectAll = editable && (event.ctrl || event.meta) && key.toLowerCase() === "a";
+      const enter = key === "Enter" && editable;
+      const caret = editable
+        && caretKeys.includes(key)
+        && (!(event.ctrl || event.alt || event.meta) || wordAction || lineAction);
+      if (!selectAll && !enter && !caret) {
+        throw new Error(`key ${JSON.stringify(key)} cannot be synthesized; use type for text`);
+      }
       const keyEvent = new KeyboardEvent(event.phase === "down" ? "keydown" : "keyup", {
         key: event.key, code: event.code, shiftKey: event.shift, ctrlKey: event.ctrl,
         altKey: event.alt, metaKey: event.meta, bubbles: true, composed: true, cancelable: true,
       });
       target.dispatchEvent(keyEvent);
       if (event.phase !== "down" || keyEvent.defaultPrevented || document.activeElement !== target) return;
-      const input = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
-      const contenteditable = target.isContentEditable;
-      if (!input && !contenteditable) return;
-      if ((event.ctrl || event.meta) && event.key.toLowerCase() === "a") {
+      if (selectAll) {
         if (input) {
           target.select();
         } else {
@@ -1839,21 +1856,8 @@ class Player {
         }
         return;
       }
-      if (event.key === "Enter" && (target instanceof HTMLTextAreaElement || contenteditable)) {
+      if (enter) {
         document.execCommand("insertLineBreak");
-        return;
-      }
-      const key = event.key;
-      const macOS = navigator.platform.startsWith("Mac");
-      const wordModifier = macOS
-        ? event.alt && !event.ctrl && !event.meta
-        : event.ctrl && !event.alt && !event.meta;
-      const lineModifier = macOS && event.meta && !event.ctrl && !event.alt;
-      const wordAction = wordModifier
-        && ["Backspace", "Delete", "ArrowLeft", "ArrowRight"].includes(key);
-      const lineAction = lineModifier && ["Backspace", "ArrowLeft", "ArrowRight"].includes(key);
-      const caretKeys = ["Backspace", "Delete", "ArrowLeft", "ArrowRight", "Home", "End"];
-      if ((event.ctrl || event.alt || event.meta) && caretKeys.includes(key) && !wordAction && !lineAction) {
         return;
       }
       if (wordAction || lineAction) {
