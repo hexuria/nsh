@@ -10,7 +10,10 @@
 use std::{
     cell::RefCell,
     rc::Rc,
-    sync::Mutex,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -63,6 +66,7 @@ struct Click {
 /// The surface the agent acts on, by key (its calls must be `Send`).
 pub(crate) struct MacNative {
     key: u64,
+    available: Option<Arc<AtomicBool>>,
     /// The last left button press, which the next one may follow.
     last_click: Mutex<Option<Click>>,
     /// The window pointer input goes to, by its root node.
@@ -73,8 +77,21 @@ impl MacNative {
     pub(crate) fn new(key: u64) -> Self {
         MacNative {
             key,
+            available: None,
             last_click: Mutex::new(None),
             target: Mutex::new(ROOT_ID),
+        }
+    }
+
+    #[cfg(all(
+        feature = "dev-agent",
+        not(feature = "gpui-agent-server"),
+        debug_assertions
+    ))]
+    pub(crate) fn attached(key: u64, available: Arc<AtomicBool>) -> Self {
+        Self {
+            available: Some(available),
+            ..Self::new(key)
         }
     }
 
@@ -342,6 +359,48 @@ fn within(frame: NSRect, area: NSRect) -> NSPoint {
 }
 
 impl Native for MacNative {
+    fn available(&self) -> bool {
+        self.available
+            .as_ref()
+            .is_none_or(|alive| alive.load(Ordering::Acquire))
+    }
+
+    fn hit_at(&self, at: Point<Points>) -> Result<Option<NodeId>, String> {
+        self.on_target(move |surface, window| {
+            let content = window.contentView()?;
+            let window_point = synth::to_window(window, f64::from(at.x.0), f64::from(at.y.0));
+            let point = match crate::view::superview(&content) {
+                Some(parent) => parent.convertPoint_fromView(window_point, None),
+                None => window_point,
+            };
+            let hit = content.hitTest(point)?;
+            // A surface root takes every press inside it and picks the
+            // view itself (`crate::input`), so ask it as the press would.
+            let hit = match crate::view::NshView::from_ns(&hit).and_then(|v| v.surface()) {
+                Some(picker) => {
+                    let root = crate::window::root_in(&picker, window)?;
+                    let local = root.ns().convertPoint_fromView(window_point, None);
+                    let view = crate::input::view_at(&root, local.x as f32, local.y as f32)?;
+                    objc2::Message::retain(view.ns())
+                }
+                None => hit,
+            };
+            let mut current = Some(hit);
+            let mounter = surface.mounter.borrow();
+            while let Some(native) = current {
+                if let Some(view) = crate::view::NshView::from_ns(&native)
+                    && let Some(owner) = mounter.views.get(&view.id())
+                    && std::ptr::eq::<NSView>(owner.ns(), &*native)
+                {
+                    return Some(view.id());
+                }
+                current = crate::view::superview(&native);
+            }
+            None
+        })
+        .ok_or_else(|| "the window is gone".to_owned())
+    }
+
     fn bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
         self.on_main(|surface, _| {
             let mounter = surface.mounter.borrow();
@@ -457,6 +516,54 @@ impl Native for MacNative {
     fn focused(&self) -> Option<NodeId> {
         self.on_key(|_, window| crate::text_input::test_focused(window))
             .flatten()
+    }
+
+    fn focus_node(&self, id: NodeId) -> Result<(), String> {
+        self.on_main(move |surface, _| {
+            let view = surface.mounter.borrow().views.get(&id).cloned();
+            view.is_some_and(|view| {
+                let Some(window) = view.ns().window() else {
+                    return false;
+                };
+                if view.kind() == nsh_core::ViewKind::Input {
+                    crate::text_input::focus(&view);
+                } else if id != ROOT_ID {
+                    crate::input::focus_control(surface, &view);
+                }
+                let focused = crate::text_input::test_focused(&window) == Some(id)
+                    || window.firstResponder().is_some_and(|responder| {
+                        // The responder's nearest nsh view must be this
+                        // node: a focused child does not focus its group.
+                        let mut current = responder
+                            .downcast_ref::<NSView>()
+                            .map(objc2::Message::retain);
+                        while let Some(native) = current {
+                            if let Some(owner) = crate::view::NshView::from_ns(&native) {
+                                return owner.id() == id;
+                            }
+                            current = crate::view::superview(&native);
+                        }
+                        false
+                    });
+                // Only a node that took focus moves the key window, so a
+                // refused request leaves the user's window and popups alone.
+                if focused {
+                    window.makeKeyAndOrderFront(None);
+                    window.makeKeyWindow();
+                }
+                focused
+            })
+        })
+        .ok_or_else(|| "the window is gone".to_owned())?
+        .then_some(())
+        .ok_or_else(|| format!("node {id} cannot receive native focus"))
+    }
+
+    fn app_focused(&self) -> bool {
+        self.on_key(|surface, window| {
+            NSApplication::sharedApplication(surface.mtm).isActive() && window.isKeyWindow()
+        })
+        .unwrap_or(false)
     }
 
     fn compose(&self, text: &str) -> Result<(), String> {

@@ -25,6 +25,8 @@ default = ["js", "shader", "editor", "emoji-picker", "highlight", "math", "plot"
 js = ["nsh-engine/js-core"]
 # Development support: dev server client, log forwarding, error overlay.
 dev = ["js", "shader", "editor", "emoji-picker", "highlight", "math", "plot", "rich-editor", "term", "zlib", "crypto", "websocket", "updater", "dep:nsh-dev", "dep:nsh-testing", "svg"]
+# GPUI-agent is linked only into development hosts, never release apps.
+dev-agent = ["dev", "dep:nsh-gpui-agent", "nsh-gpui-agent/dev-agent"]
 # Shaders (`Shader`, `ShaderEffect`, `ShaderTransition`, the shader transitions
 # of pages and dialogs), on naga and wgpu. Without it they draw nothing.
 shader = ["nsh-engine/shader"]
@@ -95,9 +97,12 @@ unicode-bidi.workspace = true
 libc.workspace = true
 nsh-dev = { workspace = true, features = ["client"], optional = true }
 nsh-testing = { workspace = true, features = ["agent"], optional = true }
+nsh-gpui-agent = { workspace = true, optional = true }
 gpui-agent = { workspace = true, optional = true }
 
 [dev-dependencies]
+getrandom = { workspace = true }
+gpui-agent = { workspace = true }
 # Exercise standalone engine replacement through a real development session.
 nsh-dev = { workspace = true, features = ["server"] }
 

@@ -814,6 +814,17 @@ These hosts are also how a change to a platform is checked by hand: `nsh test <e
 on standard input (`app.screenshot("a.png")`, `app.press(…)`) opens the app in the platform's window, takes them and
 closes it.
 
+#### macOS GPUI-agent development
+
+The debug TSX host supports the shared desktop adapter. Export `GPUI_AGENT=1`,
+`GPUI_AGENT_ADDR=127.0.0.1:17421` and a random `GPUI_AGENT_TOKEN` before
+`nsh run examples/gallery/App.tsx --target macos`. Use the same token/address
+for `gpui-agent hello`, `snapshot --pretty`, `click <target-id>` and
+`screenshot --inline --out gallery.png`. Tokens are required; only loopback
+addresses are accepted. Packaged apps and optimized development hosts start no
+shared listener. See [macOS](macos.md#gpui-agent-development-tooling) for lifecycle,
+capabilities and compatibility with the private server feature.
+
 #### Android GPUI-agent development
 
 Build the development host, opt in with a token exported once in the same shell, then forward its loopback port from
