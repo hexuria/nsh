@@ -321,7 +321,6 @@ impl NshAgentHost {
                 "hover",
                 "drag",
                 "long_press",
-                "paste",
                 "system.back",
             ]
         } else {

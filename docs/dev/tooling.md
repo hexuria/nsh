@@ -871,12 +871,13 @@ off-machine pairing is out of scope.
   - `TextBounds`: the page's answer `nsh test --target web` asks too: each run knows its first character's offset.
   - Key checks are the CLI's (`browser_keys`).
   - In the owned-browser mode, input, screenshots (`Page.captureScreenshot`, viewport only) and resizing are CDP
-    calls. Tab mode supports synthetic pointer, wheel, keyboard, text insertion, focus and back events, but has no
-    screenshot or viewport capability.
+    calls. Tab mode supports synthetic pointer, wheel, keyboard, text insertion, focus and back events, but not
+    paste, screenshot or viewport.
   - Coordinates are CSS pixels from the viewport's top left, which are points; the page itself never scrolls.
   - Keybindings are the model's keymap. The web has no menu bar.
   - The owned-browser mode has no native clipboard, context menus (`Menu.popup` is the app's own UI) or scrolled
-    screenshots, and a web view's cross-origin frame is out of reach. Tab mode inserts plain text synthetically.
+    screenshots, and a web view's cross-origin frame is out of reach. Tab mode's text insertion is synthetic, not
+    clipboard paste.
 - **Security.** The agent's server is loopback only. The token and address are read from `nsh`'s environment, never
   from argv, and are never sent to the browser. gpui-agent checks the token by an HMAC challenge, so it is never on
   the wire either. Release builds refuse to start an agent without `GPUI_AGENT_ALLOW_RELEASE`. On an agent's page a
