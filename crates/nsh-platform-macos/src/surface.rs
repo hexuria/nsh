@@ -544,7 +544,10 @@ impl Surface {
         };
         match nsh_gpui_agent::start_from_env(host) {
             Ok(worker) => *self.agent_worker.borrow_mut() = worker,
-            Err(_) => log::error!("invalid GPUI_AGENT development configuration"),
+            Err(error) => log::error!(
+                "cannot start the GPUI-agent development listener for surface {}: {error}",
+                self.key
+            ),
         }
     }
 
