@@ -1516,8 +1516,8 @@ fn pick(root: &NshView, x: f32, y: f32) -> Option<Hit> {
 /// as [`event`] picks it: the gpui-agent checks that a press reaches its
 /// target before it presses.
 #[cfg(any(feature = "gpui-agent", feature = "dev-agent"))]
-pub(crate) fn view_at(surface: &Surface, x: f32, y: f32) -> Option<NshView> {
-    pick(&surface.root, x, y).map(|hit| hit.view)
+pub(crate) fn view_at(root: &NshView, x: f32, y: f32) -> Option<NshView> {
+    pick(root, x, y).map(|hit| hit.view)
 }
 
 fn pick_in(view: &NshView, p: (f32, f32)) -> Option<Hit> {

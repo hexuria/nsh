@@ -378,8 +378,9 @@ impl Native for MacNative {
             // view itself (`crate::input`), so ask it as the press would.
             let hit = match crate::view::NshView::from_ns(&hit).and_then(|v| v.surface()) {
                 Some(picker) => {
-                    let local = hit.convertPoint_fromView(window_point, None);
-                    let view = crate::input::view_at(&picker, local.x as f32, local.y as f32)?;
+                    let root = crate::window::root_in(&picker, window)?;
+                    let local = root.ns().convertPoint_fromView(window_point, None);
+                    let view = crate::input::view_at(&root, local.x as f32, local.y as f32)?;
                     objc2::Message::retain(view.ns())
                 }
                 None => hit,
