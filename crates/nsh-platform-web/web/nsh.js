@@ -1973,6 +1973,9 @@ class Player {
       const target = element?._field ?? element;
       if (!target?.isConnected) throw new Error(`no DOM element for node ${event.node}`);
       target.focus({ preventScroll: true });
+      if (document.activeElement !== target) {
+        throw new Error(`node ${event.node} cannot receive native focus`);
+      }
       return;
     }
     if (event.event === "back") {

@@ -743,6 +743,32 @@ test("Tab stops are the pressables and the focusable views, pressable or not", (
   delete globalThis.document;
 });
 
+test("synthetic focus fails when the requested view does not take focus", () => {
+  const { player } = fakePlayer();
+  const previous = {};
+  const target = {
+    isConnected: true,
+    focus() {},
+  };
+  player.views = new Map([[7, target]]);
+  const savedDocument = globalThis.document;
+  globalThis.document = { activeElement: previous };
+  try {
+    assert.throws(
+      () => player.synthesize({ event: "focus", node: 7 }),
+      { message: "node 7 cannot receive native focus" },
+    );
+    assert.equal(document.activeElement, previous);
+
+    target.focus = () => { document.activeElement = target; };
+    assert.doesNotThrow(() => player.synthesize({ event: "focus", node: 7 }));
+    assert.equal(document.activeElement, target);
+  } finally {
+    if (savedDocument === undefined) delete globalThis.document;
+    else globalThis.document = savedDocument;
+  }
+});
+
 test("setAccessibilityFocus leaves the keyboard focus in a field the user is typing in", async () => {
   const { player } = fakePlayer();
   player.live = { textContent: "" };
