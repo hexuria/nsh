@@ -454,7 +454,9 @@ final class TestAgent {
     static int imeState(NshView host) {
         return onMain(() -> {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return -1;
-            WindowInsets insets = host.getRootWindowInsets();
+            View view = focused(host);
+            if (view == null) view = host;
+            WindowInsets insets = view.getRootWindowInsets();
             if (insets == null) return -1;
             return insets.isVisible(WindowInsets.Type.ime()) ? 1 : 0;
         }, -1);
