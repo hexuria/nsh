@@ -63,6 +63,10 @@ mod window_press;
 #[cfg(target_os = "macos")]
 mod zoom;
 fn main() {
+    // Native checks drive AppViews in-process; a development shell's
+    // GPUI_AGENT settings must not open the shared agent listener here.
+    // SAFETY: no other thread exists yet to read the environment.
+    unsafe { std::env::remove_var("GPUI_AGENT") };
     if !std::env::args().any(|arg| arg == "--ignored") {
         println!("Native AppKit checks skipped; run with --ignored in a desktop session.");
     } else {

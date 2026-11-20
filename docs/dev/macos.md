@@ -22,7 +22,7 @@ cargo test -p nsh-platform-macos --test native -- --ignored # desktop session re
 # Editor/RichEditor focus restoration and stale-target checks:
 NSH_MODAL_FOCUS_CHECK_ONLY=1 cargo test -p nsh-platform-macos --test native -- --ignored
 # Native agent window picking, named clicks and targeted keyboard focus:
-GPUI_AGENT=0 NSH_NATIVE_AGENT_CHECK_ONLY=1 cargo test -p nsh-platform-macos --features dev-agent --test native -- --ignored
+NSH_NATIVE_AGENT_CHECK_ONLY=1 cargo test -p nsh-platform-macos --features dev-agent --test native -- --ignored
 # Mounting rows that are not virtualized, measured alone (tests/native/mount.rs):
 NSH_MOUNT_BENCH_ONLY=1 cargo test --release -p nsh-platform-macos --test native -- --ignored
 ```
