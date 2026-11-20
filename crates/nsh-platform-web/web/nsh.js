@@ -1653,7 +1653,7 @@ class Player {
         const targetPath = path(target);
         const boundary = (element, pointerName, mouseName, relatedTarget, bubbles) => {
           const init = {
-            button: 0, buttons: event.buttons, clientX: event.x, clientY: event.y, relatedTarget,
+            button: -1, buttons: event.buttons, clientX: event.x, clientY: event.y, relatedTarget,
             bubbles, composed: true, cancelable: bubbles,
           };
           element.dispatchEvent(new PointerEvent(pointerName, {
@@ -1674,11 +1674,11 @@ class Player {
         this.syntheticPointerTarget = target;
       }
       const pointer = new PointerEvent(names[0], {
-        pointerType: "mouse", pointerId: 1, button: 0, buttons: event.buttons,
+        pointerType: "mouse", pointerId: 1, button: event.phase === "move" ? -1 : 0, buttons: event.buttons,
         clientX: event.x, clientY: event.y, bubbles: true, composed: true, cancelable: true,
       });
       const mouse = new MouseEvent(names[1], {
-        button: 0, buttons: event.buttons, clientX: event.x, clientY: event.y,
+        button: event.phase === "move" ? -1 : 0, buttons: event.buttons, clientX: event.x, clientY: event.y,
         bubbles: true, composed: true, cancelable: true,
       });
       target.dispatchEvent(pointer);
