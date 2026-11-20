@@ -2311,11 +2311,13 @@ dependencies = [
 
 [[package]]
 name = "gpui-agent"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71bd3fba3da2ba2253b47d1970ed91ea51df3c1d9d359194fa79914b4ddcf721"
+checksum = "7d22f391992e0b20682baf38df56a204cd2e5ef00104c96293ff6857a9fa0966"
 dependencies = [
+ "base64 0.22.1",
  "hmac 0.12.1",
+ "log",
  "png 0.17.16",
  "serde",
  "serde_json",
