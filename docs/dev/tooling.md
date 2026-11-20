@@ -875,13 +875,14 @@ gpui-agent wait && gpui-agent snapshot --pretty
 gpui-agent screenshot --out gallery.png
 ```
 
-A page cannot listen on a socket and a tab the user opens takes no trusted input, so the agent runs in `nsh`
-(`nsh-cli/src/web_agent.rs`). Next to the address it prints for browsers, `nsh` opens the development page in a
-Chromium of its own (`cdp.rs`, as `nsh test --target web` finds it; headless, in a window with
-`GPUI_AGENT_WEB_HEADED=1`, 1280×800, which is the desktop idiom). It serves
-`nsh_gpui_agent::NshAgentHost` (`PlatformKind::Web`) on `GPUI_AGENT_ADDR` over an
-`Agent::requiring_native_hit_test` on a `RemoteScene` and the shared `WebNative` (`web_native.rs`). The browser closes
-when the run ends, Ctrl-C included.
+A page cannot listen on a socket, so the agent runs in `nsh` (`nsh-cli/src/web_agent.rs`). By default, `nsh` opens
+the development page in a Chromium of its own (`cdp.rs`, headless or in a window with `GPUI_AGENT_WEB_HEADED=1`,
+1280×800, which is the desktop idiom) and sends trusted input. Set `GPUI_AGENT_WEB_TAB=1` to instead have `nsh` print
+a one-use pairing URL for a tab a person opens; `nsh` does not launch or control a browser in this mode, and its page
+dispatches synthetic DOM events. It serves `nsh_gpui_agent::NshAgentHost` (`PlatformKind::Web`) on
+`GPUI_AGENT_ADDR` over an `Agent::requiring_native_hit_test` and the shared scene queries (`web_native.rs`).
+The page keeps the pairing key in session storage and removes it from the URL. Pairing accepts loopback peers only;
+off-machine pairing is out of scope.
 
 - **Routing.** `nsh run` serves the network (`0.0.0.0`), so the page is known by a key: 128 random bits that
   `DevServer::agent_session` holds. CDP's `Page.addScriptToEvaluateOnNewDocument` (after `Page.enable`) gives the key
@@ -897,12 +898,14 @@ when the run ends, Ctrl-C included.
   - `AppFocused`: `document.hasFocus()`, true under CDP's focus emulation.
   - `TextBounds`: the page's answer `nsh test --target web` asks too: each run knows its first character's offset.
   - Key checks are the CLI's (`browser_keys`).
-  - Input, screenshots (`Page.captureScreenshot`, viewport only) and resizing (the idiom stays as it was at start
-    until a reload) are `nsh test`'s CDP calls.
+  - In the owned-browser mode, input, screenshots (`Page.captureScreenshot`, viewport only) and resizing are CDP
+    calls. Tab mode supports synthetic pointer, wheel, keyboard, text insertion, focus and back events, but not
+    paste, screenshot or viewport.
   - Coordinates are CSS pixels from the viewport's top left, which are points; the page itself never scrolls.
   - Keybindings are the model's keymap. The web has no menu bar.
-  - There is nothing to paste with, no native context menus (`Menu.popup` is the app's own UI) and no scrolled
-    screenshots, and a web view's cross-origin frame is out of reach.
+  - The owned-browser mode has no native clipboard, context menus (`Menu.popup` is the app's own UI) or scrolled
+    screenshots, and a web view's cross-origin frame is out of reach. Tab mode's text insertion is synthetic, not
+    clipboard paste.
 - **Security.** The agent's server is loopback only. The token and address are read from `nsh`'s environment, never
   from argv, and are never sent to the browser. gpui-agent checks the token by an HMAC challenge, so it is never on
   the wire either. Release builds refuse to start an agent without `GPUI_AGENT_ALLOW_RELEASE`. On an agent's page a

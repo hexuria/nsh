@@ -1020,6 +1020,7 @@ pub fn answer(model: &Model, step: &TestStep) -> Option<Result<serde_json::Value
             | SceneQuery::DialogPoint { .. }
             | SceneQuery::HitAt { .. }
             | SceneQuery::Focus { .. }
+            | SceneQuery::Focused
             | SceneQuery::AppFocused => return None,
         },
         _ => return None,
@@ -2604,6 +2605,7 @@ impl Agent {
                 ))
             }
             TestStep::Scene { query } => self.scene_query(query),
+            TestStep::Synth { .. } => Err("synthetic events are handled by the web page".into()),
         }
     }
 
@@ -2681,6 +2683,7 @@ impl Agent {
             SceneQuery::InputText { id } => {
                 Ok(self.native.input_text(id).map_or(Value::Null, Value::from))
             }
+            SceneQuery::Focused => Ok(Value::from(self.native.focused())),
             SceneQuery::Animating => Ok(Value::from(self.native.animating())),
             SceneQuery::DialogPoint { .. } => {
                 Err("this host answers dialogs itself (`AnswerDialog`)".into())
@@ -4976,12 +4979,14 @@ mod tests {
             let agent = Agent::requiring_native_hit_test(
                 target_scene(nodes.clone()),
                 Box::new(GateNative {
+                    windows: None,
                     bounds: [(4, bounds)].into(),
                     text_bounds: Default::default(),
                     hit: Ok(hit),
                     hits: Arc::new(Mutex::new(Vec::new())),
                     presses: presses.clone(),
                     pressed_at: Arc::new(Mutex::new(Vec::new())),
+                    long_presses: Arc::new(Mutex::new(Vec::new())),
                     typed: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
                     viewport: Size::new(px(100.0), px(100.0)),
                 }),

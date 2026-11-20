@@ -395,13 +395,15 @@ fn run_web(
     crate::runtime::web(crate::runtime::WebKind::Dev, true)?.context("no web runtime")?;
     let session = DevSession::start(entry, listen, release, limits)?;
     session.print_web_url();
-    // A GPUI agent's page, in a browser of its own, until the session ends.
+    let tab_mode = crate::web_agent::tab_mode();
+    // A GPUI agent's page, in a browser of its own or a tab the user opens.
     let _agent = match agent {
         Some((addr, token)) => Some(crate::web_agent::start(
             session.server(),
             &dunce::canonicalize(entry)?,
             addr,
             token,
+            tab_mode,
         )?),
         None => None,
     };

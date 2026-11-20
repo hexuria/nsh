@@ -2,14 +2,14 @@
 //! `gpui-agent` CLI drives the app through `nsh-gpui-agent`, in its strict,
 //! natively hit-tested mode, as on Linux and Android.
 //!
-//! A page cannot listen on a socket, and a tab the user opened takes no
-//! trusted input, so the agent runs here: `nsh` opens the development page
-//! in a browser of its own ([`cdp`], headless unless
-//! `GPUI_AGENT_WEB_HEADED=1`), which the dev server knows by a key
-//! (`DevServer::agent_session`) handed to the page before its scripts run,
-//! and acts on it as `nsh test --target web` does ([`WebNative`]). The
-//! agent's server listens on `GPUI_AGENT_ADDR` (loopback only) and checks
-//! `GPUI_AGENT_TOKEN`, both from this process's environment.
+//! By default `nsh` opens the development page in a browser of its own
+//! ([`cdp`], headless unless `GPUI_AGENT_WEB_HEADED=1`). With
+//! `GPUI_AGENT_WEB_TAB=1`, a person opens the printed URL in their browser
+//! instead, and input is dispatched synthetically by [`TabNative`]. The dev
+//! server pairs the page by a key; only loopback peers are accepted, and
+//! off-machine pairing is out of scope. The agent's server listens on
+//! `GPUI_AGENT_ADDR` and checks `GPUI_AGENT_TOKEN`, both from this process's
+//! environment.
 //!
 //! [`cdp`]: crate::cdp
 
@@ -23,11 +23,12 @@ use std::{
 use nsh_core::geometry::Points;
 use nsh_dev::DevServer;
 use nsh_gpui_agent::{NshAgentHost, PlatformKind, WorkerHandle};
-use nsh_testing::agent::{Agent, RemoteScene};
+use nsh_testing::agent::{Agent, Native, RemoteScene};
 use serde_json::json;
 
 use crate::{
     cdp::{self, Browser, Page},
+    tab_native::TabNative,
     ui,
     web_native::{ASK, WebNative, set_size},
 };
@@ -43,13 +44,20 @@ pub(crate) fn config() -> anyhow::Result<Option<(SocketAddr, String)>> {
     nsh_gpui_agent::worker_config_from_env().map_err(anyhow::Error::msg)
 }
 
-/// The agent while it runs: dropping it stops its server, closes the page
-/// and the browser. Ctrl-C meanwhile asks the run to stop
-/// ([`ui::Stoppable`]), so the browser never outlives it.
+pub(crate) fn tab_mode() -> bool {
+    matches!(
+        std::env::var("GPUI_AGENT_WEB_TAB").as_deref(),
+        Ok("1" | "true")
+    )
+}
+
+/// The agent while it runs: dropping it stops its server and closes an
+/// owned page and browser. Ctrl-C meanwhile asks the run to stop
+/// ([`ui::Stoppable`]).
 pub(crate) struct WebAgent {
     _worker: WorkerHandle,
-    page: Arc<Page>,
-    browser: Arc<Browser>,
+    page: Option<Arc<Page>>,
+    browser: Option<Arc<Browser>>,
     _stoppable: ui::Stoppable,
 }
 
@@ -57,46 +65,71 @@ impl Drop for WebAgent {
     fn drop(&mut self) {
         // The agent's server thread still holds the page: the browser goes
         // now, not when the last of them does.
-        self.page.close();
-        self.browser.close();
+        if let Some(page) = &self.page {
+            page.close();
+        }
+        if let Some(browser) = &self.browser {
+            browser.close();
+        }
     }
 }
 
-/// Opens the page `server` serves in a browser of its own and serves the
-/// agent on `addr`, `token` required.
+/// The page and browser `nsh` owns (none in tab mode) and the input driver.
+type Driver = (Option<Arc<Page>>, Option<Arc<Browser>>, Box<dyn Native>);
+
+/// Serves the agent for `server` on `addr`, requiring `token`. In tab mode,
+/// a user-opened page is paired instead of launching a browser.
 pub(crate) fn start(
     server: Arc<DevServer>,
     entry: &Path,
     addr: SocketAddr,
     token: String,
+    tab_mode: bool,
 ) -> anyhow::Result<WebAgent> {
-    // From the browser's start on: a stop closes it on the way out.
     let stoppable = ui::Stoppable::new();
-    let exe = cdp::find(None)?;
-    let headed = matches!(
-        std::env::var("GPUI_AGENT_WEB_HEADED").as_deref(),
-        Ok("1" | "true")
-    );
     let key = key()?;
     server.agent_session(key.clone());
-    let browser = Arc::new(Browser::launch_with(&exe, headed).map_err(anyhow::Error::msg)?);
-    let page = Arc::new(browser.page().map_err(anyhow::Error::msg)?);
-    open(&page, &server, key).map_err(anyhow::Error::msg)?;
+    let (page, browser, native): Driver = if tab_mode {
+        (None, None, Box::new(TabNative::new(server.clone())))
+    } else {
+        let exe = cdp::find(None)?;
+        let headed = matches!(
+            std::env::var("GPUI_AGENT_WEB_HEADED").as_deref(),
+            Ok("1" | "true")
+        );
+        let browser = Arc::new(Browser::launch_with(&exe, headed).map_err(anyhow::Error::msg)?);
+        let page = Arc::new(browser.page().map_err(anyhow::Error::msg)?);
+        open(&page, &server, key.clone()).map_err(anyhow::Error::msg)?;
+        let native = Box::new(WebNative::new(page.clone(), server.clone(), true));
+        (Some(page), Some(browser), native)
+    };
     let scene = Arc::new(RemoteScene::new({
         let server = server.clone();
         move |step| server.step(step, ASK)
     }));
-    let native = WebNative::new(page.clone(), server, true);
-    let agent = Arc::new(Agent::requiring_native_hit_test(scene, Box::new(native)));
+    let agent = Arc::new(Agent::requiring_native_hit_test(scene, native));
     let config = crate::package::read_config(entry)?;
     let (name, _) = crate::package::name_and_id(entry, &config);
     let host = NshAgentHost::new(name, PlatformKind::Web, agent).map_err(anyhow::Error::msg)?;
+    let host = if tab_mode { host.with_tab_mode() } else { host };
     let worker = nsh_gpui_agent::spawn_worker(addr, token, host).map_err(anyhow::Error::msg)?;
-    ui::note(format!(
-        "gpui-agent: {} ({}, a browser of its own)",
-        worker.local_addr(),
-        if headed { "in a window" } else { "headless" }
-    ));
+    if tab_mode {
+        ui::note(format!(
+            "gpui-agent: {} (a tab you open: http://127.0.0.1:{}/#gpui-agent={key})",
+            worker.local_addr(),
+            server.local_addr().port()
+        ));
+    } else {
+        let headed = matches!(
+            std::env::var("GPUI_AGENT_WEB_HEADED").as_deref(),
+            Ok("1" | "true")
+        );
+        ui::note(format!(
+            "gpui-agent: {} ({}, a browser of its own)",
+            worker.local_addr(),
+            if headed { "in a window" } else { "headless" }
+        ));
+    }
     Ok(WebAgent {
         _worker: worker,
         page,

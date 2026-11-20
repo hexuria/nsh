@@ -239,6 +239,55 @@ test("input autoCorrect sets spellcheck and the autocorrect attribute on both fi
   }
 });
 
+test("synthetic text refuses read-only and disabled inputs before editing", () => {
+  class Input {}
+  class Textarea {}
+  const { player } = fakePlayer();
+  const view = { _id: 7, _props: { disabled: false } };
+  const field = Object.assign(new Input(), {
+    disabled: false,
+    parentElement: view,
+    readOnly: true,
+    value: "before",
+  });
+  view._field = field;
+  player.views = new Map([[7, view]]);
+  const commands = [];
+  const saved = {
+    document: globalThis.document,
+    HTMLInputElement: globalThis.HTMLInputElement,
+    HTMLTextAreaElement: globalThis.HTMLTextAreaElement,
+  };
+  globalThis.HTMLInputElement = Input;
+  globalThis.HTMLTextAreaElement = Textarea;
+  globalThis.document = {
+    activeElement: field,
+    execCommand(command) {
+      commands.push(command);
+      return false;
+    },
+  };
+  try {
+    assert.throws(
+      () => player.synthesize({ event: "insert_text", text: "after" }),
+      { message: "node 7 is read-only" },
+    );
+    field.readOnly = false;
+    view._props.disabled = true;
+    assert.throws(
+      () => player.synthesize({ event: "insert_text", text: "after" }),
+      { message: "node 7 is disabled" },
+    );
+    assert.deepEqual(commands, []);
+    assert.equal(field.value, "before");
+  } finally {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete globalThis[name];
+      else globalThis[name] = value;
+    }
+  }
+});
+
 test("an invalid view is aria-invalid, and so is the field of an input", () => {
   const { player } = fakePlayer();
   const element = () => {
@@ -741,6 +790,32 @@ test("Tab stops are the pressables and the focusable views, pressable or not", (
   assert.equal(chart.hasAttribute("tabindex"), false);
   assert.equal(chart.blurred, true);
   delete globalThis.document;
+});
+
+test("synthetic focus fails when the requested view does not take focus", () => {
+  const { player } = fakePlayer();
+  const previous = {};
+  const target = {
+    isConnected: true,
+    focus() {},
+  };
+  player.views = new Map([[7, target]]);
+  const savedDocument = globalThis.document;
+  globalThis.document = { activeElement: previous };
+  try {
+    assert.throws(
+      () => player.synthesize({ event: "focus", node: 7 }),
+      { message: "node 7 cannot receive native focus" },
+    );
+    assert.equal(document.activeElement, previous);
+
+    target.focus = () => { document.activeElement = target; };
+    assert.doesNotThrow(() => player.synthesize({ event: "focus", node: 7 }));
+    assert.equal(document.activeElement, target);
+  } finally {
+    if (savedDocument === undefined) delete globalThis.document;
+    else globalThis.document = savedDocument;
+  }
 });
 
 test("setAccessibilityFocus leaves the keyboard focus in a field the user is typing in", async () => {
@@ -2992,6 +3067,218 @@ test("a new run drops a push waiting for its turn", (t) => {
   player.syncHistory();
   assert.deepEqual(calls, []);
   assert.equal(player.pageUrlPush, false);
+});
+
+test("synthetic keys dispatch to handlers before refusing skipped defaults", () => {
+  class Input {
+    dispatchEvent(event) {
+      dispatched.push([event.type, event.key]);
+      if (event.type === "keydown" && ["Enter", "Escape"].includes(event.key)) {
+        event.preventDefault();
+      }
+    }
+  }
+  class Textarea {}
+  class KeyEvent {
+    constructor(type, props) {
+      this.type = type;
+      Object.assign(this, props);
+      this.defaultPrevented = false;
+    }
+    preventDefault() {
+      this.defaultPrevented = true;
+    }
+  }
+  const { player } = fakePlayer();
+  const dispatched = [];
+  const commands = [];
+  const field = new Input();
+  Object.assign(field, {
+    isContentEditable: false,
+    select() {},
+    value: "",
+  });
+  const saved = {
+    document: globalThis.document,
+    HTMLInputElement: globalThis.HTMLInputElement,
+    HTMLTextAreaElement: globalThis.HTMLTextAreaElement,
+    KeyboardEvent: globalThis.KeyboardEvent,
+  };
+  globalThis.HTMLInputElement = Input;
+  globalThis.HTMLTextAreaElement = Textarea;
+  globalThis.KeyboardEvent = KeyEvent;
+  globalThis.document = {
+    activeElement: field,
+    execCommand(command) {
+      commands.push(command);
+      return true;
+    },
+  };
+  try {
+    const synthesize = (key, phase = "down", modifiers = {}) => player.synthesize({
+      event: "key",
+      phase,
+      key,
+      code: key,
+      shift: false,
+      ctrl: false,
+      alt: false,
+      meta: false,
+      ...modifiers,
+    });
+    assert.doesNotThrow(() => synthesize("Enter"));
+    assert.doesNotThrow(() => synthesize("Escape"));
+    for (const key of ["a", "Tab", "ArrowUp", "ArrowDown", "PageUp", "PageDown"]) {
+      assert.throws(
+        () => synthesize(key),
+        { message: `key ${JSON.stringify(key)} cannot be synthesized; use type for text` },
+      );
+    }
+    assert.doesNotThrow(() => synthesize("F1"));
+    assert.doesNotThrow(() => synthesize("a", "up"));
+    assert.doesNotThrow(() => synthesize("Backspace"));
+    assert.deepEqual(dispatched, [
+      ["keydown", "Enter"],
+      ["keydown", "Escape"],
+      ["keydown", "a"],
+      ["keydown", "Tab"],
+      ["keydown", "ArrowUp"],
+      ["keydown", "ArrowDown"],
+      ["keydown", "PageUp"],
+      ["keydown", "PageDown"],
+      ["keydown", "F1"],
+      ["keyup", "a"],
+      ["keydown", "Backspace"],
+    ]);
+    assert.deepEqual(commands, ["delete"]);
+  } finally {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete globalThis[name];
+      else globalThis[name] = value;
+    }
+  }
+});
+
+test("synthetic modified shortcuts refuse defaults they do not apply", () => {
+  class Input {
+    constructor() {
+      this.value = "one two";
+      this.selectionStart = this.value.length;
+      this.selectionEnd = this.value.length;
+      this.selectionDirection = "none";
+      this.pageHandlesCtrlZ = false;
+    }
+    dispatchEvent(event) {
+      dispatched.push([event.type, event.key, event.ctrlKey, event.altKey, event.metaKey]);
+      if (this.pageHandlesCtrlZ && event.key === "z" && event.ctrlKey) {
+        event.preventDefault();
+      }
+    }
+    select() {
+      this.setSelectionRange(0, this.value.length);
+    }
+    setSelectionRange(start, end, direction = "none") {
+      this.selectionStart = start;
+      this.selectionEnd = end;
+      this.selectionDirection = direction;
+    }
+  }
+  class Textarea {}
+  class KeyEvent {
+    constructor(type, props) {
+      this.type = type;
+      Object.assign(this, props);
+      this.defaultPrevented = false;
+    }
+    preventDefault() {
+      this.defaultPrevented = true;
+    }
+  }
+  const { player } = fakePlayer();
+  const dispatched = [];
+  const commands = [];
+  const field = new Input();
+  const saved = {
+    document: globalThis.document,
+    HTMLInputElement: globalThis.HTMLInputElement,
+    HTMLTextAreaElement: globalThis.HTMLTextAreaElement,
+    KeyboardEvent: globalThis.KeyboardEvent,
+  };
+  const savedNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  globalThis.HTMLInputElement = Input;
+  globalThis.HTMLTextAreaElement = Textarea;
+  globalThis.KeyboardEvent = KeyEvent;
+  globalThis.document = {
+    activeElement: field,
+    execCommand(command) {
+      commands.push(command);
+      if (command === "delete") {
+        const start = field.selectionStart;
+        const end = field.selectionEnd;
+        field.value = field.value.slice(0, start) + field.value.slice(end);
+        field.setSelectionRange(start, start);
+      }
+      return true;
+    },
+  };
+  const setPlatform = (platform) => {
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: { platform },
+    });
+  };
+  try {
+    const synthesize = (key, modifiers = {}) => player.synthesize({
+      event: "key",
+      phase: "down",
+      key,
+      code: key,
+      shift: false,
+      ctrl: false,
+      alt: false,
+      meta: false,
+      ...modifiers,
+    });
+    const unsupported = (key, modifiers) => assert.throws(
+      () => synthesize(key, modifiers),
+      { message: `key ${JSON.stringify(key)} cannot be synthesized; use type for text` },
+    );
+
+    unsupported("Home", { ctrl: true });
+    unsupported("z", { ctrl: true });
+    unsupported("z", { meta: true });
+    assert.doesNotThrow(() => synthesize("a", { ctrl: true }));
+    assert.deepEqual([field.selectionStart, field.selectionEnd], [0, field.value.length]);
+    assert.doesNotThrow(() => synthesize("Control", { ctrl: true }));
+
+    for (const [platform, modifiers] of [
+      ["Linux x64", { ctrl: true }],
+      ["MacIntel", { alt: true }],
+    ]) {
+      setPlatform(platform);
+      field.value = "one two";
+      field.setSelectionRange(field.value.length, field.value.length);
+      commands.length = 0;
+      assert.doesNotThrow(() => synthesize("Backspace", modifiers));
+      assert.equal(field.value, "one ");
+      assert.deepEqual(commands, ["delete"]);
+    }
+
+    field.pageHandlesCtrlZ = true;
+    assert.doesNotThrow(() => synthesize("z", { ctrl: true }));
+    assert.deepEqual(dispatched.slice(0, 3), [
+      ["keydown", "Home", true, false, false],
+      ["keydown", "z", true, false, false],
+      ["keydown", "z", false, false, true],
+    ]);
+  } finally {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete globalThis[name];
+      else globalThis[name] = value;
+    }
+    if (savedNavigator) Object.defineProperty(globalThis, "navigator", savedNavigator);
+    else delete globalThis.navigator;
+  }
 });
 
 test("a key event without `key` falls back to its code instead of throwing", () => {

@@ -33,6 +33,7 @@ pub struct NshAgentHost {
     agent: Arc<Agent>,
     token_required: bool,
     screenshot_directory: Option<PathBuf>,
+    tab_mode: bool,
 }
 
 impl NshAgentHost {
@@ -51,7 +52,14 @@ impl NshAgentHost {
             agent,
             token_required: false,
             screenshot_directory: None,
+            tab_mode: false,
         })
+    }
+
+    /// Advertises only the operations supported by a user-opened web tab.
+    pub fn with_tab_mode(mut self) -> Self {
+        self.tab_mode = true;
+        self
     }
 
     /// Confines screenshot output to a host-owned writable directory.
@@ -73,6 +81,8 @@ impl NshAgentHost {
     fn require_available(&self) -> Result<(), String> {
         if self.agent.native_available() {
             Ok(())
+        } else if self.tab_mode {
+            Err("no tab has opened the agent's page yet".into())
         } else {
             Err("attached native surface is unavailable".into())
         }
@@ -285,6 +295,11 @@ impl AgentHost for NshAgentHost {
     fn screenshot(&self, spec: ScreenshotSpec<'_>) -> Result<DispatchResult, String> {
         self.require_available()?;
         spec.validate_request()?;
+        if self.tab_mode {
+            return Err(gpui_agent::screenshot_unavailable(
+                "a tab nsh does not control cannot be captured",
+            ));
+        }
         if spec.mode != ScreenshotMode::Viewport {
             return Err(gpui_agent::screenshot_unavailable(
                 "scrolled capture is unsupported",
@@ -326,18 +341,32 @@ impl NshAgentHost {
     /// phone has no pointer to hover and no window to resize; a swipe is a
     /// touch gesture.
     fn features(&self) -> Vec<String> {
-        let mut names: Vec<&str> = match self.platform {
-            PlatformKind::Mobile => vec![
+        let mut names: Vec<&str> = if self.tab_mode {
+            vec![
                 "press",
                 "scroll",
+                "hover",
                 "drag",
-                "swipe",
                 "long_press",
                 "system.back",
-            ],
-            _ => vec!["press", "scroll", "hover", "drag", "viewport"],
+            ]
+        } else {
+            match self.platform {
+                PlatformKind::Mobile => vec![
+                    "press",
+                    "scroll",
+                    "drag",
+                    "swipe",
+                    "long_press",
+                    "system.back",
+                ],
+                _ => vec!["press", "scroll", "hover", "drag", "viewport"],
+            }
         };
-        if cfg!(target_os = "android") && matches!(self.platform, PlatformKind::Mobile) {
+        if !self.tab_mode
+            && cfg!(target_os = "android")
+            && matches!(self.platform, PlatformKind::Mobile)
+        {
             names.extend([
                 "paste",
                 "system.rotate",
@@ -362,12 +391,17 @@ impl NshAgentHost {
         } else {
             "portrait"
         };
+        let input_source = if self.tab_mode {
+            "synthetic"
+        } else {
+            "trusted"
+        };
         gpui_agent::DeviceInfo {
             form_factor: Some(form_factor.into()),
             width: known.then_some(width),
             height: known.then_some(height),
             orientation: known.then(|| orientation.into()),
-            input: Some("trusted".into()),
+            input: Some(input_source.into()),
             ..Default::default()
         }
     }

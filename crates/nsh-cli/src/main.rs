@@ -25,6 +25,7 @@ mod runtime;
 mod rust_app;
 mod self_update;
 mod sign;
+mod tab_native;
 mod test;
 mod test_android;
 mod test_host;
