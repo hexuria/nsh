@@ -621,6 +621,38 @@ function wordBoundary(value, position, direction) {
   return value.length;
 }
 
+function graphemeBoundary(value, position, direction) {
+  graphemes ??= typeof Intl !== "undefined" && typeof Intl.Segmenter === "function"
+    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+    : null;
+  if (graphemes) {
+    if (direction === "backward") {
+      let previous = 0;
+      for (const part of graphemes.segment(value)) {
+        const end = part.index + part.segment.length;
+        if (position <= end) return part.index;
+        previous = part.index;
+      }
+      return previous;
+    }
+    for (const part of graphemes.segment(value)) {
+      const end = part.index + part.segment.length;
+      if (end > position) return end;
+    }
+    return value.length;
+  }
+  if (direction === "backward") {
+    if (position === 0) return 0;
+    let start = position - 1;
+    const code = value.charCodeAt(start);
+    if (code >= 0xdc00 && code <= 0xdfff && start > 0) start--;
+    return start;
+  }
+  if (position >= value.length) return value.length;
+  const code = value.codePointAt(position);
+  return position + (code > 0xffff ? 2 : 1);
+}
+
 /**
  * The key of a key event as `nsh_key` takes it (-1: none): the character
  * it types without modifiers, or, when Shift or Option change it or the
@@ -1893,9 +1925,9 @@ class Player {
         } else if (!event.shift && start !== end && key === "ArrowRight") {
           position = end;
         } else if (key === "ArrowLeft") {
-          position = Math.max(0, position - 1);
+          position = graphemeBoundary(value, position, "backward");
         } else if (key === "ArrowRight") {
-          position = Math.min(value.length, position + 1);
+          position = graphemeBoundary(value, position, "forward");
         } else if (key === "Home") {
           position = Math.max(0, value.lastIndexOf("\n", position - 1) + 1);
         } else {
