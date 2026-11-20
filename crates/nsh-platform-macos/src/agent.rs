@@ -529,9 +529,18 @@ impl Native for MacNative {
                 view.ns().window().is_some_and(|window| {
                     crate::text_input::test_focused(&window) == Some(id)
                         || window.firstResponder().is_some_and(|responder| {
-                            responder.downcast_ref::<NSView>().is_some_and(|native| {
-                                native == view.ns() || native.isDescendantOf(view.ns())
-                            })
+                            // The responder's nearest nsh view must be this
+                            // node: a focused child does not focus its group.
+                            let mut current = responder
+                                .downcast_ref::<NSView>()
+                                .map(objc2::Message::retain);
+                            while let Some(native) = current {
+                                if let Some(owner) = crate::view::NshView::from_ns(&native) {
+                                    return owner.id() == id;
+                                }
+                                current = crate::view::superview(&native);
+                            }
+                            false
                         })
                 })
             })
