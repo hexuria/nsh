@@ -25,6 +25,8 @@ use nsh_core::{
 };
 use nsh_testing::agent::{Agent, SemanticKeybinding, SemanticNode};
 
+const MAX_LONG_PRESS_DURATION_MS: u64 = 10_000;
+
 /// Native Shell host exposed through GPUI-agent.
 #[non_exhaustive]
 pub struct NshAgentHost {
@@ -127,7 +129,18 @@ impl NshAgentHost {
                 y,
                 duration_ms,
             } => {
-                let hold = duration_ms.map(|ms| std::time::Duration::from_millis(ms.min(10_000)));
+                let hold = match *duration_ms {
+                    Some(ms) if ms > MAX_LONG_PRESS_DURATION_MS => {
+                        return Err(format!(
+                            "long_press duration cannot exceed {MAX_LONG_PRESS_DURATION_MS} ms"
+                        ));
+                    }
+                    Some(ms) => Some(std::time::Duration::from_millis(ms)),
+                    None => None,
+                };
+                if target.is_some() && (x.is_some() || y.is_some()) {
+                    return Err("give a target or a point, not both".into());
+                }
                 match (target, x, y) {
                     (Some(target), _, _) => {
                         self.agent.long_press_node(self.node_id(target)?, hold)?
@@ -1366,5 +1379,35 @@ mod tests {
         binding.label = Some("Save".into());
         binding.chord = "ctrl+s".into();
         assert!(!keybinding_info(&binding).dangerous);
+    }
+
+    #[test]
+    fn long_press_rejects_duration_above_cap() {
+        let mut host = snapshot_host(SnapshotScene(Ok(sample_nodes()), 1, Default::default()));
+        assert_eq!(
+            host.dispatch(&Op::LongPress {
+                target: Some("visible".into()),
+                x: None,
+                y: None,
+                duration_ms: Some(MAX_LONG_PRESS_DURATION_MS + 1),
+            })
+            .unwrap_err(),
+            "long_press duration cannot exceed 10000 ms"
+        );
+    }
+
+    #[test]
+    fn long_press_rejects_target_and_point_together() {
+        let mut host = snapshot_host(SnapshotScene(Ok(sample_nodes()), 1, Default::default()));
+        assert_eq!(
+            host.dispatch(&Op::LongPress {
+                target: Some("visible".into()),
+                x: Some(1.0),
+                y: Some(2.0),
+                duration_ms: None,
+            })
+            .unwrap_err(),
+            "give a target or a point, not both"
+        );
     }
 }
