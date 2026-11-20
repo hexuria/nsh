@@ -1925,6 +1925,7 @@ impl Agent {
         node: &SemanticNode,
         selector: &str,
     ) -> Result<Point<Points>, String> {
+        self.target_node_window(node.id)?;
         match &node.native_target {
             SemanticTarget::View => self.scroll_into_view(node.id, selector),
             SemanticTarget::Canvas { owner, bounds } => {
@@ -2134,6 +2135,15 @@ impl Agent {
 
     /// Drags from one checked semantic node to another.
     pub fn drag_nodes(&self, from: NodeId, to: NodeId) -> Result<(), String> {
+        let nodes = self.scene.semantic_tree()?;
+        for id in [from, to] {
+            if !nodes.iter().any(|node| node.id == id) {
+                return Err(format!("`node {id}` is offscreen (node unavailable)"));
+            }
+        }
+        if self.scene.window_of(from)? != self.scene.window_of(to)? {
+            return Err("drag endpoints are in different windows".into());
+        }
         let from_selector = format!("node {from}");
         let to_selector = format!("node {to}");
         let _ = self.node_point(from)?;
@@ -2370,6 +2380,7 @@ impl Agent {
         id: NodeId,
         selector: &str,
     ) -> Result<Point<Points>, String> {
+        self.target_node_window(id)?;
         let nodes = self.scene.semantic_tree()?;
         let node = nodes
             .iter()
@@ -2701,8 +2712,7 @@ impl Agent {
         self.settled()?;
         let picked = self.scene.pick(selector, target)?;
         let id = self.picked(picked, selector, what)?;
-        // The pointer acts in the window the view is in.
-        self.native.target_window(self.scene.window_of(id)?)?;
+        self.target_node_window(id)?;
         if let Some((canvas, center)) = self.scene.canvas_node(selector)? {
             let at = self.scroll_point_into_view(canvas, selector, Some(center))?;
             return Ok((id, self.actionable_point(id, canvas, at, selector)?));
@@ -2744,6 +2754,10 @@ impl Agent {
                 )
             })?;
         Ok((id, self.actionable_point(id, text, at.center(), selector)?))
+    }
+
+    fn target_node_window(&self, id: NodeId) -> Result<(), String> {
+        self.native.target_window(self.scene.window_of(id)?)
     }
 
     fn actionable_point(
@@ -3545,7 +3559,20 @@ mod tests {
     type LongPressRecords = Arc<Mutex<Vec<(Point<Points>, Duration)>>>;
     type TextBoundsTable = [((NodeId, u32, u32), Bounds<Points>)];
 
+    /// A recorded native action: its name, target window and point.
+    type WindowAction = (&'static str, NodeId, Option<Point<Points>>);
+
+    #[derive(Default)]
+    struct WindowRecords {
+        selected: Mutex<NodeId>,
+        targets: Mutex<Vec<NodeId>>,
+        actions: Mutex<Vec<WindowAction>>,
+        nodes: std::collections::HashMap<NodeId, NodeId>,
+        unavailable: Option<NodeId>,
+    }
+
     struct GateNative {
+        windows: Option<Arc<WindowRecords>>,
         bounds: std::collections::HashMap<NodeId, Bounds<Points>>,
         text_bounds: std::collections::HashMap<(NodeId, u32, u32), Bounds<Points>>,
         hit: Result<Option<NodeId>, String>,
@@ -3558,6 +3585,18 @@ mod tests {
     }
 
     impl Native for GateNative {
+        fn target_window(&self, window: NodeId) -> Result<(), String> {
+            if let Some(windows) = &self.windows {
+                if windows.unavailable == Some(window) {
+                    return Err("native window is unavailable".into());
+                }
+                *windows.selected.lock().unwrap() = window;
+                windows.targets.lock().unwrap().push(window);
+            } else if window != nsh_core::ROOT_ID {
+                return Err("native window is unavailable".into());
+            }
+            Ok(())
+        }
         fn bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
             self.bounds.get(&id).copied()
         }
@@ -3566,23 +3605,61 @@ mod tests {
         }
         fn hit_at(&self, at: Point<Points>) -> Result<Option<NodeId>, String> {
             self.hits.lock().unwrap().push(at);
+            if let Some(windows) = &self.windows {
+                let selected = *windows.selected.lock().unwrap();
+                return Ok(self.bounds.iter().find_map(|(id, bounds)| {
+                    (windows.nodes.get(id) == Some(&selected) && bounds.contains(&at))
+                        .then_some(*id)
+                }));
+            }
             self.hit.clone()
         }
         fn viewport(&self) -> Size<Points> {
             self.viewport
         }
         fn press(&self, at: Point<Points>) {
+            self.record("press", Some(at));
             self.presses
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             self.pressed_at.lock().unwrap().push(at);
         }
         fn long_press(&self, at: Point<Points>, hold: Duration) {
+            self.record("long_press", Some(at));
             self.long_presses.lock().unwrap().push((at, hold));
             self.pressed_at.lock().unwrap().push(at);
         }
-        fn scroll(&self, _: Point<Points>, _: Point<Points>) {}
-        fn drag(&self, _: Point<Points>, _: Point<Points>) {}
+        fn scroll(&self, at: Point<Points>, _: Point<Points>) {
+            self.record("scroll", Some(at));
+        }
+        fn drag(&self, at: Point<Points>, _: Point<Points>) {
+            self.record("drag", Some(at));
+        }
+        fn hover(&self, at: Point<Points>) -> Result<(), String> {
+            if self.windows.is_none() {
+                return Err("this platform has no mouse".into());
+            }
+            self.record("hover", Some(at));
+            Ok(())
+        }
+        fn focus_node(&self, _: NodeId) -> Result<(), String> {
+            if self.windows.is_none() {
+                return Err(NATIVE_FOCUS_UNSUPPORTED.into());
+            }
+            self.record("focus", None);
+            Ok(())
+        }
+        fn press_keys(&self, _: &str) -> Result<(), String> {
+            if self.windows.is_none() {
+                return Err(
+                    "this platform's test agent presses no hardware keys: run the test headless"
+                        .into(),
+                );
+            }
+            self.record("key", None);
+            Ok(())
+        }
         fn type_text(&self, _: &str) {
+            self.record("type", None);
             self.typed
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
@@ -3609,6 +3686,15 @@ mod tests {
             Ok(())
         }
         fn quit(&self) {}
+    }
+
+    impl GateNative {
+        fn record(&self, action: &'static str, at: Option<Point<Points>>) {
+            if let Some(windows) = &self.windows {
+                let selected = *windows.selected.lock().unwrap();
+                windows.actions.lock().unwrap().push((action, selected, at));
+            }
+        }
     }
 
     fn gate_scene(kind: nsh_core::ViewKind, disabled: bool, clip_root: bool) -> Arc<Model> {
@@ -3652,6 +3738,219 @@ mod tests {
         model
     }
 
+    fn two_window_agent() -> (Agent, Arc<WindowRecords>) {
+        use nsh_core::{
+            Command, EventMask, InputConfig, MountItem, ViewKind,
+            desktop::{DesktopCommand, OpenWindow, WindowOptions},
+        };
+
+        let model = Arc::new(Model::default());
+        let mut open = OpenWindow::default();
+        open.options = WindowOptions::new("preferences");
+        open.parent = Some(1);
+        let mut items = vec![
+            MountItem::Create {
+                id: 10,
+                kind: ViewKind::View,
+            },
+            MountItem::Frame {
+                id: 10,
+                frame: Bounds::new(Point::default(), size(px(100.0), px(100.0))),
+            },
+            MountItem::Insert {
+                parent: 1,
+                child: 10,
+                before: None,
+            },
+            MountItem::Command {
+                id: 10,
+                command: Command::Desktop(Box::new(DesktopCommand::OpenWindow(Box::new(open)))),
+            },
+        ];
+        let mut bounds = std::collections::HashMap::new();
+        for (id, parent, input) in [(2, 1, false), (3, 1, true), (12, 10, false), (13, 10, true)] {
+            let frame = Bounds::new(
+                point(px(if input { 60.0 } else { 10.0 }), px(10.0)),
+                size(px(20.0), px(20.0)),
+            );
+            let mut events = EventMask::default();
+            events.set(EventKind::Press, true);
+            events.set(EventKind::LongPress, true);
+            items.extend([
+                MountItem::Create {
+                    id,
+                    kind: if input {
+                        ViewKind::Input
+                    } else {
+                        ViewKind::View
+                    },
+                },
+                MountItem::Frame { id, frame },
+                MountItem::Insert {
+                    parent,
+                    child: id,
+                    before: None,
+                },
+                MountItem::Events { id, events },
+            ]);
+            if input {
+                items.push(MountItem::Input {
+                    id,
+                    config: Box::new(InputConfig::default()),
+                });
+            }
+            bounds.insert(id, frame);
+        }
+        model.apply(&MountBatch { items });
+        let windows = Arc::new(WindowRecords {
+            selected: Mutex::new(1),
+            nodes: [(2, 1), (3, 1), (12, 10), (13, 10)].into(),
+            ..Default::default()
+        });
+        let native = GateNative {
+            windows: Some(windows.clone()),
+            bounds,
+            text_bounds: Default::default(),
+            hit: Ok(None),
+            hits: Arc::default(),
+            presses: Arc::default(),
+            pressed_at: Arc::default(),
+            long_presses: Arc::default(),
+            typed: Arc::default(),
+            viewport: size(px(100.0), px(100.0)),
+        };
+        (
+            Agent::requiring_native_hit_test(model, Box::new(native)),
+            windows,
+        )
+    }
+
+    #[test]
+    fn node_actions_target_their_window_and_switch_back_to_main() {
+        for action in [
+            "press",
+            "hover",
+            "scroll",
+            "drag",
+            "drag_to",
+            "drag_by",
+            "long_press",
+            "type",
+            "set_value",
+            "key",
+        ] {
+            let (agent, windows) = two_window_agent();
+            for (window, id, input) in [(10, 12, 13), (1, 2, 3)] {
+                let before = windows.actions.lock().unwrap().len();
+                let delta = point(px(5.0), px(5.0));
+                match action {
+                    "press" => agent.press_node(id),
+                    "hover" => agent.hover_node(id),
+                    "scroll" => agent.scroll_node(id, delta),
+                    "drag" => agent.drag_nodes(id, id),
+                    "drag_to" => agent.drag_to(id, point(px(25.0), px(25.0))),
+                    "drag_by" => agent.drag_node_by(id, None, delta),
+                    "long_press" => agent.long_press_node(id, Some(Duration::ZERO)),
+                    "type" => agent.type_node(input, "hello"),
+                    "set_value" => agent.set_value_node(input, "hello"),
+                    "key" => agent.key_node(id, "enter"),
+                    _ => unreachable!(),
+                }
+                .unwrap_or_else(|error| panic!("{action} in window {window}: {error}"));
+                let actions = windows.actions.lock().unwrap();
+                assert!(actions.len() > before, "{action}");
+                assert!(
+                    actions[before..]
+                        .iter()
+                        .all(|(_, selected, _)| *selected == window),
+                    "{action}: {actions:?}"
+                );
+                let expected = point(
+                    px(if matches!(action, "type" | "set_value") {
+                        70.0
+                    } else {
+                        20.0
+                    }),
+                    px(20.0),
+                );
+                for (_, _, at) in &actions[before..] {
+                    if let Some(at) = at {
+                        assert_eq!(*at, expected, "{action}");
+                    }
+                }
+                assert_eq!(
+                    windows.targets.lock().unwrap().last(),
+                    Some(&window),
+                    "{action}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn point_actions_keep_the_explicitly_selected_window() {
+        let (agent, windows) = two_window_agent();
+        agent.native.target_window(10).unwrap();
+        windows.targets.lock().unwrap().clear();
+        let at = point(px(20.0), px(20.0));
+        agent.press_at(at).unwrap();
+        agent.hover_at(at).unwrap();
+        agent.scroll_at(at, point(px(0.0), px(5.0))).unwrap();
+        agent.drag_at(at, point(px(25.0), px(25.0))).unwrap();
+        agent.long_press_at(at, Some(Duration::ZERO)).unwrap();
+        assert!(windows.targets.lock().unwrap().is_empty());
+        let actions = windows.actions.lock().unwrap();
+        assert_eq!(actions.len(), 5);
+        assert!(
+            actions
+                .iter()
+                .all(|(_, window, at)| *window == 10 && *at == Some(point(px(20.0), px(20.0))))
+        );
+    }
+
+    #[test]
+    fn missing_nodes_and_cross_window_drags_dispatch_no_input() {
+        let (agent, windows) = two_window_agent();
+        let missing_node = "`node 999` is offscreen (node unavailable)";
+        assert_eq!(agent.press_node(999).unwrap_err(), missing_node);
+        assert_eq!(agent.drag_nodes(12, 999).unwrap_err(), missing_node);
+        assert_eq!(agent.drag_nodes(999, 12).unwrap_err(), missing_node);
+        assert_eq!(
+            agent.drag_nodes(12, 2).unwrap_err(),
+            "drag endpoints are in different windows"
+        );
+        assert!(windows.actions.lock().unwrap().is_empty());
+        assert!(windows.targets.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn unavailable_node_window_dispatches_no_input() {
+        let (mut agent, windows) = two_window_agent();
+        let closed = Arc::new(WindowRecords {
+            selected: Mutex::new(1),
+            unavailable: Some(10),
+            ..Default::default()
+        });
+        agent.native = Box::new(GateNative {
+            windows: Some(closed.clone()),
+            bounds: Default::default(),
+            text_bounds: Default::default(),
+            hit: Ok(None),
+            hits: Arc::default(),
+            presses: Arc::default(),
+            pressed_at: Arc::default(),
+            long_presses: Arc::default(),
+            typed: Arc::default(),
+            viewport: size(px(100.0), px(100.0)),
+        });
+        assert_eq!(
+            agent.press_node(12).unwrap_err(),
+            "native window is unavailable"
+        );
+        assert!(closed.actions.lock().unwrap().is_empty());
+        assert!(windows.actions.lock().unwrap().is_empty());
+    }
+
     fn long_press_only_scene(disabled: bool) -> Arc<Model> {
         use nsh_core::{EventMask, MountItem, ViewKind, ViewProps};
 
@@ -3688,6 +3987,7 @@ mod tests {
         Agent::requiring_native_hit_test(
             model,
             Box::new(GateNative {
+                windows: None,
                 bounds: bounds.iter().copied().collect(),
                 text_bounds: Default::default(),
                 hit,
@@ -3719,6 +4019,7 @@ mod tests {
         Agent::requiring_native_hit_test(
             model,
             Box::new(GateNative {
+                windows: None,
                 bounds: bounds.iter().copied().collect(),
                 text_bounds: text_bounds.iter().copied().collect(),
                 hit,
@@ -4021,6 +4322,7 @@ mod tests {
         let agent = Agent::new(
             scene,
             Box::new(GateNative {
+                windows: None,
                 bounds: [(2, bounds)].into(),
                 text_bounds: Default::default(),
                 hit: Ok(Some(2)),
@@ -4079,6 +4381,7 @@ mod tests {
             let agent = Agent::requiring_native_hit_test(
                 target_scene(nodes),
                 Box::new(GateNative {
+                    windows: None,
                     bounds: [
                         (2, Bounds::new(Point::default(), size(px(80.0), px(40.0)))),
                         (3, label_bounds),
@@ -4288,6 +4591,7 @@ mod tests {
             let agent = Agent::requiring_native_hit_test(
                 target_scene(nodes),
                 Box::new(GateNative {
+                    windows: None,
                     bounds: [
                         (2, Bounds::new(Point::default(), size(px(80.0), px(40.0)))),
                         (3, label_bounds),
@@ -4354,6 +4658,7 @@ mod tests {
             let agent = Agent::requiring_native_hit_test(
                 target_scene(nodes),
                 Box::new(GateNative {
+                    windows: None,
                     bounds: [(4, text_bounds)].into(),
                     text_bounds: [((4, 6, 10), link_bounds)].into(),
                     hit: Ok(Some(hit)),
@@ -4404,6 +4709,7 @@ mod tests {
         let canvas = Agent::requiring_native_hit_test(
             target_scene(canvas_nodes),
             Box::new(GateNative {
+                windows: None,
                 bounds: [(4, owner_bounds)].into(),
                 text_bounds: Default::default(),
                 hit: Ok(Some(4)),
@@ -4448,6 +4754,7 @@ mod tests {
         let span = Agent::requiring_native_hit_test(
             target_scene(span_nodes),
             Box::new(GateNative {
+                windows: None,
                 bounds: [(4, owner_bounds)].into(),
                 text_bounds: [((4, 0, 4), span_bounds)].into(),
                 hit: Ok(Some(4)),
@@ -4496,6 +4803,7 @@ mod tests {
             let agent = Agent::requiring_native_hit_test(
                 target_scene(nodes),
                 Box::new(GateNative {
+                    windows: None,
                     bounds: bounds.into(),
                     text_bounds: Default::default(),
                     hit,
@@ -4713,6 +5021,7 @@ mod tests {
 
         for strict in [false, true] {
             let native = GateNative {
+                windows: None,
                 bounds: Default::default(),
                 text_bounds: Default::default(),
                 hit: Ok(None),
@@ -5555,6 +5864,7 @@ mod tests {
         let agent = Agent::requiring_native_hit_test(
             target_scene(Vec::new()),
             Box::new(GateNative {
+                windows: None,
                 bounds: Default::default(),
                 text_bounds: [((9, 1, 3), text)].into(),
                 hit: Ok(Some(4)),
