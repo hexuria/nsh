@@ -5,7 +5,10 @@
 //! the main thread and returns when it is done). Java speaks pixels; the
 //! agent points (the display's density apart).
 
-use std::{sync::Weak, time::Duration};
+use std::{
+    sync::Weak,
+    time::{Duration, Instant},
+};
 
 use jni::{
     JNIEnv,
@@ -533,12 +536,36 @@ impl Native for AndroidNative {
             )?
             .z()
         });
-        if done {
-            Ok(())
-        } else if shown {
-            Err("no input has the focus".into())
-        } else {
-            Err("Android could not hide the keyboard".into())
+        if !done {
+            return if shown {
+                Err("no input has the focus".into())
+            } else {
+                Err("Android could not hide the keyboard".into())
+            };
+        }
+        let expected = if shown { 1 } else { 0 };
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            let state = self.call(|env, class, view| {
+                env.call_static_method(
+                    class,
+                    "imeState",
+                    "(Lcom/longbridge/nsh/NshView;)I",
+                    &[JValue::Object(view)],
+                )?
+                .i()
+            });
+            if state == -1 || state == expected {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(if shown {
+                    "the keyboard did not show within 2 s".into()
+                } else {
+                    "the keyboard did not hide within 2 s".into()
+                });
+            }
+            std::thread::sleep(Duration::from_millis(50));
         }
     }
 

@@ -25,6 +25,7 @@ import android.view.PixelCopy;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
@@ -448,6 +449,15 @@ final class TestAgent {
             return true;
         });
         return done != null && done;
+    }
+
+    static int imeState(NshView host) {
+        return onMain(() -> {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return -1;
+            WindowInsets insets = host.getRootWindowInsets();
+            if (insets == null) return -1;
+            return insets.isVisible(WindowInsets.Type.ime()) ? 1 : 0;
+        }, -1);
     }
 
     /** Pastes plain text into the focused input and restores the clipboard. */
