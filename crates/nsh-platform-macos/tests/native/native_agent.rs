@@ -17,10 +17,10 @@ use nsh_platform_macos::{
     self as platform,
     objc2::{MainThreadMarker, MainThreadOnly, Message, rc::Retained},
     objc2_app_kit::{
-        NSAccessibility, NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSView,
-        NSWindow, NSWindowStyleMask,
+        NSAccessibility, NSApplication, NSApplicationActivationPolicy, NSBackingStoreType,
+        NSEventMask, NSView, NSWindow, NSWindowStyleMask,
     },
-    objc2_foundation::{NSDate, NSPoint, NSRect, NSRunLoop, NSSize},
+    objc2_foundation::{NSDate, NSDefaultRunLoopMode, NSPoint, NSRect, NSRunLoop, NSSize},
 };
 use nsh_testing::agent::{Agent, Model, Native, Scene};
 
@@ -97,11 +97,27 @@ fn Windows() -> impl IntoElement {
         )
 }
 
+fn pump() {
+    let app = NSApplication::sharedApplication(MainThreadMarker::new().unwrap());
+    // SAFETY: AppKit's immutable default run-loop mode.
+    let mode = unsafe { NSDefaultRunLoopMode };
+    if let Some(event) = app.nextEventMatchingMask_untilDate_inMode_dequeue(
+        NSEventMask::Any,
+        Some(&NSDate::dateWithTimeIntervalSinceNow(0.005)),
+        mode,
+        true,
+    ) {
+        app.sendEvent(&event);
+    }
+    app.updateWindows();
+    NSRunLoop::currentRunLoop().runUntilDate(&NSDate::dateWithTimeIntervalSinceNow(0.001));
+}
+
 fn until(what: &str, mut ready: impl FnMut() -> bool) {
     let deadline = Instant::now() + Duration::from_secs(10);
     while !ready() {
         assert!(Instant::now() < deadline, "{what} never happened");
-        NSRunLoop::currentRunLoop().runUntilDate(&NSDate::dateWithTimeIntervalSinceNow(0.005));
+        pump();
     }
 }
 
@@ -181,9 +197,8 @@ fn second_window_hit_test(model: &Model, native: &mut Option<Box<dyn Native>>) {
     println!("native_agent: second_window_hit_test");
 }
 
-fn application_focus(mtm: MainThreadMarker, native: &mut Option<Box<dyn Native>>, main: &NSWindow) {
-    let app = NSApplication::sharedApplication(mtm);
-    let secondary = app
+fn secondary_window(mtm: MainThreadMarker) -> Retained<NSWindow> {
+    NSApplication::sharedApplication(mtm)
         .windows()
         .iter()
         .find(|window| {
@@ -191,13 +206,18 @@ fn application_focus(mtm: MainThreadMarker, native: &mut Option<Box<dyn Native>>
                 .contentView()
                 .is_some_and(|root| find(&root, "secondary-action").is_some())
         })
-        .expect("secondary window");
+        .expect("secondary window")
+}
+
+fn application_focus(mtm: MainThreadMarker, native: &mut Option<Box<dyn Native>>, main: &NSWindow) {
+    let app = NSApplication::sharedApplication(mtm);
+    let secondary = secondary_window(mtm);
     main.makeKeyAndOrderFront(None);
     app.activate();
     main.makeKeyWindow();
     let deadline = Instant::now() + Duration::from_secs(1);
     while !(app.isActive() && main.isKeyWindow()) && Instant::now() < deadline {
-        NSRunLoop::currentRunLoop().runUntilDate(&NSDate::dateWithTimeIntervalSinceNow(0.005));
+        pump();
     }
     let focused = app.isActive() && (main.isKeyWindow() || secondary.isKeyWindow());
     assert_eq!(call(native, |native| native.app_focused()), focused);
@@ -223,7 +243,7 @@ fn targeted_key_and_group_rejection(
     native: &mut Option<Box<dyn Native>>,
     main: &NSWindow,
     root: &NSView,
-) {
+) -> Agent {
     let child = node(&model, "child");
     let group = node(&model, "group");
     main.makeKeyAndOrderFront(None);
@@ -235,7 +255,7 @@ fn targeted_key_and_group_rejection(
             .is_some_and(|responder| responder.downcast_ref::<NSView>() == Some(&*view))
     );
     let owned = native.take().unwrap();
-    worker(move || {
+    let agent = worker(move || {
         let agent = Agent::requiring_native_hit_test(model.clone(), owned);
         agent.key_node(child, "a").unwrap();
         assert_eq!(
@@ -243,7 +263,7 @@ fn targeted_key_and_group_rejection(
             format!("node {group} cannot receive native focus")
         );
         assert!(agent.key_node(NodeId::MAX, "a").is_err());
-        named_click_changes_only_secondary(&agent, &model);
+        agent
     });
     until("the child's targeted key", || {
         KEYS.load(Ordering::SeqCst) == 1
@@ -253,22 +273,36 @@ fn targeted_key_and_group_rejection(
             .is_some_and(|responder| responder.downcast_ref::<NSView>() == Some(&*view))
     );
     println!("native_agent: targeted_key_and_group_rejection");
+    agent
 }
 
-fn named_click_changes_only_secondary(agent: &Agent, model: &Model) {
-    let outcome = agent.take(TestStep::Press {
-        selector: "label:Secondary action".into(),
-    });
-    assert!(matches!(outcome, StepOutcome::Done { .. }), "{outcome:?}");
-    assert!(
-        model
+fn named_click_changes_only_secondary(agent: Agent, model: Arc<Model>, secondary: &NSWindow) {
+    secondary.makeKeyAndOrderFront(None);
+    secondary.makeKeyWindow();
+    worker(move || {
+        let outcome = agent.take(TestStep::Press {
+            selector: "label:Secondary action".into(),
+        });
+        assert!(matches!(outcome, StepOutcome::Done { .. }), "{outcome:?}");
+        // The press lands now; the count's text arrives with a later mount batch.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !model
             .texts()
             .unwrap()
             .iter()
             .any(|text| text == "Secondary count: 1")
-    );
-    assert_eq!(SECONDARY_CLICKS.load(Ordering::SeqCst), 1);
-    assert_eq!(MAIN_CLICKS.load(Ordering::SeqCst), 0);
+        {
+            assert!(
+                Instant::now() < deadline,
+                "the secondary count never updated: clicks {}, texts {:?}",
+                SECONDARY_CLICKS.load(Ordering::SeqCst),
+                model.texts()
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(SECONDARY_CLICKS.load(Ordering::SeqCst), 1);
+        assert_eq!(MAIN_CLICKS.load(Ordering::SeqCst), 0);
+    });
     println!("native_agent: named_click_changes_only_secondary");
 }
 
@@ -319,7 +353,9 @@ pub(super) fn run() {
     main.makeKeyWindow();
     application_focus(mtm, &mut native, &main);
     second_window_hit_test(&model, &mut native);
-    targeted_key_and_group_rejection(model, &mut native, &main, &surface.view());
+    let agent =
+        targeted_key_and_group_rejection(model.clone(), &mut native, &main, &surface.view());
+    named_click_changes_only_secondary(agent, model, &secondary_window(mtm));
     surface.stop();
     main.close();
 }
