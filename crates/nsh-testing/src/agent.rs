@@ -3554,10 +3554,13 @@ mod tests {
     type TextBoundsTable = [((NodeId, u32, u32), Bounds<Points>)];
 
     #[derive(Default)]
+    /// A recorded native action: its name, target window and point.
+    type WindowAction = (&'static str, NodeId, Option<Point<Points>>);
+
     struct WindowRecords {
         selected: Mutex<NodeId>,
         targets: Mutex<Vec<NodeId>>,
-        actions: Mutex<Vec<(&'static str, NodeId, Option<Point<Points>>)>>,
+        actions: Mutex<Vec<WindowAction>>,
         nodes: std::collections::HashMap<NodeId, NodeId>,
         unavailable: Option<NodeId>,
     }
