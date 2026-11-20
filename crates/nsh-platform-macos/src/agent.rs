@@ -541,6 +541,13 @@ impl Native for MacNative {
         .ok_or_else(|| format!("node {id} cannot receive native focus"))
     }
 
+    fn app_focused(&self) -> bool {
+        self.on_key(|surface, window| {
+            NSApplication::sharedApplication(surface.mtm).isActive() && window.isKeyWindow()
+        })
+        .unwrap_or(false)
+    }
+
     fn compose(&self, text: &str) -> Result<(), String> {
         let text = text.to_owned();
         self.on_key(move |_, window| crate::text_input::test_compose(window, &text))
