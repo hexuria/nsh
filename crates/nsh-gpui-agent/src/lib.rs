@@ -268,6 +268,11 @@ impl AgentHost for NshAgentHost {
     fn screenshot(&self, spec: ScreenshotSpec<'_>) -> Result<DispatchResult, String> {
         self.require_available()?;
         spec.validate_request()?;
+        if self.tab_mode {
+            return Err(gpui_agent::screenshot_unavailable(
+                "a tab nsh does not control cannot be captured",
+            ));
+        }
         if spec.mode != ScreenshotMode::Viewport {
             return Err(gpui_agent::screenshot_unavailable(
                 "scrolled capture is unsupported",
@@ -315,7 +320,6 @@ impl NshAgentHost {
                 "scroll",
                 "hover",
                 "drag",
-                "swipe",
                 "long_press",
                 "paste",
                 "system.back",
@@ -361,7 +365,6 @@ impl NshAgentHost {
             height: known.then_some(height),
             orientation: known.then(|| orientation.into()),
             input: Some(input_source.into()),
-            input_source: Some(input_source.into()),
             ..Default::default()
         }
     }

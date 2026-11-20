@@ -74,6 +74,9 @@ impl Drop for WebAgent {
     }
 }
 
+/// The page and browser `nsh` owns (none in tab mode) and the input driver.
+type Driver = (Option<Arc<Page>>, Option<Arc<Browser>>, Box<dyn Native>);
+
 /// Serves the agent for `server` on `addr`, requiring `token`. In tab mode,
 /// a user-opened page is paired instead of launching a browser.
 pub(crate) fn start(
@@ -86,21 +89,20 @@ pub(crate) fn start(
     let stoppable = ui::Stoppable::new();
     let key = key()?;
     server.agent_session(key.clone());
-    let (page, browser, native): (Option<Arc<Page>>, Option<Arc<Browser>>, Box<dyn Native>) =
-        if tab_mode {
-            (None, None, Box::new(TabNative::new(server.clone())))
-        } else {
-            let exe = cdp::find(None)?;
-            let headed = matches!(
-                std::env::var("GPUI_AGENT_WEB_HEADED").as_deref(),
-                Ok("1" | "true")
-            );
-            let browser = Arc::new(Browser::launch_with(&exe, headed).map_err(anyhow::Error::msg)?);
-            let page = Arc::new(browser.page().map_err(anyhow::Error::msg)?);
-            open(&page, &server, key.clone()).map_err(anyhow::Error::msg)?;
-            let native = Box::new(WebNative::new(page.clone(), server.clone(), true));
-            (Some(page), Some(browser), native)
-        };
+    let (page, browser, native): Driver = if tab_mode {
+        (None, None, Box::new(TabNative::new(server.clone())))
+    } else {
+        let exe = cdp::find(None)?;
+        let headed = matches!(
+            std::env::var("GPUI_AGENT_WEB_HEADED").as_deref(),
+            Ok("1" | "true")
+        );
+        let browser = Arc::new(Browser::launch_with(&exe, headed).map_err(anyhow::Error::msg)?);
+        let page = Arc::new(browser.page().map_err(anyhow::Error::msg)?);
+        open(&page, &server, key.clone()).map_err(anyhow::Error::msg)?;
+        let native = Box::new(WebNative::new(page.clone(), server.clone(), true));
+        (Some(page), Some(browser), native)
+    };
     let scene = Arc::new(RemoteScene::new({
         let server = server.clone();
         move |step| server.step(step, ASK)

@@ -52,9 +52,12 @@
   // `web.history`; `null`: the player's default).
   const HISTORY = {{history}};
   // The key of the page a GPUI agent drives (`nsh run --target web` with
-  // `GPUI_AGENT=1`, which hands it over before the page's scripts run): the
-  // server asks this page its agent's questions. Kept here, out of the
-  // page's reach, for every connection of the page's life.
+  // `GPUI_AGENT=1`, which hands it over before the page's scripts run, or
+  // the `#gpui-agent=<key>` of a tab opened by hand with
+  // `GPUI_AGENT_WEB_TAB=1`): the server asks this page its agent's
+  // questions. A hand-opened tab keeps its key in `sessionStorage`, where
+  // the app's own scripts on this origin can read it, so a reload stays
+  // paired; the key lasts as long as this `nsh` run.
   function fromHash() {
     const parts = location.hash.slice(1).split("&");
     const supplied = parts.filter((part) => part.startsWith("gpui-agent="));

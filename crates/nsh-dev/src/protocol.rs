@@ -1411,7 +1411,7 @@ mod tests {
             },
         ];
         for step in &steps {
-            let value = serde_json::to_value(&step).unwrap();
+            let value = serde_json::to_value(step).unwrap();
             assert_eq!(serde_json::from_value::<TestStep>(value).unwrap(), *step);
         }
         assert_eq!(
