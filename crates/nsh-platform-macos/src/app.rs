@@ -936,10 +936,10 @@ define_class!(
         #[unsafe(method(clearFpsMonitor:))]
         fn clear_fps_monitor(&self, _sender: Option<&objc2::runtime::AnyObject>) {
             let view = RUNNING.with(|r| r.borrow().as_ref().map(|r| r.view.clone()));
-            if let Some(view) = view {
-                if let Some(hud) = view.fps.borrow().as_ref() {
-                    hud.clear();
-                }
+            if let Some(view) = view
+                && let Some(hud) = view.fps.borrow().as_ref()
+            {
+                hud.clear();
             }
         }
     }
