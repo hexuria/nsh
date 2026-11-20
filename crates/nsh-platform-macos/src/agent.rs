@@ -367,15 +367,24 @@ impl Native for MacNative {
 
     fn hit_at(&self, at: Point<Points>) -> Result<Option<NodeId>, String> {
         self.on_main(move |surface, window| {
-            let Some(content) = window.contentView() else {
-                return None;
-            };
-            let point = synth::to_window(window, f64::from(at.x.0), f64::from(at.y.0));
+            let content = window.contentView()?;
+            let window_point = synth::to_window(window, f64::from(at.x.0), f64::from(at.y.0));
             let point = match crate::view::superview(&content) {
-                Some(parent) => parent.convertPoint_fromView(point, None),
-                None => point,
+                Some(parent) => parent.convertPoint_fromView(window_point, None),
+                None => window_point,
             };
-            let mut current = Some(content.hitTest(point)?);
+            let hit = content.hitTest(point)?;
+            // A surface root takes every press inside it and picks the
+            // view itself (`crate::input`), so ask it as the press would.
+            let hit = match crate::view::NshView::from_ns(&hit).and_then(|v| v.surface()) {
+                Some(picker) => {
+                    let local = hit.convertPoint_fromView(window_point, None);
+                    let view = crate::input::view_at(&picker, local.x as f32, local.y as f32)?;
+                    objc2::Message::retain(view.ns())
+                }
+                None => hit,
+            };
+            let mut current = Some(hit);
             let mounter = surface.mounter.borrow();
             while let Some(native) = current {
                 if let Some(view) = crate::view::NshView::from_ns(&native)
