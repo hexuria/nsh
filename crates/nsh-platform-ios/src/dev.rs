@@ -104,11 +104,11 @@ impl DevSession {
         let key = NEXT_KEY.fetch_add(1, Ordering::Relaxed);
         crate::agent::register(key, view.clone());
         #[cfg(feature = "dev-agent")]
-        let agent = match DevAgent::start(key, &view) {
-            Ok(agent) => agent,
+        let (agent, agent_error) = match DevAgent::start(key, &view) {
+            Ok(agent) => (agent, None),
             Err(error) => {
                 log::error!("cannot start GPUI agent: {error}");
-                return None;
+                (None, Some(error))
             }
         };
         let tested = Arc::new(MainThreadBound::new(view.clone(), mtm));
@@ -164,6 +164,14 @@ impl DevSession {
         match started {
             Ok(client) => {
                 let client = Arc::new(client);
+                #[cfg(feature = "dev-agent")]
+                if let Some(error) = agent_error {
+                    client.log(
+                        nsh_dev::protocol::LogLevel::Error,
+                        "nsh_platform_ios::dev",
+                        &format!("cannot start GPUI agent; continuing development without it: {error}"),
+                    );
+                }
                 tester.set_client(&client);
                 *CLIENT.lock().unwrap_or_else(|e| e.into_inner()) = Arc::downgrade(&client);
                 Some(DevSession {
