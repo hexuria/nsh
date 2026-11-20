@@ -337,7 +337,7 @@ pub(crate) fn run(
             let mut launch = vec!["launch", "--terminate-running-process", &udid, BUNDLE_ID];
             launch.extend(args.iter().map(String::as_str));
             let mut env = simctl_app_env(&crate::package::read_config(entry)?);
-            let token_path = if let Some(token) = &agent_token {
+            let _token_file = if let Some(token) = &agent_token {
                 use std::io::Write as _;
 
                 let address = std::env::var("GPUI_AGENT_ADDR")
@@ -356,18 +356,12 @@ pub(crate) fn run(
                 env.retain(|(name, _)| name != "SIMCTL_CHILD_GPUI_AGENT_TOKEN");
                 env.push(("SIMCTL_CHILD_GPUI_AGENT".into(), "1".into()));
                 env.push(("SIMCTL_CHILD_GPUI_AGENT_ADDR".into(), address.into()));
-                Some(path)
+                Some(file)
             } else {
                 None
             };
             let step = ui::Step::start("launching the development host");
-            let launched = simctl_with_env(&launch, &env);
-            if launched.is_err()
-                && let Some(path) = &token_path
-            {
-                let _ = std::fs::remove_file(path);
-            }
-            launched?;
+            simctl_with_env(&launch, &env)?;
             step.finish();
             // The simulator shares the Mac's network: 127.0.0.1 is the dev
             // server, so a host left running would join the next session
@@ -375,9 +369,6 @@ pub(crate) fn run(
             let stoppable = ui::Stoppable::new();
             let result = session.watch(|| Ok(false));
             let _ = simctl(&["terminate", &udid, BUNDLE_ID]);
-            if let Some(path) = token_path {
-                let _ = std::fs::remove_file(path);
-            }
             drop(stoppable);
             result
         }
@@ -1115,7 +1106,28 @@ pub(crate) fn simctl(args: &[&str]) -> anyhow::Result<String> {
     simctl_with_env(args, &[])
 }
 
-fn private_token_file(path: &Path) -> anyhow::Result<std::fs::File> {
+struct PrivateTokenFile {
+    file: std::fs::File,
+    path: PathBuf,
+}
+
+impl std::io::Write for PrivateTokenFile {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        std::io::Write::write(&mut self.file, buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        std::io::Write::flush(&mut self.file)
+    }
+}
+
+impl Drop for PrivateTokenFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+fn private_token_file(path: &Path) -> anyhow::Result<PrivateTokenFile> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
@@ -1126,7 +1138,12 @@ fn private_token_file(path: &Path) -> anyhow::Result<std::fs::File> {
             .mode(0o600)
             .open(path)
             .context("open the development host's GPUI-agent token file")?;
-        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+        let file = PrivateTokenFile {
+            file,
+            path: path.to_owned(),
+        };
+        file.file
+            .set_permissions(std::fs::Permissions::from_mode(0o600))?;
         Ok(file)
     }
     #[cfg(not(unix))]
@@ -1695,20 +1712,47 @@ mod tests {
         let path = directory.join("token");
         let mut file = super::private_token_file(&path).unwrap();
         file.write_all(b"first-token").unwrap();
-        drop(file);
         assert_eq!(std::fs::read(&path).unwrap(), b"first-token");
         assert_eq!(
             std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
             0o600
         );
+        drop(file);
+        assert!(!path.exists());
+        std::fs::write(&path, b"stale-token").unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
-        drop(super::private_token_file(&path).unwrap());
+        let file = super::private_token_file(&path).unwrap();
         assert!(std::fs::read(&path).unwrap().is_empty());
         assert_eq!(
             std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
             0o600
         );
+        drop(file);
+        assert!(!path.exists());
         assert!(super::private_token_file(&directory.join("absent/token")).is_err());
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn simulator_token_files_are_removed_after_a_partial_write_fails() {
+        use std::io::Write as _;
+
+        let directory = std::env::temp_dir().join(format!(
+            "nsh-ios-token-write-failure-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("token");
+        let result = (|| -> anyhow::Result<()> {
+            let mut file = super::private_token_file(&path)?;
+            file.write_all(b"partial")?;
+            file.file = std::fs::File::open(&path)?;
+            file.write_all(b"remaining")?;
+            Ok(())
+        })();
+        assert!(result.is_err());
+        assert!(!path.exists());
         std::fs::remove_dir_all(directory).unwrap();
     }
 
