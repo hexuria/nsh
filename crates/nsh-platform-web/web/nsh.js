@@ -568,6 +568,59 @@ function clipChars(text, max) {
   return text.slice(0, end);
 }
 
+let wordSegmenter;
+
+function inputSelection(input) {
+  try {
+    const start = input.selectionStart;
+    if (start === null) return null;
+    return {
+      start,
+      end: input.selectionEnd ?? start,
+      backward: input.selectionDirection === "backward",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function setInputSelection(input, start, end, direction = "none") {
+  try {
+    input.setSelectionRange(start, end, direction);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function lineBoundary(value, position, direction) {
+  if (direction === "backward") {
+    return position === 0 ? 0 : value.lastIndexOf("\n", position - 1) + 1;
+  }
+  const nextLine = value.indexOf("\n", position);
+  return nextLine < 0 ? value.length : nextLine;
+}
+
+function wordBoundary(value, position, direction) {
+  wordSegmenter ??= typeof Intl !== "undefined" && typeof Intl.Segmenter === "function"
+    ? new Intl.Segmenter(undefined, { granularity: "word" })
+    : null;
+  if (!wordSegmenter) return position;
+  if (direction === "backward") {
+    let boundary = 0;
+    for (const part of wordSegmenter.segment(value)) {
+      if (part.index >= position) break;
+      if (part.isWordLike) boundary = part.index;
+    }
+    return boundary;
+  }
+  for (const part of wordSegmenter.segment(value)) {
+    const end = part.index + part.segment.length;
+    if (part.isWordLike && end > position) return end;
+  }
+  return value.length;
+}
+
 /**
  * The key of a key event as `nsh_key` takes it (-1: none): the character
  * it types without modifiers, or, when Shift or Option change it or the
@@ -1754,56 +1807,112 @@ class Player {
         }
         return;
       }
-      if (event.key === "Backspace") {
-        document.execCommand("delete");
-        return;
-      }
-      if (event.key === "Delete") {
-        document.execCommand("forwardDelete");
-        return;
-      }
       if (event.key === "Enter" && (target instanceof HTMLTextAreaElement || contenteditable)) {
         document.execCommand("insertLineBreak");
         return;
       }
-      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      const key = event.key;
+      const macOS = navigator.platform.startsWith("Mac");
+      const wordModifier = macOS
+        ? event.alt && !event.ctrl && !event.meta
+        : event.ctrl && !event.alt && !event.meta;
+      const lineModifier = macOS && event.meta && !event.ctrl && !event.alt;
+      const wordAction = wordModifier
+        && ["Backspace", "Delete", "ArrowLeft", "ArrowRight"].includes(key);
+      const lineAction = lineModifier && ["Backspace", "ArrowLeft", "ArrowRight"].includes(key);
+      const caretKeys = ["Backspace", "Delete", "ArrowLeft", "ArrowRight", "Home", "End"];
+      if ((event.ctrl || event.alt || event.meta) && caretKeys.includes(key) && !wordAction && !lineAction) {
+        return;
+      }
+      if (wordAction || lineAction) {
+        const backward = key === "Backspace" || key === "ArrowLeft";
+        const direction = backward ? "backward" : "forward";
+        const granularity = wordAction ? "word" : "lineboundary";
+        const moving = key === "ArrowLeft" || key === "ArrowRight";
+        if (contenteditable) {
+          const selection = window.getSelection();
+          if (!selection) return;
+          if (moving) {
+            selection.modify(event.shift ? "extend" : "move", direction, granularity);
+          } else {
+            if (selection.isCollapsed) selection.modify("extend", direction, granularity);
+            document.execCommand("delete");
+          }
+          return;
+        }
+        const selected = inputSelection(target);
+        if (!selected) return;
+        const { start, end, backward: selectionBackward } = selected;
+        const anchor = start === end ? start : selectionBackward ? end : start;
+        const position = start === end ? start : selectionBackward ? start : end;
+        const value = target.value;
+        if (moving) {
+          const next = !event.shift && start !== end
+            ? backward ? start : end
+            : lineAction
+              ? lineBoundary(value, position, direction)
+              : wordBoundary(value, position, direction);
+          if (event.shift) {
+            const selectionDirection = next < anchor ? "backward" : next > anchor ? "forward" : "none";
+            setInputSelection(target, Math.min(anchor, next), Math.max(anchor, next), selectionDirection);
+          } else {
+            setInputSelection(target, next, next);
+          }
+        } else {
+          if (start === end) {
+            const boundary = lineAction
+              ? lineBoundary(value, position, direction)
+              : wordBoundary(value, position, direction);
+            if (boundary === position) return;
+            if (!setInputSelection(target, Math.min(boundary, position), Math.max(boundary, position))) {
+              return;
+            }
+          }
+          document.execCommand("delete");
+        }
+        return;
+      }
+      if (key === "Backspace") {
+        document.execCommand("delete");
+        return;
+      }
+      if (key === "Delete") {
+        document.execCommand("forwardDelete");
+        return;
+      }
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(key)) return;
       if (input) {
         const value = target.value;
-        try {
-          const start = target.selectionStart;
-          if (start === null) return;
-          const end = target.selectionEnd ?? start;
-          const backward = target.selectionDirection === "backward";
-          const anchor = start === end ? start : backward ? end : start;
-          let position = start === end ? start : backward ? start : end;
-          if (!event.shift && start !== end && event.key === "ArrowLeft") {
-            position = start;
-          } else if (!event.shift && start !== end && event.key === "ArrowRight") {
-            position = end;
-          } else if (event.key === "ArrowLeft") {
-            position = Math.max(0, position - 1);
-          } else if (event.key === "ArrowRight") {
-            position = Math.min(value.length, position + 1);
-          } else if (event.key === "Home") {
-            position = Math.max(0, value.lastIndexOf("\n", position - 1) + 1);
-          } else {
-            const nextLine = value.indexOf("\n", position);
-            position = nextLine < 0 ? value.length : nextLine;
-          }
-          if (event.shift) {
-            const direction = position < anchor ? "backward" : position > anchor ? "forward" : "none";
-            target.setSelectionRange(Math.min(anchor, position), Math.max(anchor, position), direction);
-          } else {
-            target.setSelectionRange(position, position);
-          }
-        } catch {
-          return;
+        const selected = inputSelection(target);
+        if (!selected) return;
+        const { start, end, backward } = selected;
+        const anchor = start === end ? start : backward ? end : start;
+        let position = start === end ? start : backward ? start : end;
+        if (!event.shift && start !== end && key === "ArrowLeft") {
+          position = start;
+        } else if (!event.shift && start !== end && key === "ArrowRight") {
+          position = end;
+        } else if (key === "ArrowLeft") {
+          position = Math.max(0, position - 1);
+        } else if (key === "ArrowRight") {
+          position = Math.min(value.length, position + 1);
+        } else if (key === "Home") {
+          position = Math.max(0, value.lastIndexOf("\n", position - 1) + 1);
+        } else {
+          const nextLine = value.indexOf("\n", position);
+          position = nextLine < 0 ? value.length : nextLine;
+        }
+        if (event.shift) {
+          const direction = position < anchor ? "backward" : position > anchor ? "forward" : "none";
+          setInputSelection(target, Math.min(anchor, position), Math.max(anchor, position), direction);
+        } else {
+          setInputSelection(target, position, position);
         }
       } else {
         const selection = window.getSelection();
         if (typeof selection?.modify === "function") {
-          const direction = event.key === "ArrowLeft" || event.key === "Home" ? "backward" : "forward";
-          const granularity = event.key === "Home" || event.key === "End" ? "lineboundary" : "character";
+          const direction = key === "ArrowLeft" || key === "Home" ? "backward" : "forward";
+          const granularity = key === "Home" || key === "End" ? "lineboundary" : "character";
           selection.modify(event.shift ? "extend" : "move", direction, granularity);
         }
       }
