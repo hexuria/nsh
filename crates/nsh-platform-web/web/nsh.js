@@ -1769,30 +1769,35 @@ class Player {
       if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
       if (input) {
         const value = target.value;
-        const start = target.selectionStart ?? value.length;
-        const end = target.selectionEnd ?? start;
-        const backward = target.selectionDirection === "backward";
-        const anchor = start === end ? start : backward ? end : start;
-        let position = start === end ? start : backward ? start : end;
-        if (!event.shift && start !== end && event.key === "ArrowLeft") {
-          position = start;
-        } else if (!event.shift && start !== end && event.key === "ArrowRight") {
-          position = end;
-        } else if (event.key === "ArrowLeft") {
-          position = Math.max(0, position - 1);
-        } else if (event.key === "ArrowRight") {
-          position = Math.min(value.length, position + 1);
-        } else if (event.key === "Home") {
-          position = Math.max(0, value.lastIndexOf("\n", position - 1) + 1);
-        } else {
-          const nextLine = value.indexOf("\n", position);
-          position = nextLine < 0 ? value.length : nextLine;
-        }
-        if (event.shift) {
-          const direction = position < anchor ? "backward" : position > anchor ? "forward" : "none";
-          target.setSelectionRange(Math.min(anchor, position), Math.max(anchor, position), direction);
-        } else {
-          target.setSelectionRange(position, position);
+        try {
+          const start = target.selectionStart;
+          if (start === null) return;
+          const end = target.selectionEnd ?? start;
+          const backward = target.selectionDirection === "backward";
+          const anchor = start === end ? start : backward ? end : start;
+          let position = start === end ? start : backward ? start : end;
+          if (!event.shift && start !== end && event.key === "ArrowLeft") {
+            position = start;
+          } else if (!event.shift && start !== end && event.key === "ArrowRight") {
+            position = end;
+          } else if (event.key === "ArrowLeft") {
+            position = Math.max(0, position - 1);
+          } else if (event.key === "ArrowRight") {
+            position = Math.min(value.length, position + 1);
+          } else if (event.key === "Home") {
+            position = Math.max(0, value.lastIndexOf("\n", position - 1) + 1);
+          } else {
+            const nextLine = value.indexOf("\n", position);
+            position = nextLine < 0 ? value.length : nextLine;
+          }
+          if (event.shift) {
+            const direction = position < anchor ? "backward" : position > anchor ? "forward" : "none";
+            target.setSelectionRange(Math.min(anchor, position), Math.max(anchor, position), direction);
+          } else {
+            target.setSelectionRange(position, position);
+          }
+        } catch {
+          return;
         }
       } else {
         const selection = window.getSelection();
