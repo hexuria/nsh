@@ -1836,7 +1836,14 @@ class Player {
         && (!(event.ctrl || event.alt || event.meta) || wordAction || lineAction);
       const printable = key.length === 1 && !event.ctrl && !event.meta;
       const browserDefaultSkipped = printable || key === "Tab"
-        || (editable && ["ArrowUp", "ArrowDown", "PageUp", "PageDown"].includes(key));
+        || (editable && (
+          ["ArrowUp", "ArrowDown", "PageUp", "PageDown"].includes(key)
+          || ((event.ctrl || event.alt || event.meta)
+            && !selectAll
+            && !wordAction
+            && !lineAction
+            && !["Control", "Alt", "Meta", "Shift"].includes(key))
+        ));
       const unsupported = () => {
         throw new Error(`key ${JSON.stringify(key)} cannot be synthesized; use type for text`);
       };
@@ -1868,7 +1875,10 @@ class Player {
         if (browserDefaultSkipped) unsupported();
         return;
       }
-      if (caretKeys.includes(key) && !caret) return;
+      if (caretKeys.includes(key) && !caret) {
+        if (browserDefaultSkipped) unsupported();
+        return;
+      }
       if (wordAction || lineAction) {
         const backward = key === "Backspace" || key === "ArrowLeft";
         const direction = backward ? "backward" : "forward";

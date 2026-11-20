@@ -3159,6 +3159,128 @@ test("synthetic keys dispatch to handlers before refusing skipped defaults", () 
   }
 });
 
+test("synthetic modified shortcuts refuse defaults they do not apply", () => {
+  class Input {
+    constructor() {
+      this.value = "one two";
+      this.selectionStart = this.value.length;
+      this.selectionEnd = this.value.length;
+      this.selectionDirection = "none";
+      this.pageHandlesCtrlZ = false;
+    }
+    dispatchEvent(event) {
+      dispatched.push([event.type, event.key, event.ctrlKey, event.altKey, event.metaKey]);
+      if (this.pageHandlesCtrlZ && event.key === "z" && event.ctrlKey) {
+        event.preventDefault();
+      }
+    }
+    select() {
+      this.setSelectionRange(0, this.value.length);
+    }
+    setSelectionRange(start, end, direction = "none") {
+      this.selectionStart = start;
+      this.selectionEnd = end;
+      this.selectionDirection = direction;
+    }
+  }
+  class Textarea {}
+  class KeyEvent {
+    constructor(type, props) {
+      this.type = type;
+      Object.assign(this, props);
+      this.defaultPrevented = false;
+    }
+    preventDefault() {
+      this.defaultPrevented = true;
+    }
+  }
+  const { player } = fakePlayer();
+  const dispatched = [];
+  const commands = [];
+  const field = new Input();
+  const saved = {
+    document: globalThis.document,
+    HTMLInputElement: globalThis.HTMLInputElement,
+    HTMLTextAreaElement: globalThis.HTMLTextAreaElement,
+    KeyboardEvent: globalThis.KeyboardEvent,
+  };
+  const savedNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  globalThis.HTMLInputElement = Input;
+  globalThis.HTMLTextAreaElement = Textarea;
+  globalThis.KeyboardEvent = KeyEvent;
+  globalThis.document = {
+    activeElement: field,
+    execCommand(command) {
+      commands.push(command);
+      if (command === "delete") {
+        const start = field.selectionStart;
+        const end = field.selectionEnd;
+        field.value = field.value.slice(0, start) + field.value.slice(end);
+        field.setSelectionRange(start, start);
+      }
+      return true;
+    },
+  };
+  const setPlatform = (platform) => {
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: { platform },
+    });
+  };
+  try {
+    const synthesize = (key, modifiers = {}) => player.synthesize({
+      event: "key",
+      phase: "down",
+      key,
+      code: key,
+      shift: false,
+      ctrl: false,
+      alt: false,
+      meta: false,
+      ...modifiers,
+    });
+    const unsupported = (key, modifiers) => assert.throws(
+      () => synthesize(key, modifiers),
+      { message: `key ${JSON.stringify(key)} cannot be synthesized; use type for text` },
+    );
+
+    unsupported("Home", { ctrl: true });
+    unsupported("z", { ctrl: true });
+    unsupported("z", { meta: true });
+    assert.doesNotThrow(() => synthesize("a", { ctrl: true }));
+    assert.deepEqual([field.selectionStart, field.selectionEnd], [0, field.value.length]);
+    assert.doesNotThrow(() => synthesize("Control", { ctrl: true }));
+
+    for (const [platform, modifiers] of [
+      ["Linux x64", { ctrl: true }],
+      ["MacIntel", { alt: true }],
+    ]) {
+      setPlatform(platform);
+      field.value = "one two";
+      field.setSelectionRange(field.value.length, field.value.length);
+      commands.length = 0;
+      assert.doesNotThrow(() => synthesize("Backspace", modifiers));
+      assert.equal(field.value, "one ");
+      assert.deepEqual(commands, ["delete"]);
+    }
+
+    field.pageHandlesCtrlZ = true;
+    assert.doesNotThrow(() => synthesize("z", { ctrl: true }));
+    assert.deepEqual(dispatched.slice(0, 3), [
+      ["keydown", "Home", true, false, false],
+      ["keydown", "z", true, false, false],
+      ["keydown", "z", false, false, true],
+    ]);
+  } finally {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete globalThis[name];
+      else globalThis[name] = value;
+    }
+    if (savedNavigator) Object.defineProperty(globalThis, "navigator", savedNavigator);
+    else delete globalThis.navigator;
+  }
+});
+
 test("a key event without `key` falls back to its code instead of throwing", () => {
   assert.equal(keyCode({ code: "KeyA" }), 97);
   assert.equal(keyCode({ key: null, code: "Digit3" }), 51);
