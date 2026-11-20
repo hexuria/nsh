@@ -1929,10 +1929,9 @@ class Player {
         } else if (key === "ArrowRight") {
           position = graphemeBoundary(value, position, "forward");
         } else if (key === "Home") {
-          position = Math.max(0, value.lastIndexOf("\n", position - 1) + 1);
+          position = lineBoundary(value, position, "backward");
         } else {
-          const nextLine = value.indexOf("\n", position);
-          position = nextLine < 0 ? value.length : nextLine;
+          position = lineBoundary(value, position, "forward");
         }
         if (event.shift) {
           const direction = position < anchor ? "backward" : position > anchor ? "forward" : "none";
