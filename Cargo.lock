@@ -2311,9 +2311,9 @@ dependencies = [
 
 [[package]]
 name = "gpui-agent"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d22f391992e0b20682baf38df56a204cd2e5ef00104c96293ff6857a9fa0966"
+checksum = "210a5d3d1877b0cf43c33debda98a9db610738e3459e17b7f868013901493ca3"
 dependencies = [
  "base64 0.22.1",
  "hmac 0.12.1",
