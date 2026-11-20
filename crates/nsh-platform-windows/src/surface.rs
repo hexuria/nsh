@@ -701,8 +701,8 @@ impl Surface {
         self.views.get(id)
     }
 
-    /// Shows fatal app errors with `f` (development hosts).
-    #[cfg(feature = "dev")]
+    /// Hands the app's errors to `f` (the development panel or the
+    /// embedding app through [`crate::AppView::set_error_handler`]).
     pub(crate) fn set_error_handler(&self, f: ErrorHandler) {
         *self.on_error.borrow_mut() = Some(f);
     }
