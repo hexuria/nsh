@@ -184,6 +184,13 @@ impl DevSession {
         show_error(&self.ui, container, title, message, false);
     }
 
+    #[cfg(feature = "dev-agent")]
+    pub(crate) fn reset_agent_scene(&self) {
+        if let Some(agent) = &self._agent {
+            agent.model.reset();
+        }
+    }
+
     /// A hot update failed: loads the latest bundle from scratch.
     pub(crate) fn reload(view: &Rc<Inner>) {
         let latest = view
@@ -199,6 +206,7 @@ impl DevSession {
 
 #[cfg(feature = "dev-agent")]
 struct DevAgent {
+    model: Arc<nsh_testing::agent::Model>,
     alive: Arc<AtomicBool>,
     _worker: nsh_gpui_agent::WorkerHandle,
 }
@@ -247,8 +255,9 @@ impl DevAgent {
         )?
         .with_screenshot_directory(screenshots);
         let worker = nsh_gpui_agent::spawn_worker(address, token, host)?;
-        view.set_test_model(model);
+        view.set_test_model(model.clone());
         Ok(Some(Self {
+            model,
             alive,
             _worker: worker,
         }))

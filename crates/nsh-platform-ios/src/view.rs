@@ -315,6 +315,11 @@ impl Inner {
     pub(crate) fn load(this: &Rc<Inner>, app: App) {
         let mut state = this.state.borrow_mut();
         if let Some(surface) = &state.surface {
+            // The engine restarts, so the agent's scene starts empty too.
+            #[cfg(feature = "dev-agent")]
+            if let Some(dev) = this.dev().as_ref() {
+                dev.reset_agent_scene();
+            }
             return surface.reload(app);
         }
         let mtm = this.container.mtm();
