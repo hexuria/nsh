@@ -3945,7 +3945,11 @@ mod tests {
                 SemanticTarget::Canvas { owner: 4, bounds },
             ),
         ];
-        assert!(is_descendant_or_same(NodeId::MAX, 4, &mounted_parents(&nodes)));
+        assert!(is_descendant_or_same(
+            NodeId::MAX,
+            4,
+            &mounted_parents(&nodes)
+        ));
         for hit in [None, Some(4)] {
             let presses = Arc::new(std::sync::atomic::AtomicUsize::new(0));
             let agent = Agent::requiring_native_hit_test(
