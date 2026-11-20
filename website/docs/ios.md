@@ -49,10 +49,12 @@ gpui-agent screenshot --inline --out gallery.png
 
 Keep `nsh run` and the GPUI-agent CLI in the same shell so they share the token. The default address is
 `127.0.0.1:17421`; `GPUI_AGENT_ADDR` may choose another loopback socket address. The token is written with mode `0600`
-to the app's data container, read once and deleted by the host, never passed in launch arguments or the app's
-environment. Screenshots are stored in the app's cache; `--inline --out` saves them on the Mac. Attach ends when the
-view or development session closes. This endpoint is for simulator debug hosts, not release apps, physical devices
-or Mac Catalyst.
+to the app's data container, then read once and deleted by the host. This private file carries the token across
+the launch boundary. Screenshots are stored in the app's cache; `--inline --out` saves them on the Mac. Attach ends
+when the view or development session closes. Simulator debug hosts provide this development endpoint;
+release apps, physical-device hosts and Mac Catalyst hosts follow their regular application lifecycle.
+If agent startup fails, the development session continues and reports the error in the `nsh run` terminal.
+Agent attach and `nsh test` keep independent models of the same running app.
 
 ## Packaging
 
