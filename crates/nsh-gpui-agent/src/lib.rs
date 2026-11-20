@@ -100,6 +100,32 @@ impl NshAgentHost {
                 .key_node(self.node_id(target)?, key)
                 .map(|()| DispatchResult::empty()),
             Op::Invoke { name, args } => self.invoke(name, args),
+            Op::Press { .. }
+            | Op::Scroll { .. }
+            | Op::Hover { .. }
+            | Op::Drag { .. }
+            | Op::Viewport { .. } => {
+                // The dispatcher has already checked a press's fingerprint;
+                // the remaining fields are the `invoke` arguments.
+                let op = match op {
+                    Op::Press { target, x, y, .. } => Op::Press {
+                        target: target.clone(),
+                        x: *x,
+                        y: *y,
+                        expect_fingerprint: None,
+                    },
+                    other => other.clone(),
+                };
+                match op.legacy_invoke() {
+                    Some(Op::Invoke { name, args }) => self.invoke(&name, &args),
+                    _ => Err(gpui_agent::unsupported_op("this operation")),
+                }
+            }
+            Op::Swipe {
+                target,
+                direction,
+                distance,
+            } => self.swipe(target.as_deref(), *direction, *distance),
             Op::Keybinding { .. } => {
                 let bindings = self.keybindings();
                 let entry =
@@ -133,7 +159,9 @@ impl AgentHost for NshAgentHost {
             },
             bundle_id: None,
             executable: None,
-            features: Vec::new(),
+            features: self.features(),
+            framework: Some("nsh".into()),
+            device: Some(self.device()),
         }
     }
 
@@ -245,6 +273,79 @@ impl AgentHost for NshAgentHost {
 }
 
 impl NshAgentHost {
+    /// The feature-gated operations this platform's agent delivers. A
+    /// phone has no pointer to hover and no window to resize; a swipe is a
+    /// touch gesture.
+    fn features(&self) -> Vec<String> {
+        let names: &[&str] = match self.platform {
+            PlatformKind::Mobile => &["press", "scroll", "drag", "swipe"],
+            _ => &["press", "scroll", "hover", "drag", "viewport"],
+        };
+        names.iter().map(|name| (*name).to_string()).collect()
+    }
+
+    fn device(&self) -> gpui_agent::DeviceInfo {
+        let viewport = self.agent.native_viewport();
+        let (width, height) = (f64::from(viewport.width.0), f64::from(viewport.height.0));
+        let known = width > 0.0 && height > 0.0;
+        let mut device = gpui_agent::DeviceInfo::default();
+        device.form_factor = Some(
+            match self.platform {
+                PlatformKind::Mobile => "phone",
+                PlatformKind::Web => "browser",
+                _ => "desktop",
+            }
+            .into(),
+        );
+        if known {
+            device.width = Some(width);
+            device.height = Some(height);
+            device.orientation = Some(if width > height { "landscape" } else { "portrait" }.into());
+        }
+        device.input = Some("trusted".into());
+        device
+    }
+
+    /// A swipe is a touch drag: across the node, or from the centre of the
+    /// surface when no node is named.
+    fn swipe(
+        &self,
+        target: Option<&str>,
+        direction: gpui_agent::SwipeDirection,
+        distance: Option<f64>,
+    ) -> Result<DispatchResult, String> {
+        let viewport = self.agent.native_viewport();
+        let (width, height) = (viewport.width.0, viewport.height.0);
+        let horizontal = matches!(
+            direction,
+            gpui_agent::SwipeDirection::Left | gpui_agent::SwipeDirection::Right
+        );
+        let distance = match distance {
+            Some(distance) if distance.is_finite() && distance > 0.0 => distance as f32,
+            Some(_) => return Err("swipe distance must be finite and positive".into()),
+            None => (if horizontal { width } else { height }) * 0.4,
+        };
+        let delta = match direction {
+            gpui_agent::SwipeDirection::Up => Point::new(Points(0.0), Points(-distance)),
+            gpui_agent::SwipeDirection::Down => Point::new(Points(0.0), Points(distance)),
+            gpui_agent::SwipeDirection::Left => Point::new(Points(-distance), Points(0.0)),
+            gpui_agent::SwipeDirection::Right => Point::new(Points(distance), Points(0.0)),
+        };
+        match target {
+            Some(target) => self
+                .agent
+                .drag_node_by(self.node_id(target)?, None, delta)?,
+            None => {
+                let from = Point::new(Points(width / 2.0), Points(height / 2.0));
+                self.agent.drag_at(
+                    from,
+                    Point::new(Points(from.x.0 + delta.x.0), Points(from.y.0 + delta.y.0)),
+                )?;
+            }
+        }
+        Ok(DispatchResult::empty())
+    }
+
     fn invoke(&self, name: &str, args: &serde_json::Value) -> Result<DispatchResult, String> {
         let target = |name: &str| {
             args.get(name)
@@ -1039,6 +1140,41 @@ mod tests {
             .dispatch(&Op::Invoke {
                 name: "press".into(),
                 args: serde_json::json!({"target":"visible"}),
+            })
+            .unwrap_err();
+        assert!(error.contains("unavailable"));
+    }
+
+    #[test]
+    fn hello_lists_the_gated_operations_the_platform_delivers() {
+        let host = snapshot_host_with_native(
+            SnapshotScene(Ok(sample_nodes()), 1, Default::default()),
+            SnapshotNative(true, None, false),
+        );
+        let hello = host.hello();
+        assert_eq!(hello.framework.as_deref(), Some("nsh"));
+        for feature in ["press", "scroll", "drag"] {
+            assert!(hello.features.iter().any(|name| name == feature));
+        }
+        let lists = |name: &str| hello.features.iter().any(|feature| feature == name);
+        match hello.platform {
+            PlatformKind::Mobile => assert!(lists("swipe") && !lists("hover")),
+            _ => assert!(lists("hover") && !lists("swipe")),
+        }
+    }
+
+    #[test]
+    fn a_press_operation_reaches_the_agent_like_the_invoke_it_replaces() {
+        let mut host = snapshot_host_with_availability(
+            SnapshotScene(Ok(sample_nodes()), 1, Default::default()),
+            false,
+        );
+        let error = host
+            .dispatch(&Op::Press {
+                target: Some("visible".into()),
+                x: None,
+                y: None,
+                expect_fingerprint: Some(7),
             })
             .unwrap_err();
         assert!(error.contains("unavailable"));
