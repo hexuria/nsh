@@ -1515,6 +1515,14 @@ class Player {
    */
   testStep(step) {
     if (!this.takesTests) return { outcome: "failed", message: "this runtime takes no test steps" };
+    if (step.step === "synth") {
+      try {
+        this.synthesize(step.event);
+        return { outcome: "done", value: null };
+      } catch (e) {
+        return { outcome: "failed", message: String(e?.message ?? e) };
+      }
+    }
     const len = this.withStrings([JSON.stringify(step)], (p, l) => this.wasm.nsh_test_answer(p, l));
     const answer = JSON.parse(this.str(this.wasm.nsh_test_answer_ptr(), len));
     if (step.query?.query === "animating" && "done" in answer) {
@@ -1595,8 +1603,14 @@ class Player {
         target.focus({ preventScroll: true });
         return document.activeElement === target;
       }
+      case "focused": {
+        for (let el = document.activeElement; el; el = el.parentElement) {
+          if (el._id != null && this.views.get(el._id) === el) return el._id;
+        }
+        return null;
+      }
       case "app_focused":
-        return document.hasFocus() && document.visibilityState === "visible";
+        return document.hasFocus();
       case "dialog_point": {
         const backdrops = this.root.querySelectorAll(".nsh-dialog-backdrop");
         const backdrop = backdrops[backdrops.length - 1];
@@ -1613,6 +1627,78 @@ class Player {
       }
     }
     throw new Error(`the page cannot answer ${JSON.stringify(query)}`);
+  }
+
+  synthesize(event) {
+    if (event.event === "pointer") {
+      const target = document.elementFromPoint(event.x, event.y);
+      if (!target) throw new Error("no element at the synthetic pointer position");
+      const names = {
+        down: ["pointerdown", "mousedown"],
+        move: ["pointermove", "mousemove"],
+        up: ["pointerup", "mouseup"],
+      }[event.phase];
+      if (!names) throw new Error(`unknown pointer phase ${event.phase}`);
+      target.dispatchEvent(new PointerEvent(names[0], {
+        pointerType: "mouse", pointerId: 1, button: 0, buttons: event.buttons,
+        clientX: event.x, clientY: event.y, bubbles: true, composed: true,
+      }));
+      target.dispatchEvent(new MouseEvent(names[1], {
+        button: 0, buttons: event.buttons, clientX: event.x, clientY: event.y,
+        bubbles: true, composed: true,
+      }));
+      return;
+    }
+    if (event.event === "wheel") {
+      const target = document.elementFromPoint(event.x, event.y);
+      if (!target) throw new Error("no element at the synthetic wheel position");
+      target.dispatchEvent(new WheelEvent("wheel", {
+        deltaX: event.dx, deltaY: event.dy, deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+        clientX: event.x, clientY: event.y, bubbles: true, composed: true,
+      }));
+      return;
+    }
+    if (event.event === "key") {
+      document.activeElement?.dispatchEvent(new KeyboardEvent(
+        event.phase === "down" ? "keydown" : "keyup",
+        {
+          key: event.key, code: event.code, shiftKey: event.shift, ctrlKey: event.ctrl,
+          altKey: event.alt, metaKey: event.meta, bubbles: true, composed: true,
+        },
+      ));
+      return;
+    }
+    if (event.event === "insert_text") {
+      const target = document.activeElement;
+      if (!target || !(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable)) {
+        throw new Error("the focused element is not editable");
+      }
+      if (document.execCommand("insertText", false, event.text)) return;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        const start = target.selectionStart ?? target.value.length;
+        const end = target.selectionEnd ?? start;
+        target.value = target.value.slice(0, start) + event.text + target.value.slice(end);
+        target.setSelectionRange(start + event.text.length, start + event.text.length);
+      } else {
+        target.textContent = event.text;
+      }
+      target.dispatchEvent(new InputEvent("input", {
+        data: event.text, inputType: "insertText", bubbles: true, composed: true,
+      }));
+      return;
+    }
+    if (event.event === "focus") {
+      const element = this.views.get(event.node);
+      const target = element?._field ?? element;
+      if (!target?.isConnected) throw new Error(`no DOM element for node ${event.node}`);
+      target.focus({ preventScroll: true });
+      return;
+    }
+    if (event.event === "back") {
+      history.back();
+      return;
+    }
+    throw new Error(`unknown synthetic event ${JSON.stringify(event)}`);
   }
 
   // Memory --------------------------------------------------------------

@@ -1020,6 +1020,7 @@ pub fn answer(model: &Model, step: &TestStep) -> Option<Result<serde_json::Value
             | SceneQuery::DialogPoint { .. }
             | SceneQuery::HitAt { .. }
             | SceneQuery::Focus { .. }
+            | SceneQuery::Focused
             | SceneQuery::AppFocused => return None,
         },
         _ => return None,
@@ -2566,6 +2567,7 @@ impl Agent {
                 ))
             }
             TestStep::Scene { query } => self.scene_query(query),
+            TestStep::Synth { .. } => Err("synthetic events are handled by the web page".into()),
         }
     }
 
@@ -2643,6 +2645,7 @@ impl Agent {
             SceneQuery::InputText { id } => {
                 Ok(self.native.input_text(id).map_or(Value::Null, Value::from))
             }
+            SceneQuery::Focused => Ok(Value::from(self.native.focused())),
             SceneQuery::Animating => Ok(Value::from(self.native.animating())),
             SceneQuery::DialogPoint { .. } => {
                 Err("this host answers dialogs itself (`AnswerDialog`)".into())

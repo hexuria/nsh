@@ -433,6 +433,91 @@ impl Default for ViewStyle {
     }
 }
 
+/// A synthetic mouse pointer event phase.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SynthPointerPhase {
+    /// A button was pressed.
+    Down,
+    /// The pointer moved.
+    Move,
+    /// A button was released.
+    Up,
+}
+
+/// A synthetic keyboard event phase.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SynthKeyPhase {
+    /// A key was pressed.
+    Down,
+    /// A key was released.
+    Up,
+}
+
+/// An untrusted DOM event dispatched by a web page.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "event", rename_all = "snake_case")]
+pub enum SynthEvent {
+    /// Dispatches pointer and mouse events at viewport-relative CSS pixels.
+    Pointer {
+        /// The event phase.
+        phase: SynthPointerPhase,
+        /// The horizontal CSS-pixel coordinate.
+        #[serde(deserialize_with = "float::f32")]
+        x: f32,
+        /// The vertical CSS-pixel coordinate.
+        #[serde(deserialize_with = "float::f32")]
+        y: f32,
+        /// The pressed mouse buttons bit mask.
+        buttons: u32,
+    },
+    /// Dispatches a wheel event at viewport-relative CSS pixels.
+    Wheel {
+        /// The horizontal CSS-pixel coordinate.
+        #[serde(deserialize_with = "float::f32")]
+        x: f32,
+        /// The vertical CSS-pixel coordinate.
+        #[serde(deserialize_with = "float::f32")]
+        y: f32,
+        /// The horizontal scroll delta in CSS pixels.
+        #[serde(deserialize_with = "float::f32")]
+        dx: f32,
+        /// The vertical scroll delta in CSS pixels.
+        #[serde(deserialize_with = "float::f32")]
+        dy: f32,
+    },
+    /// Dispatches a keyboard event on the focused element.
+    Key {
+        /// The event phase.
+        phase: SynthKeyPhase,
+        /// The DOM key name.
+        key: String,
+        /// The DOM physical key code.
+        code: String,
+        /// Whether Shift is held.
+        shift: bool,
+        /// Whether Control is held.
+        ctrl: bool,
+        /// Whether Alt is held.
+        alt: bool,
+        /// Whether Meta is held.
+        meta: bool,
+    },
+    /// Inserts plain text into the focused editable element.
+    InsertText {
+        /// The text to insert.
+        text: String,
+    },
+    /// Focuses the DOM element for a view.
+    Focus {
+        /// The view's node id.
+        node: u32,
+    },
+    /// Navigates back in the page's history.
+    Back,
+}
+
 /// A step of a test on a host's app, named as `nsh/test` names them: views
 /// are found by selectors (`id:save`, `text:Add`, `role:button[Save]`), and
 /// actions are native input at the view the selector names.
@@ -712,6 +797,11 @@ pub enum TestStep {
         /// The app's id for the window (`"main"`: the main window).
         id: String,
     },
+    /// Dispatches an untrusted DOM event in the web page.
+    Synth {
+        /// The event.
+        event: SynthEvent,
+    },
     /// A question about the host's model of the app or about its views,
     /// from a test agent that runs elsewhere (the web: `nsh` acts through
     /// the browser, the page knows the app).
@@ -854,6 +944,8 @@ pub enum SceneQuery {
         /// The view.
         id: u32,
     },
+    /// The app's focused view, if it has one.
+    Focused,
     /// Whether a native animation runs that ends by itself (not one
     /// looping forever).
     Animating,
@@ -1273,6 +1365,61 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&msg).unwrap(),
             r#"{"type":"step","id":1,"step":{"step":"set_viewport","width":390.5,"height":844.0}}"#
+        );
+    }
+
+    #[test]
+    fn synthetic_steps_round_trip() {
+        let steps = [
+            TestStep::Synth {
+                event: SynthEvent::Pointer {
+                    phase: SynthPointerPhase::Down,
+                    x: 10.5,
+                    y: 2.25,
+                    buttons: 1,
+                },
+            },
+            TestStep::Synth {
+                event: SynthEvent::Wheel {
+                    x: 10.5,
+                    y: 2.25,
+                    dx: -1.0,
+                    dy: 4.0,
+                },
+            },
+            TestStep::Synth {
+                event: SynthEvent::Key {
+                    phase: SynthKeyPhase::Up,
+                    key: "Enter".into(),
+                    code: "Enter".into(),
+                    shift: false,
+                    ctrl: true,
+                    alt: false,
+                    meta: false,
+                },
+            },
+            TestStep::Synth {
+                event: SynthEvent::InsertText {
+                    text: "text".into(),
+                },
+            },
+            TestStep::Synth {
+                event: SynthEvent::Focus { node: 7 },
+            },
+            TestStep::Synth {
+                event: SynthEvent::Back,
+            },
+        ];
+        for step in &steps {
+            let value = serde_json::to_value(&step).unwrap();
+            assert_eq!(serde_json::from_value::<TestStep>(value).unwrap(), *step);
+        }
+        assert_eq!(
+            serde_json::to_value(&steps[0]).unwrap(),
+            serde_json::json!({
+                "step": "synth",
+                "event": {"event": "pointer", "phase": "down", "x": 10.5, "y": 2.25, "buttons": 1}
+            })
         );
     }
 

@@ -977,3 +977,61 @@ fn an_agent_session_asks_only_the_page_that_holds_its_key() {
         .unwrap();
     assert_eq!(asking.join().unwrap(), Ok(serde_json::json!(["Hello"])));
 }
+
+#[test]
+fn the_most_recent_keyed_agent_tab_receives_steps() {
+    use nsh_dev::protocol::TestStep;
+
+    let server = std::sync::Arc::new(
+        DevServer::start("127.0.0.1:0".parse().unwrap(), "bc-1", None, |_| {}).unwrap(),
+    );
+    server.agent_session("k3y".into());
+    let url = format!("ws://{}{WS_PATH}", server.local_addr());
+    let (_older, _) = web_hello(&url, Some("k3y"));
+    let deadline = std::time::Instant::now() + TIMEOUT;
+    while server.clients() < 1 {
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let (mut newer, hello) = web_hello(&url, Some("k3y"));
+    assert_eq!(hello["agent"], true);
+    while server.clients() < 2 {
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    std::thread::sleep(Duration::from_millis(50));
+
+    let asking = std::thread::spawn({
+        let server = server.clone();
+        move || server.step(TestStep::Texts, Duration::from_secs(2))
+    });
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let step = loop {
+            if let tungstenite::Message::Text(text) = newer.read().expect("step") {
+                let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+                if value["type"] == "step" {
+                    break value;
+                }
+            }
+        };
+        tx.send((newer, step)).unwrap();
+    });
+    let (mut newer, step) = rx
+        .recv_timeout(Duration::from_secs(3))
+        .expect("the newest tab receives the step");
+    newer
+        .send(tungstenite::Message::text(
+            serde_json::json!({
+                "type": "step_done",
+                "id": step["id"],
+                "outcome": {"outcome": "done", "value": ["newest"]},
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    assert_eq!(
+        asking.join().unwrap().unwrap(),
+        serde_json::json!(["newest"])
+    );
+}
