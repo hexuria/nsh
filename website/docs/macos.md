@@ -17,6 +17,42 @@ context menus come from `nsh_core::element::desktop` in Rust ([Desktop title bar
 The macOS backend behaves like a desktop app: mouse, trackpad and keyboard input, resizable windows, dialogs
 over the window and a menu bar.
 
+## GPUI-agent development tooling
+
+The source-built debug TSX development host provides the shared `nsh-gpui-agent`
+adapter through `nsh-platform-macos/dev-agent`. Build the `nsh` CLI from a source
+checkout and run that binary for agent sessions. The distributed `nsh` CLI supplies
+an optimized host for standard development runs; shared-agent startup is a
+source-built debug-host capability.
+
+```sh
+cargo build -p nsh-cli
+export GPUI_AGENT=1
+export GPUI_AGENT_ADDR=127.0.0.1:17421
+export GPUI_AGENT_TOKEN="$(openssl rand -hex 32)"
+./target/debug/nsh run examples/gallery/App.tsx --target macos
+```
+
+Keep the host running and use the same environment in another terminal:
+
+```sh
+gpui-agent hello
+gpui-agent snapshot --pretty
+gpui-agent click <target-id>
+gpui-agent screenshot --inline --out gallery.png
+```
+
+Choose a target ID from the snapshot. The desktop adapter supports native press,
+scroll, hover, drag, viewport resizing and inline PNG screenshots. The listener
+binds to a loopback address with token authentication. Keep tokens private in your
+local shell environment. Reloading resets the semantic model; closing the surface
+stops its worker. Shared-agent sessions use the source-built debug development host,
+while packaged apps and optimized hosts follow their regular application lifecycle.
+Rust-root apps use their dedicated runner.
+
+The existing `gpui-agent` and `gpui-agent-server` features retain their in-process
+APIs. Enabling `gpui-agent-server` selects the private server as the protocol listener.
+
 ## Requirements
 
 - **macOS 14** or later, where the app runs, or the later version the app names
