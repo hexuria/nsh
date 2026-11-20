@@ -21,7 +21,7 @@ use nsh_testing::agent::{Key, Native, SystemName};
 use objc2::{Message, msg_send, rc::Retained};
 use objc2_core_foundation::CGRect;
 use objc2_foundation::NSObjectProtocol;
-use objc2_ui_kit::{UILabel, UIView, UIWindow};
+use objc2_ui_kit::{UIApplication, UIApplicationState, UILabel, UIView, UIWindow};
 use rustc_hash::FxHashMap;
 
 use crate::{
@@ -354,6 +354,16 @@ impl Native for IosNative {
         self.available
             .as_ref()
             .is_none_or(|alive| alive.load(std::sync::atomic::Ordering::Acquire))
+    }
+
+    fn app_focused(&self) -> bool {
+        self.on_main(|_, window| {
+            UIApplication::sharedApplication(objc2::MainThreadMarker::from(window))
+                .applicationState()
+                == UIApplicationState::Active
+                && window.isKeyWindow()
+        })
+        .unwrap_or(false)
     }
 
     fn hit_at(&self, at: Point<Points>) -> Result<Option<NodeId>, String> {
