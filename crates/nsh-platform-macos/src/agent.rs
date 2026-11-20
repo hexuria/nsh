@@ -366,7 +366,7 @@ impl Native for MacNative {
     }
 
     fn hit_at(&self, at: Point<Points>) -> Result<Option<NodeId>, String> {
-        self.on_main(move |surface, window| {
+        self.on_target(move |surface, window| {
             let content = window.contentView()?;
             let window_point = synth::to_window(window, f64::from(at.x.0), f64::from(at.y.0));
             let point = match crate::view::superview(&content) {
