@@ -3069,17 +3069,24 @@ test("a new run drops a push waiting for its turn", (t) => {
   assert.equal(player.pageUrlPush, false);
 });
 
-test("synthetic keys reject keys without an implemented effect", () => {
+test("synthetic keys dispatch to handlers before refusing skipped defaults", () => {
   class Input {
     dispatchEvent(event) {
-      dispatched.push(event.type);
+      dispatched.push([event.type, event.key]);
+      if (event.type === "keydown" && ["Enter", "Escape"].includes(event.key)) {
+        event.preventDefault();
+      }
     }
   }
   class Textarea {}
   class KeyEvent {
-    constructor(type) {
+    constructor(type, props) {
       this.type = type;
+      Object.assign(this, props);
       this.defaultPrevented = false;
+    }
+    preventDefault() {
+      this.defaultPrevented = true;
     }
   }
   const { player } = fakePlayer();
@@ -3108,9 +3115,9 @@ test("synthetic keys reject keys without an implemented effect", () => {
     },
   };
   try {
-    const synthesize = (key, modifiers = {}) => player.synthesize({
+    const synthesize = (key, phase = "down", modifiers = {}) => player.synthesize({
       event: "key",
-      phase: "down",
+      phase,
       key,
       code: key,
       shift: false,
@@ -3119,17 +3126,30 @@ test("synthetic keys reject keys without an implemented effect", () => {
       meta: false,
       ...modifiers,
     });
-    for (const key of ["a", "Tab", "ArrowUp", "ArrowDown"]) {
+    assert.doesNotThrow(() => synthesize("Enter"));
+    assert.doesNotThrow(() => synthesize("Escape"));
+    for (const key of ["a", "Tab", "ArrowUp", "ArrowDown", "PageUp", "PageDown"]) {
       assert.throws(
         () => synthesize(key),
         { message: `key ${JSON.stringify(key)} cannot be synthesized; use type for text` },
       );
     }
-    assert.deepEqual(dispatched, []);
-
-    assert.doesNotThrow(() => synthesize("Enter"));
+    assert.doesNotThrow(() => synthesize("F1"));
+    assert.doesNotThrow(() => synthesize("a", "up"));
     assert.doesNotThrow(() => synthesize("Backspace"));
-    assert.deepEqual(dispatched, ["keydown", "keydown"]);
+    assert.deepEqual(dispatched, [
+      ["keydown", "Enter"],
+      ["keydown", "Escape"],
+      ["keydown", "a"],
+      ["keydown", "Tab"],
+      ["keydown", "ArrowUp"],
+      ["keydown", "ArrowDown"],
+      ["keydown", "PageUp"],
+      ["keydown", "PageDown"],
+      ["keydown", "F1"],
+      ["keyup", "a"],
+      ["keydown", "Backspace"],
+    ]);
     assert.deepEqual(commands, ["delete"]);
   } finally {
     for (const [name, value] of Object.entries(saved)) {

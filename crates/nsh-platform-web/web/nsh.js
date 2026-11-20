@@ -1815,6 +1815,7 @@ class Player {
     }
     if (event.event === "key") {
       const target = document.activeElement;
+      if (!target) return;
       const input = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
       const contenteditable = target?.isContentEditable;
       const key = event.key;
@@ -1829,13 +1830,16 @@ class Player {
       const caretKeys = ["Backspace", "Delete", "ArrowLeft", "ArrowRight", "Home", "End"];
       const editable = input || contenteditable;
       const selectAll = editable && (event.ctrl || event.meta) && key.toLowerCase() === "a";
-      const enter = key === "Enter" && editable;
+      const enter = key === "Enter" && (target instanceof HTMLTextAreaElement || contenteditable);
       const caret = editable
         && caretKeys.includes(key)
         && (!(event.ctrl || event.alt || event.meta) || wordAction || lineAction);
-      if (!selectAll && !enter && !caret) {
+      const printable = key.length === 1 && !event.ctrl && !event.meta;
+      const browserDefaultSkipped = printable || key === "Tab"
+        || (editable && ["ArrowUp", "ArrowDown", "PageUp", "PageDown"].includes(key));
+      const unsupported = () => {
         throw new Error(`key ${JSON.stringify(key)} cannot be synthesized; use type for text`);
-      }
+      };
       const keyEvent = new KeyboardEvent(event.phase === "down" ? "keydown" : "keyup", {
         key: event.key, code: event.code, shiftKey: event.shift, ctrlKey: event.ctrl,
         altKey: event.alt, metaKey: event.meta, bubbles: true, composed: true, cancelable: true,
@@ -1860,6 +1864,11 @@ class Player {
         document.execCommand("insertLineBreak");
         return;
       }
+      if (!editable) {
+        if (browserDefaultSkipped) unsupported();
+        return;
+      }
+      if (caretKeys.includes(key) && !caret) return;
       if (wordAction || lineAction) {
         const backward = key === "Backspace" || key === "ArrowLeft";
         const direction = backward ? "backward" : "forward";
@@ -1916,7 +1925,10 @@ class Player {
         document.execCommand("forwardDelete");
         return;
       }
-      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(key)) return;
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(key)) {
+        if (browserDefaultSkipped) unsupported();
+        return;
+      }
       if (input) {
         const value = target.value;
         const selected = inputSelection(target);
