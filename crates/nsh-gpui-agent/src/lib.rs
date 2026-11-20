@@ -967,6 +967,9 @@ mod tests {
     }
 
     type DragRecords = Arc<std::sync::Mutex<Vec<(Point<Points>, Point<Points>)>>>;
+    type ScrollRecords = Arc<std::sync::Mutex<Vec<(Point<Points>, Point<Points>)>>>;
+    type HoverRecords = Arc<std::sync::Mutex<Vec<Point<Points>>>>;
+    type ResizeRecords = Arc<std::sync::Mutex<Vec<(Points, Points)>>>;
 
     /// Available, the text of a masked input, not laid out.
     struct SnapshotNative {
@@ -975,7 +978,10 @@ mod tests {
         viewport_unlaid: bool,
         viewport: Size<Points>,
         presses: Arc<std::sync::Mutex<Vec<Point<Points>>>>,
+        scrolls: ScrollRecords,
         drags: DragRecords,
+        hovers: HoverRecords,
+        resizes: ResizeRecords,
     }
 
     impl SnapshotNative {
@@ -986,7 +992,10 @@ mod tests {
                 viewport_unlaid,
                 viewport: Size::new(Points(50.0), Points(50.0)),
                 presses: Arc::default(),
+                scrolls: Arc::default(),
                 drags: Arc::default(),
+                hovers: Arc::default(),
+                resizes: Arc::default(),
             }
         }
     }
@@ -1030,10 +1039,17 @@ mod tests {
         }
 
         fn long_press(&self, _: Point<Points>, _: std::time::Duration) {}
-        fn scroll(&self, _: Point<Points>, _: Point<Points>) {}
+        fn scroll(&self, at: Point<Points>, delta: Point<Points>) {
+            self.scrolls.lock().unwrap().push((at, delta));
+        }
 
         fn drag(&self, from: Point<Points>, to: Point<Points>) {
             self.drags.lock().unwrap().push((from, to));
+        }
+
+        fn hover(&self, at: Point<Points>) -> Result<(), String> {
+            self.hovers.lock().unwrap().push(at);
+            Ok(())
         }
 
         fn type_text(&self, _: &str) {}
@@ -1053,7 +1069,8 @@ mod tests {
         fn screenshot(&self) -> Result<Vec<u8>, String> {
             Err("not available".into())
         }
-        fn resize(&self, _: Points, _: Points) -> Result<(), String> {
+        fn resize(&self, width: Points, height: Points) -> Result<(), String> {
+            self.resizes.lock().unwrap().push((width, height));
             Ok(())
         }
         fn set_dark(&self, _: bool) -> Result<(), String> {
@@ -1268,6 +1285,106 @@ mod tests {
         assert_eq!(
             *presses.lock().unwrap(),
             vec![Point::new(Points(10.0), Points(10.0))]
+        );
+    }
+
+    #[test]
+    fn scroll_operation_reaches_native_scroll() {
+        let mut nodes = sample_nodes();
+        nodes.iter_mut().find(|node| node.id == 3).unwrap().enabled = true;
+        let native = SnapshotNative::new(true, None, false);
+        let scrolls = native.scrolls.clone();
+        let mut host =
+            snapshot_host_with_native(SnapshotScene(Ok(nodes), 1, Default::default()), native);
+
+        host.dispatch(&Op::Scroll {
+            target: None,
+            x: Some(12.0),
+            y: Some(14.0),
+            dx: 4.0,
+            dy: -8.0,
+        })
+        .unwrap();
+
+        assert_eq!(
+            *scrolls.lock().unwrap(),
+            vec![(
+                Point::new(Points(12.0), Points(14.0)),
+                Point::new(Points(4.0), Points(-8.0)),
+            )]
+        );
+    }
+
+    #[test]
+    fn hover_operation_reaches_native_hover() {
+        let mut nodes = sample_nodes();
+        nodes.iter_mut().find(|node| node.id == 3).unwrap().enabled = true;
+        let native = SnapshotNative::new(true, None, false);
+        let hovers = native.hovers.clone();
+        let mut host =
+            snapshot_host_with_native(SnapshotScene(Ok(nodes), 1, Default::default()), native);
+
+        host.dispatch(&Op::Hover {
+            target: None,
+            x: Some(8.0),
+            y: Some(9.0),
+        })
+        .unwrap();
+
+        assert_eq!(
+            *hovers.lock().unwrap(),
+            vec![Point::new(Points(8.0), Points(9.0))]
+        );
+    }
+
+    #[test]
+    fn drag_operation_reaches_native_drag() {
+        let mut nodes = sample_nodes();
+        nodes.iter_mut().find(|node| node.id == 3).unwrap().enabled = true;
+        let native = SnapshotNative::new(true, None, false);
+        let drags = native.drags.clone();
+        let mut host =
+            snapshot_host_with_native(SnapshotScene(Ok(nodes), 1, Default::default()), native);
+
+        host.dispatch(&Op::Drag {
+            from: None,
+            to: None,
+            target: None,
+            x: Some(10.0),
+            y: Some(12.0),
+            dx: Some(4.0),
+            dy: Some(6.0),
+        })
+        .unwrap();
+
+        assert_eq!(
+            *drags.lock().unwrap(),
+            vec![(
+                Point::new(Points(10.0), Points(12.0)),
+                Point::new(Points(14.0), Points(18.0)),
+            )]
+        );
+    }
+
+    #[test]
+    fn viewport_operation_reaches_native_resize() {
+        let native = SnapshotNative::new(true, None, false);
+        let resizes = native.resizes.clone();
+        let mut host = snapshot_host_with_native(
+            SnapshotScene(Ok(sample_nodes()), 1, Default::default()),
+            native,
+        );
+
+        host.dispatch(&Op::Viewport {
+            width: Some(120.0),
+            height: Some(80.0),
+            preset: None,
+        })
+        .unwrap();
+
+        assert_eq!(
+            *resizes.lock().unwrap(),
+            vec![(Points(120.0), Points(80.0))]
         );
     }
 
