@@ -113,10 +113,9 @@ final class TestAgent {
             View focus = focused(host);
             for (View view = focus; view != null; view = view.getParent() instanceof View
                     ? (View) view.getParent() : null) {
-                for (int i = 0; i < host.mounter().views.size(); i++) {
-                    if (host.mounter().views.valueAt(i) == view) {
-                        return view instanceof InputBox ? host.mounter().views.keyAt(i) : HIT_NONE;
-                    }
+                int index = host.mounter().views.indexOfValue(view);
+                if (index >= 0) {
+                    return view instanceof InputBox ? host.mounter().views.keyAt(index) : HIT_NONE;
                 }
             }
             return HIT_NONE;
