@@ -72,6 +72,7 @@ const MOUSE_BUTTON_NAMES = ["left", "middle", "right", "back", "forward"];
 const MOUSE_BUTTON_BITS = [1, 4, 2, 8, 16];
 /** The keys whose press or release is reported as a mouse move. */
 const MOUSE_MODIFIER_KEYS = new Set(["Control", "Alt", "Shift", "Meta"]);
+const SYNTHETIC_CLICK_SLOP = 4;
 // What lays out a field's text, copied to the hidden copy that finds its
 // caret (`caretBounds`).
 const CARET_STYLE = [
@@ -1081,6 +1082,7 @@ class Player {
     // Views removed by the batch being applied (`finishRemovals`).
     this.removals = [];
     this.images = new Map();
+    this.syntheticPointerDown = null;
     // Browser blob URLs of the in-memory images (`data:` URIs, blobs) the
     // views show, by the source's URI (`image_bytes`).
     this.inlineImages = new Map();
@@ -1639,14 +1641,50 @@ class Player {
         up: ["pointerup", "mouseup"],
       }[event.phase];
       if (!names) throw new Error(`unknown pointer phase ${event.phase}`);
-      target.dispatchEvent(new PointerEvent(names[0], {
+      const pointer = new PointerEvent(names[0], {
         pointerType: "mouse", pointerId: 1, button: 0, buttons: event.buttons,
-        clientX: event.x, clientY: event.y, bubbles: true, composed: true,
-      }));
-      target.dispatchEvent(new MouseEvent(names[1], {
+        clientX: event.x, clientY: event.y, bubbles: true, composed: true, cancelable: true,
+      });
+      const mouse = new MouseEvent(names[1], {
         button: 0, buttons: event.buttons, clientX: event.x, clientY: event.y,
-        bubbles: true, composed: true,
-      }));
+        bubbles: true, composed: true, cancelable: true,
+      });
+      target.dispatchEvent(pointer);
+      target.dispatchEvent(mouse);
+      if (event.phase === "down") {
+        this.syntheticPointerDown = {
+          x: event.x,
+          y: event.y,
+          moved: false,
+          prevented: pointer.defaultPrevented || mouse.defaultPrevented,
+        };
+      } else if (event.phase === "move" && this.syntheticPointerDown) {
+        if (
+          Math.hypot(event.x - this.syntheticPointerDown.x, event.y - this.syntheticPointerDown.y)
+          > SYNTHETIC_CLICK_SLOP
+        ) {
+          this.syntheticPointerDown.moved = true;
+        }
+      } else if (event.phase === "up") {
+        const down = this.syntheticPointerDown;
+        this.syntheticPointerDown = null;
+        if (
+          down && !down.moved && !down.prevented && !pointer.defaultPrevented && !mouse.defaultPrevented
+          && Math.hypot(event.x - down.x, event.y - down.y) <= SYNTHETIC_CLICK_SLOP
+        ) {
+          const focusable = target.closest("input, textarea, select, [contenteditable], [tabindex], button, a[href]");
+          if (focusable && document.activeElement !== focusable) focusable.focus({ preventScroll: true });
+          if (
+            document.activeElement === focusable
+            && (focusable instanceof HTMLInputElement || focusable instanceof HTMLTextAreaElement)
+          ) {
+            const end = focusable.value.length;
+            const canSetCaret = focusable instanceof HTMLTextAreaElement
+              || ["text", "search", "tel", "url", "password"].includes(focusable.type);
+            if (canSetCaret) focusable.setSelectionRange(end, end);
+          }
+        }
+      }
       return;
     }
     if (event.event === "wheel") {
