@@ -280,6 +280,10 @@ fn targeted_key_and_group_rejection(
             .firstResponder()
             .is_some_and(|responder| responder.downcast_ref::<NSView>() == Some(&*view))
     );
+    let secondary = secondary_window(MainThreadMarker::from(main));
+    secondary.makeKeyAndOrderFront(None);
+    secondary.makeKeyWindow();
+    assert!(secondary.isKeyWindow());
     let owned = native.take().unwrap();
     let agent = worker(move || {
         let agent = Agent::requiring_native_hit_test(model.clone(), owned);
@@ -294,6 +298,7 @@ fn targeted_key_and_group_rejection(
     until("the child's targeted key", || {
         KEYS.load(Ordering::SeqCst) == 1
     });
+    assert!(main.isKeyWindow());
     assert!(
         main.firstResponder()
             .is_some_and(|responder| responder.downcast_ref::<NSView>() == Some(&*view))

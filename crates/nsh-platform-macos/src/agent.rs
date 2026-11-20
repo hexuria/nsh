@@ -522,28 +522,31 @@ impl Native for MacNative {
         self.on_main(move |surface, _| {
             let view = surface.mounter.borrow().views.get(&id).cloned();
             view.is_some_and(|view| {
+                let Some(window) = view.ns().window() else {
+                    return false;
+                };
+                window.makeKeyAndOrderFront(None);
+                window.makeKeyWindow();
                 if view.kind() == nsh_core::ViewKind::Input {
                     crate::text_input::focus(&view);
                 } else if id != ROOT_ID {
                     crate::input::focus_control(surface, &view);
                 }
-                view.ns().window().is_some_and(|window| {
-                    crate::text_input::test_focused(&window) == Some(id)
-                        || window.firstResponder().is_some_and(|responder| {
-                            // The responder's nearest nsh view must be this
-                            // node: a focused child does not focus its group.
-                            let mut current = responder
-                                .downcast_ref::<NSView>()
-                                .map(objc2::Message::retain);
-                            while let Some(native) = current {
-                                if let Some(owner) = crate::view::NshView::from_ns(&native) {
-                                    return owner.id() == id;
-                                }
-                                current = crate::view::superview(&native);
+                crate::text_input::test_focused(&window) == Some(id)
+                    || window.firstResponder().is_some_and(|responder| {
+                        // The responder's nearest nsh view must be this
+                        // node: a focused child does not focus its group.
+                        let mut current = responder
+                            .downcast_ref::<NSView>()
+                            .map(objc2::Message::retain);
+                        while let Some(native) = current {
+                            if let Some(owner) = crate::view::NshView::from_ns(&native) {
+                                return owner.id() == id;
                             }
-                            false
-                        })
-                })
+                            current = crate::view::superview(&native);
+                        }
+                        false
+                    })
             })
         })
         .ok_or_else(|| "the window is gone".to_owned())?
