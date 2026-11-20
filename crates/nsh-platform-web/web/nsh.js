@@ -1954,6 +1954,16 @@ class Player {
       if (!target || !(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable)) {
         throw new Error("the focused element is not editable");
       }
+      let owner;
+      for (let el = target; el; el = el.parentElement) {
+        if (el._id != null && this.views.get(el._id) === el) {
+          owner = el;
+          break;
+        }
+      }
+      const subject = owner ? `node ${owner._id}` : "the focused input";
+      if (target.disabled || owner?._props?.disabled) throw new Error(`${subject} is disabled`);
+      if (target.readOnly) throw new Error(`${subject} is read-only`);
       if (document.execCommand("insertText", false, event.text)) return;
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
         const start = target.selectionStart ?? target.value.length;

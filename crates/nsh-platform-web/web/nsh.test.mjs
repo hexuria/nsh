@@ -239,6 +239,55 @@ test("input autoCorrect sets spellcheck and the autocorrect attribute on both fi
   }
 });
 
+test("synthetic text refuses read-only and disabled inputs before editing", () => {
+  class Input {}
+  class Textarea {}
+  const { player } = fakePlayer();
+  const view = { _id: 7, _props: { disabled: false } };
+  const field = Object.assign(new Input(), {
+    disabled: false,
+    parentElement: view,
+    readOnly: true,
+    value: "before",
+  });
+  view._field = field;
+  player.views = new Map([[7, view]]);
+  const commands = [];
+  const saved = {
+    document: globalThis.document,
+    HTMLInputElement: globalThis.HTMLInputElement,
+    HTMLTextAreaElement: globalThis.HTMLTextAreaElement,
+  };
+  globalThis.HTMLInputElement = Input;
+  globalThis.HTMLTextAreaElement = Textarea;
+  globalThis.document = {
+    activeElement: field,
+    execCommand(command) {
+      commands.push(command);
+      return false;
+    },
+  };
+  try {
+    assert.throws(
+      () => player.synthesize({ event: "insert_text", text: "after" }),
+      { message: "node 7 is read-only" },
+    );
+    field.readOnly = false;
+    view._props.disabled = true;
+    assert.throws(
+      () => player.synthesize({ event: "insert_text", text: "after" }),
+      { message: "node 7 is disabled" },
+    );
+    assert.deepEqual(commands, []);
+    assert.equal(field.value, "before");
+  } finally {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete globalThis[name];
+      else globalThis[name] = value;
+    }
+  }
+});
+
 test("an invalid view is aria-invalid, and so is the field of an input", () => {
   const { player } = fakePlayer();
   const element = () => {
