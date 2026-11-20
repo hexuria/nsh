@@ -127,7 +127,7 @@ impl NshAgentHost {
                 y,
                 duration_ms,
             } => {
-                let hold = std::time::Duration::from_millis(duration_ms.unwrap_or(600).min(10_000));
+                let hold = duration_ms.map(|ms| std::time::Duration::from_millis(ms.min(10_000)));
                 match (target, x, y) {
                     (Some(target), _, _) => {
                         self.agent.long_press_node(self.node_id(target)?, hold)?
@@ -954,15 +954,33 @@ mod tests {
     }
 
     /// Available, the text of a masked input, not laid out.
-    struct SnapshotNative(bool, Option<String>, bool);
+    struct SnapshotNative {
+        available: bool,
+        input: Option<String>,
+        viewport_unlaid: bool,
+        presses: Arc<std::sync::Mutex<Vec<Point<Points>>>>,
+        drags: Arc<std::sync::Mutex<Vec<(Point<Points>, Point<Points>)>>>,
+    }
+
+    impl SnapshotNative {
+        fn new(available: bool, input: Option<String>, viewport_unlaid: bool) -> Self {
+            Self {
+                available,
+                input,
+                viewport_unlaid,
+                presses: Arc::default(),
+                drags: Arc::default(),
+            }
+        }
+    }
 
     impl Native for SnapshotNative {
         fn available(&self) -> bool {
-            self.0
+            self.available
         }
 
         fn laid_out(&self) -> Result<(), String> {
-            if self.2 {
+            if self.viewport_unlaid {
                 Err("the viewport is not laid out yet".into())
             } else {
                 Ok(())
@@ -986,14 +1004,25 @@ mod tests {
             Size::new(Points(50.0), Points(50.0))
         }
 
-        fn press(&self, _: Point<Points>) {}
+        fn hit_at(&self, _: Point<Points>) -> Result<Option<NodeId>, String> {
+            Ok(Some(3))
+        }
+
+        fn press(&self, at: Point<Points>) {
+            self.presses.lock().unwrap().push(at);
+        }
+
         fn long_press(&self, _: Point<Points>, _: std::time::Duration) {}
         fn scroll(&self, _: Point<Points>, _: Point<Points>) {}
-        fn drag(&self, _: Point<Points>, _: Point<Points>) {}
+
+        fn drag(&self, from: Point<Points>, to: Point<Points>) {
+            self.drags.lock().unwrap().push((from, to));
+        }
+
         fn type_text(&self, _: &str) {}
         fn key(&self, _: nsh_testing::agent::Key) {}
         fn input_text(&self, id: NodeId) -> Option<String> {
-            (id == 3).then(|| self.1.clone()).flatten()
+            (id == 3).then(|| self.input.clone()).flatten()
         }
         fn back(&self) -> Result<(), String> {
             Ok(())
@@ -1017,7 +1046,7 @@ mod tests {
     }
 
     fn snapshot_host_with_availability(scene: SnapshotScene, available: bool) -> NshAgentHost {
-        snapshot_host_with_native(scene, SnapshotNative(available, None, false))
+        snapshot_host_with_native(scene, SnapshotNative::new(available, None, false))
     }
 
     fn snapshot_host_with_native(scene: SnapshotScene, native: SnapshotNative) -> NshAgentHost {
@@ -1098,7 +1127,7 @@ mod tests {
             }
             let mut host = snapshot_host_with_native(
                 SnapshotScene(Ok(nodes), 1, Default::default()),
-                SnapshotNative(true, Some(secret.into()), false),
+                SnapshotNative::new(true, Some(secret.into()), false),
             );
             let snapshot = host.snapshot();
             let input = &snapshot.nodes[0].children[1];
@@ -1148,7 +1177,7 @@ mod tests {
     fn snapshot_is_not_ready_while_the_viewport_is_not_laid_out() {
         let host = snapshot_host_with_native(
             SnapshotScene(Ok(sample_nodes()), 1, Default::default()),
-            SnapshotNative(true, None, true),
+            SnapshotNative::new(true, None, true),
         );
         let snapshot = host.snapshot();
         assert!(!snapshot.ready);
@@ -1159,7 +1188,7 @@ mod tests {
     fn hello_is_not_ready_while_the_viewport_is_not_laid_out() {
         let host = snapshot_host_with_native(
             SnapshotScene(Ok(sample_nodes()), 1, Default::default()),
-            SnapshotNative(true, None, true),
+            SnapshotNative::new(true, None, true),
         );
         assert!(!host.hello().ready);
     }
@@ -1185,7 +1214,7 @@ mod tests {
     fn hello_lists_the_gated_operations_the_platform_delivers() {
         let host = snapshot_host_with_native(
             SnapshotScene(Ok(sample_nodes()), 1, Default::default()),
-            SnapshotNative(true, None, false),
+            SnapshotNative::new(true, None, false),
         );
         let hello = host.hello();
         assert_eq!(hello.framework.as_deref(), Some("nsh"));
@@ -1201,19 +1230,57 @@ mod tests {
 
     #[test]
     fn a_press_operation_reaches_the_agent_like_the_invoke_it_replaces() {
-        let mut host = snapshot_host_with_availability(
-            SnapshotScene(Ok(sample_nodes()), 1, Default::default()),
-            false,
+        let mut nodes = sample_nodes();
+        let visible = nodes.iter_mut().find(|node| node.id == 3).unwrap();
+        visible.enabled = true;
+        visible.pressable = true;
+        let presses = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut native = SnapshotNative::new(true, None, false);
+        native.presses = presses.clone();
+        let mut host =
+            snapshot_host_with_native(SnapshotScene(Ok(nodes), 1, Default::default()), native);
+
+        host.dispatch(&Op::Press {
+            target: Some("visible".into()),
+            x: None,
+            y: None,
+            expect_fingerprint: None,
+        })
+        .unwrap();
+
+        assert_eq!(
+            *presses.lock().unwrap(),
+            vec![Point::new(Points(10.0), Points(10.0))]
         );
-        let error = host
-            .dispatch(&Op::Press {
-                target: Some("visible".into()),
-                x: None,
-                y: None,
-                expect_fingerprint: Some(7),
-            })
-            .unwrap_err();
-        assert!(error.contains("unavailable"));
+    }
+
+    #[test]
+    fn mobile_swipe_dispatch_reaches_native_drag() {
+        let mut nodes = sample_nodes();
+        nodes.iter_mut().find(|node| node.id == 3).unwrap().enabled = true;
+        let drags = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut native = SnapshotNative::new(true, None, false);
+        native.drags = drags.clone();
+        let agent = Arc::new(Agent::requiring_native_hit_test(
+            Arc::new(SnapshotScene(Ok(nodes), 1, Default::default())),
+            Box::new(native),
+        ));
+        let mut host = NshAgentHost::new("test", PlatformKind::Mobile, agent).unwrap();
+
+        host.dispatch(&Op::Swipe {
+            target: Some("visible".into()),
+            direction: gpui_agent::SwipeDirection::Down,
+            distance: Some(20.0),
+        })
+        .unwrap();
+
+        assert_eq!(
+            *drags.lock().unwrap(),
+            vec![(
+                Point::new(Points(10.0), Points(10.0)),
+                Point::new(Points(10.0), Points(30.0)),
+            )]
+        );
     }
 
     #[test]

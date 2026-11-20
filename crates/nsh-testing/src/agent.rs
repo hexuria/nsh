@@ -540,6 +540,13 @@ struct TargetGeometry {
     synthetic: bool,
 }
 
+#[derive(Clone, Copy)]
+enum PointActionability {
+    Any,
+    Press,
+    LongPress,
+}
+
 /// The app as an [`Agent`] sees it: the host's [`Model`] (the agent runs on
 /// the host), or one asked about through the host ([`RemoteScene`]: the
 /// web, whose agent runs in `nsh`).
@@ -1975,42 +1982,16 @@ impl Agent {
         self.settled()
     }
 
-    /// Presses and holds the semantic node `id` for `hold`, under the same
-    /// actionability checks as [`press_node`](Self::press_node).
-    pub fn long_press_node(&self, id: NodeId, hold: Duration) -> Result<(), String> {
-        self.settled()?;
-        let selector = format!("node {id}");
-        let nodes = self.scene.semantic_tree()?;
-        let target = nodes
-            .iter()
-            .find(|node| node.id == id)
-            .ok_or_else(|| format!("`{selector}` is offscreen (node unavailable)"))?;
-        if !target.enabled {
-            return Err(format!("`{selector}` is disabled"));
-        }
-        let owner =
-            press_owner(&nodes, target).ok_or_else(|| format!("`{selector}` is not pressable"))?;
-        let selected = self.target_point(id, &selector)?;
-        let geometry = self
-            .target_geometry(target)
-            .ok_or_else(|| format!("`{selector}` is offscreen (no native bounds)"))?;
-        let at = self.actionable_point_with_press_owner(
-            id,
-            geometry.owner,
-            selected,
-            &selector,
-            Some(owner),
-            false,
-        )?;
-        self.native.long_press(at, hold);
-        self.settled()
+    /// Presses and holds semantic node `id`, after long-press actionability is
+    /// established.
+    pub fn long_press_node(&self, id: NodeId, hold: Option<Duration>) -> Result<(), String> {
+        self.long_press(&format!("view:{id}"), hold)
     }
 
-    /// Presses and holds a checked native point for `hold`.
-    pub fn long_press_at(&self, at: Point<Points>, hold: Duration) -> Result<(), String> {
-        let at = self.checked_point_target(at, true)?;
-        self.native.long_press(at, hold);
-        self.settled()
+    /// Presses and holds a checked native point.
+    pub fn long_press_at(&self, at: Point<Points>, hold: Option<Duration>) -> Result<(), String> {
+        let (owner, at) = self.checked_point_target(at, PointActionability::LongPress)?;
+        self.hold_long_press(owner, at, hold)
     }
 
     /// The system's back gesture or button, on platforms that have one.
@@ -2117,28 +2098,28 @@ impl Agent {
 
     /// Presses the semantic node hit by a checked native point.
     pub fn press_at(&self, at: Point<Points>) -> Result<(), String> {
-        let at = self.checked_point_target(at, true)?;
+        let (_, at) = self.checked_point_target(at, PointActionability::Press)?;
         self.native.press(at);
         self.settled()
     }
 
     /// Hovers the semantic node hit by a checked native point.
     pub fn hover_at(&self, at: Point<Points>) -> Result<(), String> {
-        let at = self.checked_point_target(at, false)?;
+        let (_, at) = self.checked_point_target(at, PointActionability::Any)?;
         self.native.hover(at)?;
         self.settled()
     }
 
     /// Scrolls the semantic node hit by a checked native point.
     pub fn scroll_at(&self, at: Point<Points>, delta: Point<Points>) -> Result<(), String> {
-        let at = self.checked_point_target(at, false)?;
+        let (_, at) = self.checked_point_target(at, PointActionability::Any)?;
         self.native.scroll(at, delta);
         self.settled()
     }
 
     /// Drags from a checked native point to an on-screen point.
     pub fn drag_at(&self, from: Point<Points>, to: Point<Points>) -> Result<(), String> {
-        let from = self.checked_point_target(from, false)?;
+        let (_, from) = self.checked_point_target(from, PointActionability::Any)?;
         let viewport = self.native.viewport();
         if to.x.0 < 0.0 || to.y.0 < 0.0 || to.x.0 >= viewport.width.0 || to.y.0 >= viewport.height.0
         {
@@ -2253,13 +2234,12 @@ impl Agent {
         self.actionable_point(id, geometry.owner, at, &selector)
     }
 
-    /// Checks that the native hit at `at` is an enabled semantic node and,
-    /// when `pressable`, one a press goes to ([`press_owner`]).
+    /// Checks that the native hit at `at` is enabled and supports `actionability`.
     fn checked_point_target(
         &self,
         at: Point<Points>,
-        pressable: bool,
-    ) -> Result<Point<Points>, String> {
+        actionability: PointActionability,
+    ) -> Result<(NodeId, Point<Points>), String> {
         self.settled()?;
         let id = self
             .native
@@ -2273,19 +2253,34 @@ impl Agent {
         if !node.enabled {
             return Err(format!("node {id} is disabled"));
         }
-        // A text view nothing pressable owns may still take the press in
-        // one of its spans (a link): the platform's press handler finds it
-        // from the character under the finger.
         let mut target = id;
-        if pressable && press_owner(&nodes, node).is_none() {
-            let link = self
-                .pressable_span_at(&nodes, id, at)
-                .ok_or_else(|| format!("node {id} is not pressable"))?;
-            if !link.enabled {
-                return Err(format!("node {} is disabled", link.id));
+        let action_target = match actionability {
+            PointActionability::Any => id,
+            PointActionability::Press => {
+                if let Some(owner) = press_owner(&nodes, node) {
+                    owner
+                } else {
+                    // A text view nothing pressable owns may still take the
+                    // press in one of its spans (a link).
+                    let link = self
+                        .pressable_span_at(&nodes, id, at)
+                        .ok_or_else(|| format!("node {id} is not pressable"))?;
+                    if !link.enabled {
+                        return Err(format!("node {} is disabled", link.id));
+                    }
+                    target = link.id;
+                    link.id
+                }
             }
-            target = link.id;
-        }
+            PointActionability::LongPress => {
+                let selector = format!("view:{id}");
+                self.picked(
+                    self.scene.pick(&selector, PickTarget::LongPressable)?,
+                    &selector,
+                    "pressable view",
+                )?
+            }
+        };
         let bounds = self
             .native
             .bounds(id)
@@ -2298,6 +2293,7 @@ impl Agent {
             return Err(format!("offscreen: coordinate is outside node {id}"));
         }
         self.explicit_actionable_point(target, id, at, &format!("node {target}"))
+            .map(|at| (action_target, at))
     }
 
     /// The pressable span of text view `text` whose characters are at
@@ -2357,7 +2353,7 @@ impl Agent {
         match step {
             TestStep::Ready { timeout_ms } => done(self.ready(Duration::from_millis(timeout_ms))),
             TestStep::Press { selector } => done(self.press(&selector)),
-            TestStep::LongPress { selector } => done(self.long_press(&selector)),
+            TestStep::LongPress { selector } => done(self.long_press(&selector, None)),
             TestStep::Type { selector, text } => done(self.type_text(&selector, &text)),
             TestStep::Submit { selector } => done(self.submit(&selector)),
             TestStep::Clear { selector } => done(self.clear(&selector)),
@@ -3095,13 +3091,27 @@ impl Agent {
         Some(bounds.center())
     }
 
-    fn long_press(&self, selector: &str) -> Result<(), String> {
+    fn long_press(&self, selector: &str, hold: Option<Duration>) -> Result<(), String> {
         let (id, at) = self.find(selector, "pressable view", PickTarget::LongPressable)?;
-        let hold = self.scene.long_press_delay(id)?.map_or(LONG_PRESS, |ms| {
-            Duration::from_secs_f64(f64::from(ms.max(0.0)) / 1000.0)
-        });
-        // A little past the delay, as a finger holds on.
-        let hold = hold + Duration::from_millis(100);
+        self.hold_long_press(id, at, hold)
+    }
+
+    fn hold_long_press(
+        &self,
+        id: NodeId,
+        at: Point<Points>,
+        hold: Option<Duration>,
+    ) -> Result<(), String> {
+        let hold = match hold {
+            Some(hold) => hold,
+            None => {
+                let delay = self.scene.long_press_delay(id)?.map_or(LONG_PRESS, |ms| {
+                    Duration::from_secs_f64(f64::from(ms.max(0.0)) / 1000.0)
+                });
+                // Hold a little past the delay, as a finger does.
+                delay + Duration::from_millis(100)
+            }
+        };
         if !self.scene.manual_clock() {
             self.native.long_press(at, hold);
             return self.settled();
@@ -3485,7 +3495,9 @@ mod tests {
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             self.pressed_at.lock().unwrap().push(at);
         }
-        fn long_press(&self, _: Point<Points>, _: Duration) {}
+        fn long_press(&self, at: Point<Points>, _: Duration) {
+            self.pressed_at.lock().unwrap().push(at);
+        }
         fn scroll(&self, _: Point<Points>, _: Point<Points>) {}
         fn drag(&self, _: Point<Points>, _: Point<Points>) {}
         fn type_text(&self, _: &str) {
@@ -3558,6 +3570,18 @@ mod tests {
         model
     }
 
+    fn long_press_only_scene(disabled: bool) -> Arc<Model> {
+        use nsh_core::{EventMask, MountItem, ViewKind};
+
+        let model = gate_scene(ViewKind::View, disabled, false);
+        let mut events = EventMask::default();
+        events.set(EventKind::LongPress, true);
+        model.apply(&MountBatch {
+            items: vec![MountItem::Events { id: 2, events }],
+        });
+        model
+    }
+
     fn gate_agent(
         model: Arc<Model>,
         hit: Result<Option<NodeId>, String>,
@@ -3580,6 +3604,71 @@ mod tests {
                 viewport,
             }),
         )
+    }
+
+    fn gate_long_press_agent(model: Arc<Model>, held_at: Arc<Mutex<Vec<Point<Points>>>>) -> Agent {
+        Agent::requiring_native_hit_test(
+            model,
+            Box::new(GateNative {
+                bounds: [(
+                    2,
+                    Bounds::new(point(px(20.0), px(0.0)), size(px(60.0), px(100.0))),
+                )]
+                .into(),
+                text_bounds: Default::default(),
+                hit: Ok(Some(2)),
+                hits: Arc::default(),
+                presses: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                pressed_at: held_at,
+                typed: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                viewport: size(px(100.0), px(100.0)),
+            }),
+        )
+    }
+
+    #[test]
+    fn long_press_only_nodes_are_held_by_node_and_point_actions() {
+        let held_at = Arc::new(Mutex::new(Vec::new()));
+        let scene = long_press_only_scene(false);
+        assert!(
+            !scene
+                .semantic_tree()
+                .unwrap()
+                .iter()
+                .find(|node| node.id == 2)
+                .unwrap()
+                .pressable
+        );
+        let agent = gate_long_press_agent(scene, held_at.clone());
+        let center = point(px(50.0), px(50.0));
+
+        agent.long_press_node(2, None).unwrap();
+        agent
+            .long_press_at(center, Some(Duration::from_millis(800)))
+            .unwrap();
+
+        assert_eq!(*held_at.lock().unwrap(), vec![center, center]);
+    }
+
+    #[test]
+    fn disabled_long_press_only_nodes_are_refused() {
+        let held_at = Arc::new(Mutex::new(Vec::new()));
+        let agent = gate_long_press_agent(long_press_only_scene(true), held_at.clone());
+        let center = point(px(50.0), px(50.0));
+
+        assert!(
+            agent
+                .long_press_node(2, None)
+                .unwrap_err()
+                .contains("disabled")
+        );
+        assert!(
+            agent
+                .long_press_at(center, None)
+                .unwrap_err()
+                .contains("disabled")
+        );
+        assert!(held_at.lock().unwrap().is_empty());
     }
 
     fn target_scene(nodes: Vec<SemanticNode>) -> Arc<RemoteScene> {
