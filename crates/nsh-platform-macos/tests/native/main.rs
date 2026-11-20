@@ -36,6 +36,8 @@ mod modal_fade;
 mod modal_focus;
 #[cfg(target_os = "macos")]
 mod mount;
+#[cfg(all(target_os = "macos", feature = "dev-agent"))]
+mod native_agent;
 #[cfg(target_os = "macos")]
 mod press_momentum;
 #[cfg(target_os = "macos")]
@@ -66,7 +68,12 @@ fn main() {
     } else {
         #[cfg(target_os = "macos")]
         {
-            if std::env::var_os("NSH_TAP_FEEDBACK_CHECK_ONLY").is_some() {
+            if std::env::var_os("NSH_NATIVE_AGENT_CHECK_ONLY").is_some() {
+                #[cfg(feature = "dev-agent")]
+                native_agent::run();
+                #[cfg(not(feature = "dev-agent"))]
+                panic!("the native agent checks require --features dev-agent");
+            } else if std::env::var_os("NSH_TAP_FEEDBACK_CHECK_ONLY").is_some() {
                 tap_feedback::run();
             } else if std::env::var_os("NSH_QUIT_CHECK_CASE").is_some() {
                 quit_requests::run_case();
@@ -120,6 +127,8 @@ fn main() {
             } else if std::env::var_os("NSH_PRESS_MOMENTUM_CHECK_ONLY").is_some() {
                 press_momentum::run();
             } else {
+                #[cfg(feature = "dev-agent")]
+                native_agent::run();
                 quit_requests::run();
                 window_press::run();
                 window_hover::run();

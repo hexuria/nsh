@@ -21,12 +21,21 @@ cargo build -p nsh-macos-host                     # ./target/debug/nsh-macos-hos
 cargo test -p nsh-platform-macos --test native -- --ignored # desktop session required
 # Editor/RichEditor focus restoration and stale-target checks:
 NSH_MODAL_FOCUS_CHECK_ONLY=1 cargo test -p nsh-platform-macos --test native -- --ignored
+# Native agent window picking, named clicks and targeted keyboard focus:
+GPUI_AGENT=0 NSH_NATIVE_AGENT_CHECK_ONLY=1 cargo test -p nsh-platform-macos --features dev-agent --test native -- --ignored
 # Mounting rows that are not virtualized, measured alone (tests/native/mount.rs):
 NSH_MOUNT_BENCH_ONLY=1 cargo test --release -p nsh-platform-macos --test native -- --ignored
 ```
 
 Features: `js` (default; JS apps; without it the crate only runs Rust apps and links no QuickJS) and `dev` (the dev
 server client, log forwarding, the error overlay: `dev.rs`). The runtime needs macOS 14 (`NSView`'s display links).
+
+The native agent checks use the same single AppKit test binary and require a desktop
+session. With `dev-agent` they also run in its full `--ignored` suite. The checks
+exercise the real mounted model through selector-based presses and targeted keys;
+they do not start a protocol server or require an agent token. Application focus
+is compared with AppKit's observed activation and key-window state; a session that
+cannot activate the app reports that limitation.
 
 ## GPUI-agent development tooling
 

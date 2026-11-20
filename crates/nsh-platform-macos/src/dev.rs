@@ -132,6 +132,26 @@ impl Drop for DevSession {
     }
 }
 
+/// Installs the native test driver's model before loading an app. Main thread.
+///
+/// Native calls must run on a worker while the main thread services AppKit.
+#[doc(hidden)]
+#[cfg(feature = "dev-agent")]
+pub fn native_test_agent(
+    view: &AppView,
+) -> (
+    std::sync::Arc<nsh_testing::agent::Model>,
+    Box<dyn nsh_testing::agent::Native>,
+) {
+    let model = std::sync::Arc::new(nsh_testing::agent::Model::default());
+    view.surface().set_test_model(Some(model.clone()));
+    crate::system::testing_started(view.surface());
+    (
+        model,
+        Box::new(crate::agent::MacNative::new(view.surface_key())),
+    )
+}
+
 /// What a session shows and runs.
 struct DevUi {
     key: u64,
