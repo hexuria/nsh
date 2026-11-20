@@ -2135,6 +2135,12 @@ impl Agent {
 
     /// Drags from one checked semantic node to another.
     pub fn drag_nodes(&self, from: NodeId, to: NodeId) -> Result<(), String> {
+        let nodes = self.scene.semantic_tree()?;
+        for id in [from, to] {
+            if !nodes.iter().any(|node| node.id == id) {
+                return Err(format!("`node {id}` is offscreen (node unavailable)"));
+            }
+        }
         if self.scene.window_of(from)? != self.scene.window_of(to)? {
             return Err("drag endpoints are in different windows".into());
         }
@@ -3905,7 +3911,10 @@ mod tests {
     #[test]
     fn missing_nodes_and_cross_window_drags_dispatch_no_input() {
         let (agent, windows) = two_window_agent();
-        assert!(agent.press_node(999).unwrap_err().contains("unavailable"));
+        let missing_node = "`node 999` is offscreen (node unavailable)";
+        assert_eq!(agent.press_node(999).unwrap_err(), missing_node);
+        assert_eq!(agent.drag_nodes(12, 999).unwrap_err(), missing_node);
+        assert_eq!(agent.drag_nodes(999, 12).unwrap_err(), missing_node);
         assert_eq!(
             agent.drag_nodes(12, 2).unwrap_err(),
             "drag endpoints are in different windows"
