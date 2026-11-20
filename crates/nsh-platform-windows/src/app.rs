@@ -497,6 +497,15 @@ impl AppView {
         self.surface.start(config);
     }
 
+    /// Hears the errors of the apps this view runs, on the main thread
+    /// after they are logged: an uncaught exception or rejection, a load
+    /// that failed, a budget the app ran over ([`AppOptions::limits`]). An
+    /// embedding app shows them in its own UI. One handler; setting another
+    /// replaces it (in development, the error panel's).
+    pub fn set_error_handler(&self, handler: impl Fn(&str) + 'static) {
+        self.surface.set_error_handler(Box::new(handler));
+    }
+
     /// The login item of the app this view runs: the standalone app's alone
     /// ([`run_app`]'s view, not one embedded in another app, also while the
     /// standalone app runs on this thread), when its runner says.
@@ -897,6 +906,14 @@ mod tests {
                 GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32,
             )
         }
+    }
+
+    #[test]
+    fn an_app_view_accepts_an_error_handler() {
+        let view = AppView::new(None, AppOptions::default()).unwrap();
+        view.set_error_handler(|_| {});
+        // SAFETY: the test's own window.
+        let _ = unsafe { DestroyWindow(view.hwnd()) };
     }
 
     #[test]
