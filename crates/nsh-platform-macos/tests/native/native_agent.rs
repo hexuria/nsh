@@ -292,11 +292,6 @@ fn targeted_key_and_group_rejection(
     let agent = worker(move || {
         let agent = Agent::requiring_native_hit_test(model.clone(), owned);
         agent.key_node(child, "a").unwrap();
-        assert_eq!(
-            agent.key_node(group, "a").unwrap_err(),
-            format!("node {group} cannot receive native focus")
-        );
-        assert!(agent.key_node(NodeId::MAX, "a").is_err());
         agent
     });
     until("the child's targeted key", || {
@@ -311,6 +306,27 @@ fn targeted_key_and_group_rejection(
         main.firstResponder()
             .is_some_and(|responder| responder.downcast_ref::<NSView>() == Some(&*view))
     );
+    // A refused request leaves the key window where it was.
+    secondary.makeKeyAndOrderFront(None);
+    secondary.makeKeyWindow();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !secondary.isKeyWindow() && Instant::now() < deadline {
+        pump();
+    }
+    let secondary_key = secondary.isKeyWindow();
+    let agent = worker(move || {
+        assert_eq!(
+            agent.key_node(group, "a").unwrap_err(),
+            format!("node {group} cannot receive native focus")
+        );
+        assert!(agent.key_node(NodeId::MAX, "a").is_err());
+        agent
+    });
+    pump();
+    if secondary_key {
+        assert!(secondary.isKeyWindow());
+    }
+    assert_eq!(KEYS.load(Ordering::SeqCst), 1);
     println!("native_agent: targeted_key_and_group_rejection");
     agent
 }

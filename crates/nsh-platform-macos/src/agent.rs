@@ -525,14 +525,12 @@ impl Native for MacNative {
                 let Some(window) = view.ns().window() else {
                     return false;
                 };
-                window.makeKeyAndOrderFront(None);
-                window.makeKeyWindow();
                 if view.kind() == nsh_core::ViewKind::Input {
                     crate::text_input::focus(&view);
                 } else if id != ROOT_ID {
                     crate::input::focus_control(surface, &view);
                 }
-                crate::text_input::test_focused(&window) == Some(id)
+                let focused = crate::text_input::test_focused(&window) == Some(id)
                     || window.firstResponder().is_some_and(|responder| {
                         // The responder's nearest nsh view must be this
                         // node: a focused child does not focus its group.
@@ -546,7 +544,14 @@ impl Native for MacNative {
                             current = crate::view::superview(&native);
                         }
                         false
-                    })
+                    });
+                // Only a node that took focus moves the key window, so a
+                // refused request leaves the user's window and popups alone.
+                if focused {
+                    window.makeKeyAndOrderFront(None);
+                    window.makeKeyWindow();
+                }
+                focused
             })
         })
         .ok_or_else(|| "the window is gone".to_owned())?
