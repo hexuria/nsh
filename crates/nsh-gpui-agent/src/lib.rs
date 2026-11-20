@@ -121,6 +121,28 @@ impl NshAgentHost {
                     _ => Err(gpui_agent::unsupported_op("this operation")),
                 }
             }
+            Op::LongPress {
+                target,
+                x,
+                y,
+                duration_ms,
+            } => {
+                let hold = std::time::Duration::from_millis(duration_ms.unwrap_or(600).min(10_000));
+                match (target, x, y) {
+                    (Some(target), _, _) => {
+                        self.agent.long_press_node(self.node_id(target)?, hold)?
+                    }
+                    (None, Some(x), Some(y)) => self
+                        .agent
+                        .long_press_at(Point::new(Points(*x as f32), Points(*y as f32)), hold)?,
+                    _ => return Err("long_press needs target or x and y".into()),
+                }
+                Ok(DispatchResult::empty())
+            }
+            Op::System {
+                action: gpui_agent::SystemAction::Back,
+                ..
+            } => self.agent.back().map(|()| DispatchResult::empty()),
             Op::Swipe {
                 target,
                 direction,
@@ -278,7 +300,14 @@ impl NshAgentHost {
     /// touch gesture.
     fn features(&self) -> Vec<String> {
         let names: &[&str] = match self.platform {
-            PlatformKind::Mobile => &["press", "scroll", "drag", "swipe"],
+            PlatformKind::Mobile => &[
+                "press",
+                "scroll",
+                "drag",
+                "swipe",
+                "long_press",
+                "system.back",
+            ],
             _ => &["press", "scroll", "hover", "drag", "viewport"],
         };
         names.iter().map(|name| (*name).to_string()).collect()
@@ -300,7 +329,14 @@ impl NshAgentHost {
         if known {
             device.width = Some(width);
             device.height = Some(height);
-            device.orientation = Some(if width > height { "landscape" } else { "portrait" }.into());
+            device.orientation = Some(
+                if width > height {
+                    "landscape"
+                } else {
+                    "portrait"
+                }
+                .into(),
+            );
         }
         device.input = Some("trusted".into());
         device

@@ -1975,6 +1975,49 @@ impl Agent {
         self.settled()
     }
 
+    /// Presses and holds the semantic node `id` for `hold`, under the same
+    /// actionability checks as [`press_node`](Self::press_node).
+    pub fn long_press_node(&self, id: NodeId, hold: Duration) -> Result<(), String> {
+        self.settled()?;
+        let selector = format!("node {id}");
+        let nodes = self.scene.semantic_tree()?;
+        let target = nodes
+            .iter()
+            .find(|node| node.id == id)
+            .ok_or_else(|| format!("`{selector}` is offscreen (node unavailable)"))?;
+        if !target.enabled {
+            return Err(format!("`{selector}` is disabled"));
+        }
+        let owner =
+            press_owner(&nodes, target).ok_or_else(|| format!("`{selector}` is not pressable"))?;
+        let selected = self.target_point(id, &selector)?;
+        let geometry = self
+            .target_geometry(target)
+            .ok_or_else(|| format!("`{selector}` is offscreen (no native bounds)"))?;
+        let at = self.actionable_point_with_press_owner(
+            id,
+            geometry.owner,
+            selected,
+            &selector,
+            Some(owner),
+            false,
+        )?;
+        self.native.long_press(at, hold);
+        self.settled()
+    }
+
+    /// Presses and holds a checked native point for `hold`.
+    pub fn long_press_at(&self, at: Point<Points>, hold: Duration) -> Result<(), String> {
+        let at = self.checked_point_target(at, true)?;
+        self.native.long_press(at, hold);
+        self.settled()
+    }
+
+    /// The system's back gesture or button, on platforms that have one.
+    pub fn back(&self) -> Result<(), String> {
+        self.native.back().and_then(|()| self.settled())
+    }
+
     /// Focuses input `id`, types `text`, and waits for the resulting state.
     pub fn type_node(&self, id: NodeId, text: &str) -> Result<(), String> {
         let at = self.node_point(id)?;
