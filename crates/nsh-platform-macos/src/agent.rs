@@ -517,6 +517,30 @@ impl Native for MacNative {
             .flatten()
     }
 
+    fn focus_node(&self, id: NodeId) -> Result<(), String> {
+        self.on_main(move |surface, _| {
+            let view = surface.mounter.borrow().views.get(&id).cloned();
+            view.is_some_and(|view| {
+                if view.kind() == nsh_core::ViewKind::Input {
+                    crate::text_input::focus(&view);
+                } else if id != ROOT_ID {
+                    crate::input::focus_control(surface, &view);
+                }
+                view.ns().window().is_some_and(|window| {
+                    crate::text_input::test_focused(&window) == Some(id)
+                        || window.firstResponder().is_some_and(|responder| {
+                            responder.downcast_ref::<NSView>().is_some_and(|native| {
+                                native == view.ns() || native.isDescendantOf(view.ns())
+                            })
+                        })
+                })
+            })
+        })
+        .ok_or_else(|| "the window is gone".to_owned())?
+        .then_some(())
+        .ok_or_else(|| format!("node {id} cannot receive native focus"))
+    }
+
     fn compose(&self, text: &str) -> Result<(), String> {
         let text = text.to_owned();
         self.on_key(move |_, window| crate::text_input::test_compose(window, &text))
