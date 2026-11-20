@@ -51,6 +51,27 @@ type SharedHandler = Arc<MainThreadBound<RefCell<Option<Box<dyn Fn()>>>>>;
 #[cfg(feature = "dev")]
 type TestModel = Arc<std::sync::Mutex<Option<Arc<nsh_testing::agent::Model>>>>;
 
+#[cfg(feature = "dev")]
+#[derive(Clone, Default)]
+struct DevModels {
+    test: TestModel,
+    #[cfg(feature = "dev-agent")]
+    agent: TestModel,
+}
+
+#[cfg(feature = "dev")]
+impl DevModels {
+    fn each(&self, f: impl Fn(&nsh_testing::agent::Model)) {
+        if let Some(model) = &*self.test.lock().unwrap_or_else(|e| e.into_inner()) {
+            f(model);
+        }
+        #[cfg(feature = "dev-agent")]
+        if let Some(model) = &*self.agent.lock().unwrap_or_else(|e| e.into_inner()) {
+            f(model);
+        }
+    }
+}
+
 /// Forwards mount batches and errors from the engine thread to the main
 /// thread.
 struct MainThreadSink {
@@ -58,15 +79,13 @@ struct MainThreadSink {
     on_error: SharedErrorHandler,
     on_hot_failed: SharedHandler,
     #[cfg(feature = "dev")]
-    test_model: TestModel,
+    models: DevModels,
 }
 
 impl MountSink for MainThreadSink {
     fn submit(&self, batch: MountBatch) {
         #[cfg(feature = "dev")]
-        if let Some(model) = &*self.test_model.lock().unwrap_or_else(|e| e.into_inner()) {
-            model.apply(&batch);
-        }
+        self.models.each(|model| model.apply(&batch));
         let mounter = self.mounter.clone();
         DispatchQueue::main().exec_async(move || {
             let mtm = MainThreadMarker::new().expect("main queue runs on the main thread");
@@ -103,9 +122,7 @@ impl MountSink for MainThreadSink {
 
     fn report_error(&self, message: &str) {
         #[cfg(feature = "dev")]
-        if let Some(model) = &*self.test_model.lock().unwrap_or_else(|e| e.into_inner()) {
-            model.error(message);
-        }
+        self.models.each(|model| model.error(message));
         let on_error = self.on_error.clone();
         let message = message.to_owned();
         DispatchQueue::main().exec_async(move || {
@@ -152,7 +169,7 @@ pub(crate) struct RootViewIvars {
     /// Links that came before the engine started ([`Surface::url_scheme`]).
     url_schemes: RefCell<Vec<String>>,
     #[cfg(feature = "dev")]
-    test_model: TestModel,
+    models: DevModels,
 }
 
 define_class!(
@@ -371,7 +388,7 @@ impl RootView {
             observers: RefCell::new(Vec::new()),
             url_schemes: RefCell::new(Vec::new()),
             #[cfg(feature = "dev")]
-            test_model: TestModel::default(),
+            models: DevModels::default(),
         });
         // SAFETY: UIView's designated initializer.
         unsafe { msg_send![super(this), initWithFrame: frame] }
@@ -886,7 +903,8 @@ impl RootView {
         #[cfg(feature = "dev")]
         if let Some(model) = &*self
             .ivars()
-            .test_model
+            .models
+            .test
             .lock()
             .unwrap_or_else(|e| e.into_inner())
         {
@@ -897,7 +915,7 @@ impl RootView {
             on_error: self.ivars().on_error.clone(),
             on_hot_failed: self.ivars().on_hot_failed.clone(),
             #[cfg(feature = "dev")]
-            test_model: self.ivars().test_model.clone(),
+            models: self.ivars().models.clone(),
         };
         // The embedding app's theme overrides are in the first frame, and
         // the links that came before are the app's address when its code
@@ -921,14 +939,9 @@ impl RootView {
         };
         // The test moves its clock through the engine.
         #[cfg(feature = "dev")]
-        if let Some(model) = &*self
-            .ivars()
-            .test_model
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-        {
-            model.engine_started(engine.control());
-        }
+        self.ivars()
+            .models
+            .each(|model| model.engine_started(engine.control()));
         // Batches are queued on the main queue, so none can run before the
         // mounter is installed here.
         let root = Retained::into_super(self.retain());
@@ -1131,7 +1144,19 @@ impl Surface {
         *self
             .view
             .ivars()
-            .test_model
+            .models
+            .test
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = model;
+    }
+
+    #[cfg(feature = "dev-agent")]
+    pub(crate) fn set_agent_model(&self, model: Option<Arc<nsh_testing::agent::Model>>) {
+        *self
+            .view
+            .ivars()
+            .models
+            .agent
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = model;
     }
@@ -1369,4 +1394,43 @@ fn os_version(mtm: MainThreadMarker) -> (u16, u16) {
         let mut parts = version.split('.').map(|p| p.parse().unwrap_or(0));
         (parts.next().unwrap_or(0), parts.next().unwrap_or(0))
     })
+}
+
+#[cfg(all(test, feature = "dev-agent"))]
+mod tests {
+    use nsh_testing::agent::{Model, Scene};
+
+    use super::*;
+
+    #[test]
+    fn agent_and_test_models_receive_updates_independently() {
+        let models = DevModels::default();
+        let agent = Arc::new(Model::default());
+        let test = Arc::new(Model::default());
+        *models.agent.lock().unwrap() = Some(agent.clone());
+        *models.test.lock().unwrap() = Some(test.clone());
+        let batch = MountBatch { items: Vec::new() };
+        models.each(|model| model.apply(&batch));
+        assert_eq!(agent.activity().unwrap().batches, 1);
+        assert_eq!(test.activity().unwrap().batches, 1);
+
+        let replacement = Arc::new(Model::default());
+        *models.test.lock().unwrap() = Some(replacement.clone());
+        models.each(|model| model.apply(&batch));
+        assert_eq!(agent.activity().unwrap().batches, 2);
+        assert_eq!(test.activity().unwrap().batches, 1);
+        assert_eq!(replacement.activity().unwrap().batches, 1);
+
+        models.each(|model| model.error("app error"));
+        assert_eq!(agent.take_errors().unwrap(), vec!["app error"]);
+        assert_eq!(replacement.take_errors().unwrap(), vec!["app error"]);
+        assert!(test.take_errors().unwrap().is_empty());
+        agent.reset();
+        assert_eq!(replacement.activity().unwrap().batches, 1);
+    }
+
+    #[test]
+    fn absent_dev_models_receive_no_updates() {
+        DevModels::default().each(|_| panic!("no observer is installed"));
+    }
 }

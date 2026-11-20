@@ -49,6 +49,8 @@ struct State {
     /// A test session's model of the app, for every surface from now on.
     #[cfg(feature = "dev")]
     test_model: Option<std::sync::Arc<nsh_testing::agent::Model>>,
+    #[cfg(feature = "dev-agent")]
+    agent_model: Option<std::sync::Arc<nsh_testing::agent::Model>>,
 }
 
 impl AppView {
@@ -74,6 +76,8 @@ impl AppView {
                     dev: None,
                     #[cfg(feature = "dev")]
                     test_model: None,
+                    #[cfg(feature = "dev-agent")]
+                    agent_model: None,
                 }),
             }),
         }
@@ -315,6 +319,11 @@ impl Inner {
     pub(crate) fn load(this: &Rc<Inner>, app: App) {
         let mut state = this.state.borrow_mut();
         if let Some(surface) = &state.surface {
+            // The engine restarts, so the agent's scene starts empty too.
+            #[cfg(feature = "dev-agent")]
+            if let Some(dev) = &state.dev {
+                dev.reset_agent_scene();
+            }
             return surface.reload(app);
         }
         let mtm = this.container.mtm();
@@ -331,6 +340,8 @@ impl Inner {
         surface.set_host_fonts(state.fonts.clone());
         #[cfg(feature = "dev")]
         surface.set_test_model(state.test_model.clone());
+        #[cfg(feature = "dev-agent")]
+        surface.set_agent_model(state.agent_model.clone());
         let weak: Weak<Inner> = Rc::downgrade(this);
         surface.set_error_handler(move |message| {
             if let Some(inner) = weak.upgrade() {
@@ -385,6 +396,15 @@ impl Inner {
             surface.set_test_model(Some(model.clone()));
         }
         state.test_model = Some(model);
+    }
+
+    #[cfg(feature = "dev-agent")]
+    pub(crate) fn set_agent_model(&self, model: std::sync::Arc<nsh_testing::agent::Model>) {
+        let mut state = self.state.borrow_mut();
+        if let Some(surface) = &state.surface {
+            surface.set_agent_model(Some(model.clone()));
+        }
+        state.agent_model = Some(model);
     }
 
     /// `f` with the running app's mounter.

@@ -814,6 +814,17 @@ These hosts are also how a change to a platform is checked by hand: `nsh test <e
 on standard input (`app.screenshot("a.png")`, `app.press(…)`) opens the app in the platform's window, takes them and
 closes it.
 
+#### macOS GPUI-agent development
+
+The debug TSX host supports the shared desktop adapter. Export `GPUI_AGENT=1`,
+`GPUI_AGENT_ADDR=127.0.0.1:17421` and a random `GPUI_AGENT_TOKEN` before
+`nsh run examples/gallery/App.tsx --target macos`. Use the same token/address
+for `gpui-agent hello`, `snapshot --pretty`, `click <target-id>` and
+`screenshot --inline --out gallery.png`. Tokens are required; only loopback
+addresses are accepted. Packaged apps and optimized development hosts start no
+shared listener. See [macOS](macos.md#gpui-agent-development-tooling) for lifecycle,
+capabilities and compatibility with the private server feature.
+
 #### Android GPUI-agent development
 
 Build the development host, opt in with a token exported once in the same shell, then forward its loopback port from
@@ -837,6 +848,23 @@ activity but not choose the token. No process environment is mutated, and releas
 server binds to `127.0.0.1:17421` by default. A requested viewport resizes only the `NshView` content and
 must fit the device window; it does not change the device resolution. Screenshot names are relative `.png` files in
 the app's cache on the device, not host paths.
+
+#### iOS Simulator GPUI-agent development
+
+The simulator development host enables `nsh-platform-ios/dev-agent` and serves the shared
+`nsh-gpui-agent` adapter as `PlatformKind::Mobile`. See [iOS development](ios.md) for the lifecycle and token handoff.
+
+```sh
+export GPUI_AGENT_TOKEN="$(openssl rand -hex 32)"
+GPUI_AGENT=1 nsh run examples/gallery --target ios &
+gpui-agent hello
+gpui-agent snapshot --pretty
+gpui-agent screenshot --inline --out gallery.png
+```
+
+No port forwarding is needed: the simulator shares the Mac's loopback network. Only the opt-in and loopback address
+are launch environment variables; the token is a private, one-use file in the app's data container. Release builds,
+physical devices and Mac Catalyst do not serve this simulator attach endpoint.
 
 #### Web GPUI-agent development
 

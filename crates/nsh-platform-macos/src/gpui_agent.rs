@@ -1742,8 +1742,11 @@ fn receiver(window: &NSWindow, x: f64, y: f64) -> Receiver {
     let Some(surface) = NshView::from_ns(&hit).and_then(|v| v.surface()) else {
         return Receiver::View(hit);
     };
-    let r = hit.convertPoint_fromView(p, None);
-    match crate::input::view_at(&surface, r.x as f32, r.y as f32) {
+    let Some(root) = crate::window::root_in(&surface, window) else {
+        return Receiver::Nothing;
+    };
+    let r = root.ns().convertPoint_fromView(p, None);
+    match crate::input::view_at(&root, r.x as f32, r.y as f32) {
         Some(view) => Receiver::View(view.ns().retain()),
         None => Receiver::Nothing,
     }

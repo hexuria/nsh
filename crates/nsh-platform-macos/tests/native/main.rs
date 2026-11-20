@@ -12,6 +12,14 @@
 //! ```sh
 //! NSH_MOUNT_BENCH_ONLY=1 cargo test --release -p nsh-platform-macos --test native -- --ignored
 //! ```
+#[cfg(all(
+    target_os = "macos",
+    feature = "dev-agent",
+    not(feature = "gpui-agent-server")
+))]
+mod agent_listener;
+#[cfg(all(target_os = "macos", feature = "dev-agent"))]
+mod agent_support;
 #[cfg(target_os = "macos")]
 mod canvas_bounds;
 #[cfg(target_os = "macos")]
@@ -36,6 +44,8 @@ mod modal_fade;
 mod modal_focus;
 #[cfg(target_os = "macos")]
 mod mount;
+#[cfg(all(target_os = "macos", feature = "dev-agent"))]
+mod native_agent;
 #[cfg(target_os = "macos")]
 mod press_momentum;
 #[cfg(target_os = "macos")]
@@ -61,12 +71,28 @@ mod window_press;
 #[cfg(target_os = "macos")]
 mod zoom;
 fn main() {
+    // Native checks drive AppViews in-process; a development shell's
+    // GPUI_AGENT settings must not open the shared agent listener here.
+    // SAFETY: no other thread exists yet to read the environment.
+    unsafe { std::env::remove_var("GPUI_AGENT") };
     if !std::env::args().any(|arg| arg == "--ignored") {
         println!("Native AppKit checks skipped; run with --ignored in a desktop session.");
     } else {
         #[cfg(target_os = "macos")]
         {
-            if std::env::var_os("NSH_TAP_FEEDBACK_CHECK_ONLY").is_some() {
+            if std::env::var_os("NSH_AGENT_LISTENER_CHECK_ONLY").is_some() {
+                #[cfg(all(feature = "dev-agent", not(feature = "gpui-agent-server")))]
+                agent_listener::run();
+                #[cfg(any(not(feature = "dev-agent"), feature = "gpui-agent-server"))]
+                panic!(
+                    "the agent listener checks require --features dev-agent without gpui-agent-server"
+                );
+            } else if std::env::var_os("NSH_NATIVE_AGENT_CHECK_ONLY").is_some() {
+                #[cfg(feature = "dev-agent")]
+                native_agent::run();
+                #[cfg(not(feature = "dev-agent"))]
+                panic!("the native agent checks require --features dev-agent");
+            } else if std::env::var_os("NSH_TAP_FEEDBACK_CHECK_ONLY").is_some() {
                 tap_feedback::run();
             } else if std::env::var_os("NSH_QUIT_CHECK_CASE").is_some() {
                 quit_requests::run_case();
@@ -120,6 +146,8 @@ fn main() {
             } else if std::env::var_os("NSH_PRESS_MOMENTUM_CHECK_ONLY").is_some() {
                 press_momentum::run();
             } else {
+                #[cfg(feature = "dev-agent")]
+                native_agent::run();
                 quit_requests::run();
                 window_press::run();
                 window_hover::run();

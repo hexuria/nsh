@@ -2,8 +2,11 @@ package com.longbridge.nsh;
 
 import android.app.Activity;
 import android.app.Dialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.ContextWrapper;
+import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -14,6 +17,7 @@ import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.view.Choreographer;
+import android.view.InputDevice;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -21,7 +25,9 @@ import android.view.PixelCopy;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.TextView;
 
@@ -99,6 +105,21 @@ final class TestAgent {
                 }
             }
             return hit == null ? HIT_NONE : HIT_FOREIGN;
+        }, HIT_FAILED);
+    }
+
+    /** The focused input's node id, or {@link #HIT_NONE}. */
+    static int focusedNode(NshView host) {
+        return onMain(() -> {
+            View focus = focused(host);
+            for (View view = focus; view != null; view = view.getParent() instanceof View
+                    ? (View) view.getParent() : null) {
+                int index = host.mounter().views.indexOfValue(view);
+                if (index >= 0) {
+                    return view instanceof InputBox ? host.mounter().views.keyAt(index) : HIT_NONE;
+                }
+            }
+            return HIT_NONE;
         }, HIT_FAILED);
     }
 
@@ -225,12 +246,12 @@ final class TestAgent {
             long now = SystemClock.uptimeMillis();
             MotionEvent event = MotionEvent.obtain(now, now, MotionEvent.ACTION_HOVER_ENTER,
                     x, y, 0);
-            event.setSource(android.view.InputDevice.SOURCE_MOUSE);
+            event.setSource(InputDevice.SOURCE_MOUSE);
             root.dispatchGenericMotionEvent(event);
             event.recycle();
             event = MotionEvent.obtain(now, now, MotionEvent.ACTION_HOVER_MOVE,
                     x, y, 0);
-            event.setSource(android.view.InputDevice.SOURCE_MOUSE);
+            event.setSource(InputDevice.SOURCE_MOUSE);
             root.dispatchGenericMotionEvent(event);
             event.recycle();
             return true;
@@ -252,7 +273,7 @@ final class TestAgent {
             }
             View root = touchTarget != null ? touchTarget : target(host);
             MotionEvent e = MotionEvent.obtain(downTime, now, action, x, y, 0);
-            e.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+            e.setSource(InputDevice.SOURCE_TOUCHSCREEN);
             root.dispatchTouchEvent(e);
             e.recycle();
             if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) touchTarget = null;
@@ -282,7 +303,7 @@ final class TestAgent {
                     int action = at == 0 ? MotionEvent.ACTION_DOWN
                             : at == last ? MotionEvent.ACTION_UP : MotionEvent.ACTION_MOVE;
                     MotionEvent e = MotionEvent.obtain(start, due, action, xs[at], ys[at], 0);
-                    e.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+                    e.setSource(InputDevice.SOURCE_TOUCHSCREEN);
                     window.dispatchTouchEvent(e);
                     e.recycle();
                     if (at == last) done.countDown();
@@ -363,7 +384,7 @@ final class TestAgent {
             View window = target(host);
             long now = SystemClock.uptimeMillis();
             KeyEvent down = new KeyEvent(now, now, KeyEvent.ACTION_DOWN, code, 0, meta,
-                    KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, android.view.InputDevice.SOURCE_KEYBOARD);
+                    KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD);
             if ((meta & KeyEvent.META_CTRL_ON) == 0 || !window.dispatchKeyShortcutEvent(down)) {
                 window.dispatchKeyEvent(down);
             }
@@ -393,6 +414,71 @@ final class TestAgent {
             if (a == null) return false;
             a.onBackPressed();
             return true;
+        });
+        return done != null && done;
+    }
+
+    /** Requests the device orientation. */
+    static boolean rotate(NshView host, boolean landscape) {
+        Boolean done = onMain(() -> {
+            Activity activity = SystemUi.activity(host.getContext());
+            if (activity == null || activity.isFinishing()) return false;
+            activity.setRequestedOrientation(landscape
+                    ? ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                    : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+            return true;
+        });
+        return done != null && done;
+    }
+
+    /** Shows the keyboard for the focused input, or hides it from this window. */
+    static boolean keyboard(NshView host, boolean shown) {
+        Boolean done = onMain(() -> {
+            if (shown) {
+                View focus = focused(host);
+                if (!(focus instanceof EditText) || !(focus.getParent() instanceof InputBox)) return false;
+                ((InputBox) focus.getParent()).showKeyboard();
+                return true;
+            }
+            View focus = focused(host);
+            InputMethodManager manager = (InputMethodManager)
+                    host.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (manager == null) return false;
+            manager.hideSoftInputFromWindow(
+                    focus == null ? host.getWindowToken() : focus.getWindowToken(), 0);
+            return true;
+        });
+        return done != null && done;
+    }
+
+    static int imeState(NshView host) {
+        return onMain(() -> {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return -1;
+            View view = focused(host);
+            if (view == null) view = host;
+            WindowInsets insets = view.getRootWindowInsets();
+            if (insets == null) return -1;
+            return insets.isVisible(WindowInsets.Type.ime()) ? 1 : 0;
+        }, -1);
+    }
+
+    /** Pastes plain text into the focused input and restores the clipboard. */
+    static boolean paste(NshView host, String text) {
+        Boolean done = onMain(() -> {
+            View focus = focused(host);
+            if (!(focus instanceof EditText) || !(focus.getParent() instanceof InputBox)) return false;
+            ClipboardManager clipboard = (ClipboardManager)
+                    host.getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard == null) return false;
+            ClipData previous = clipboard.getPrimaryClip();
+            try {
+                clipboard.setPrimaryClip(ClipData.newPlainText("text", text));
+                return ((EditText) focus).onTextContextMenuItem(android.R.id.paste);
+            } finally {
+                if (previous == null && Build.VERSION.SDK_INT >= 28) clipboard.clearPrimaryClip();
+                else if (previous == null) clipboard.setPrimaryClip(ClipData.newPlainText("", ""));
+                else clipboard.setPrimaryClip(previous);
+            }
         });
         return done != null && done;
     }

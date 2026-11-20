@@ -5,7 +5,10 @@
 //! the main thread and returns when it is done). Java speaks pixels; the
 //! agent points (the display's density apart).
 
-use std::{sync::Weak, time::Duration};
+use std::{
+    sync::Weak,
+    time::{Duration, Instant},
+};
 
 use jni::{
     JNIEnv,
@@ -226,6 +229,21 @@ impl Native for AndroidNative {
             id if id < 0 => Err(format!("Android hit testing failed: unknown result {id}")),
             id => Ok(Some(id as NodeId)),
         }
+    }
+
+    /// The focused input's node id, if one has focus.
+    fn focused(&self) -> Option<NodeId> {
+        let focused: Option<i32> = self.call(|env, class, view| {
+            env.call_static_method(
+                class,
+                "focusedNode",
+                "(Lcom/longbridge/nsh/NshView;)I",
+                &[JValue::Object(view)],
+            )?
+            .i()
+            .map(Some)
+        });
+        focused.filter(|id| *id >= 0).map(|id| id as NodeId)
     }
 
     fn bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
@@ -486,6 +504,87 @@ impl Native for AndroidNative {
         } else {
             Err("the activity is gone".into())
         }
+    }
+
+    fn rotate(&self, landscape: bool) -> Result<(), String> {
+        let done = self.call(|env, class, view| {
+            env.call_static_method(
+                class,
+                "rotate",
+                "(Lcom/longbridge/nsh/NshView;Z)Z",
+                &[
+                    JValue::Object(view),
+                    JValue::Bool(if landscape { 1 } else { 0 }),
+                ],
+            )?
+            .z()
+        });
+        done.then_some(())
+            .ok_or_else(|| "Android could not change the requested orientation".into())
+    }
+
+    fn keyboard(&self, shown: bool) -> Result<(), String> {
+        let done = self.call(|env, class, view| {
+            env.call_static_method(
+                class,
+                "keyboard",
+                "(Lcom/longbridge/nsh/NshView;Z)Z",
+                &[
+                    JValue::Object(view),
+                    JValue::Bool(if shown { 1 } else { 0 }),
+                ],
+            )?
+            .z()
+        });
+        if !done {
+            return if shown {
+                Err("no input has the focus".into())
+            } else {
+                Err("Android could not hide the keyboard".into())
+            };
+        }
+        let expected = if shown { 1 } else { 0 };
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            let state = self.call(|env, class, view| {
+                env.call_static_method(
+                    class,
+                    "imeState",
+                    "(Lcom/longbridge/nsh/NshView;)I",
+                    &[JValue::Object(view)],
+                )?
+                .i()
+            });
+            if state == -1 || state == expected {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(if shown {
+                    "the keyboard did not show within 2 s".into()
+                } else {
+                    "the keyboard did not hide within 2 s".into()
+                });
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    fn paste(&self, content: &nsh_core::PasteEvent) -> Result<(), String> {
+        if !content.html.is_empty() || !content.files.is_empty() || !content.uris.is_empty() {
+            return Err("Android paste supports plain text only".into());
+        }
+        let done = self.call(|env, class, view| {
+            let text = env.new_string(&content.text)?;
+            env.call_static_method(
+                class,
+                "paste",
+                "(Lcom/longbridge/nsh/NshView;Ljava/lang/String;)Z",
+                &[JValue::Object(view), JValue::Object(&text)],
+            )?
+            .z()
+        });
+        done.then_some(())
+            .ok_or_else(|| "Android paste dispatch failed".into())
     }
 
     fn answer_dialog(&self, button: Option<&str>) -> Result<(), String> {

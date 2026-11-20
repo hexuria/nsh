@@ -149,10 +149,37 @@ impl NshAgentHost {
                 }
                 Ok(DispatchResult::empty())
             }
+            Op::Paste { target, text } => self
+                .agent
+                .paste_node(self.node_id(target)?, text)
+                .map(|()| DispatchResult::empty()),
             Op::System {
                 action: gpui_agent::SystemAction::Back,
                 ..
             } => self.agent.back().map(|()| DispatchResult::empty()),
+            Op::System {
+                action: gpui_agent::SystemAction::Rotate,
+                value,
+            } => {
+                let landscape = match value.as_deref() {
+                    Some("landscape") => true,
+                    Some("portrait") => false,
+                    _ => {
+                        return Err("system rotate value must be `portrait` or `landscape`".into());
+                    }
+                };
+                self.agent
+                    .rotate(landscape)
+                    .map(|()| DispatchResult::empty())
+            }
+            Op::System {
+                action: gpui_agent::SystemAction::KeyboardShow,
+                ..
+            } => self.agent.keyboard(true).map(|()| DispatchResult::empty()),
+            Op::System {
+                action: gpui_agent::SystemAction::KeyboardHide,
+                ..
+            } => self.agent.keyboard(false).map(|()| DispatchResult::empty()),
             Op::Swipe {
                 target,
                 direction,
@@ -314,8 +341,8 @@ impl NshAgentHost {
     /// phone has no pointer to hover and no window to resize; a swipe is a
     /// touch gesture.
     fn features(&self) -> Vec<String> {
-        let names: &[&str] = if self.tab_mode {
-            &[
+        let mut names: Vec<&str> = if self.tab_mode {
+            vec![
                 "press",
                 "scroll",
                 "hover",
@@ -325,7 +352,7 @@ impl NshAgentHost {
             ]
         } else {
             match self.platform {
-                PlatformKind::Mobile => &[
+                PlatformKind::Mobile => vec![
                     "press",
                     "scroll",
                     "drag",
@@ -333,9 +360,20 @@ impl NshAgentHost {
                     "long_press",
                     "system.back",
                 ],
-                _ => &["press", "scroll", "hover", "drag", "viewport"],
+                _ => vec!["press", "scroll", "hover", "drag", "viewport"],
             }
         };
+        if !self.tab_mode
+            && cfg!(target_os = "android")
+            && matches!(self.platform, PlatformKind::Mobile)
+        {
+            names.extend([
+                "paste",
+                "system.rotate",
+                "system.keyboard_show",
+                "system.keyboard_hide",
+            ]);
+        }
         names.iter().map(|name| (*name).to_string()).collect()
     }
 
@@ -1089,6 +1127,14 @@ mod tests {
         snapshot_host_with_availability(scene, true)
     }
 
+    fn snapshot_host_on(platform: PlatformKind) -> NshAgentHost {
+        let agent = Arc::new(Agent::requiring_native_hit_test(
+            Arc::new(SnapshotScene(Ok(sample_nodes()), 1, Default::default())),
+            Box::new(SnapshotNative::new(true, None, false)),
+        ));
+        NshAgentHost::new("test", platform, agent).unwrap()
+    }
+
     fn sample_nodes() -> Vec<SemanticNode> {
         let mut root = SemanticNode::default();
         root.id = 1;
@@ -1254,6 +1300,36 @@ mod tests {
             PlatformKind::Mobile => assert!(lists("swipe") && !lists("hover")),
             _ => assert!(lists("hover") && !lists("swipe")),
         }
+    }
+
+    #[test]
+    fn mobile_hello_lists_android_only_operations_only_on_android() {
+        let hello = snapshot_host_on(PlatformKind::Mobile).hello();
+        for feature in [
+            "paste",
+            "system.rotate",
+            "system.keyboard_show",
+            "system.keyboard_hide",
+        ] {
+            assert_eq!(
+                hello.features.iter().any(|name| name == feature),
+                cfg!(target_os = "android"),
+                "{feature}"
+            );
+        }
+    }
+
+    #[test]
+    fn rotate_rejects_values_other_than_portrait_or_landscape() {
+        let mut host = snapshot_host(SnapshotScene(Ok(sample_nodes()), 1, Default::default()));
+        let error = host
+            .dispatch(&Op::System {
+                action: gpui_agent::SystemAction::Rotate,
+                value: Some("sideways".into()),
+            })
+            .unwrap_err();
+        assert!(error.contains("portrait"));
+        assert!(error.contains("landscape"));
     }
 
     #[test]

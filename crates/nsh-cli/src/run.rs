@@ -194,6 +194,15 @@ pub(crate) fn run(
         crate::rust_app::set_release_hosts();
     }
     let agent_token = agent_token()?;
+    if agent_token.is_some() && target == Target::Ios && release {
+        bail!("GPUI agent attach is unavailable in release builds");
+    }
+    if agent_token.is_some() && target == Target::Catalyst {
+        bail!("UIKit GPUI agent attach requires --target ios (the iOS Simulator)");
+    }
+    if agent_token.is_some() && target == Target::Ios && crate::rust_app::is_root(entry) {
+        bail!("iOS Simulator GPUI agent attach requires a TSX development host");
+    }
     let work = dunce::canonicalize(entry)?
         .parent()
         .context("entry has no directory")?
@@ -327,7 +336,30 @@ pub(crate) fn run(
             step.finish();
             let mut launch = vec!["launch", "--terminate-running-process", &udid, BUNDLE_ID];
             launch.extend(args.iter().map(String::as_str));
-            let env = simctl_app_env(&crate::package::read_config(entry)?);
+            let mut env = simctl_app_env(&crate::package::read_config(entry)?);
+            let _token_file = if let Some(token) = &agent_token {
+                use std::io::Write as _;
+
+                let address = std::env::var("GPUI_AGENT_ADDR")
+                    .unwrap_or_else(|_| "127.0.0.1:17421".to_owned());
+                let socket = address
+                    .parse::<std::net::SocketAddr>()
+                    .context("GPUI_AGENT_ADDR must be a loopback socket address")?;
+                if !socket.ip().is_loopback() {
+                    bail!("GPUI_AGENT_ADDR must be a loopback socket address");
+                }
+                let container = simctl(&["get_app_container", &udid, BUNDLE_ID, "data"])?;
+                let path = PathBuf::from(container.trim()).join("Library/Caches/gpui-agent-token");
+                let mut file = private_token_file(&path)?;
+                file.write_all(token.as_bytes())
+                    .context("store the GPUI-agent token in the development host")?;
+                env.retain(|(name, _)| name != "SIMCTL_CHILD_GPUI_AGENT_TOKEN");
+                env.push(("SIMCTL_CHILD_GPUI_AGENT".into(), "1".into()));
+                env.push(("SIMCTL_CHILD_GPUI_AGENT_ADDR".into(), address.into()));
+                Some(file)
+            } else {
+                None
+            };
             let step = ui::Step::start("launching the development host");
             simctl_with_env(&launch, &env)?;
             step.finish();
@@ -1076,6 +1108,53 @@ pub(crate) fn simctl(args: &[&str]) -> anyhow::Result<String> {
     simctl_with_env(args, &[])
 }
 
+struct PrivateTokenFile {
+    file: std::fs::File,
+    path: PathBuf,
+}
+
+impl std::io::Write for PrivateTokenFile {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        std::io::Write::write(&mut self.file, buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        std::io::Write::flush(&mut self.file)
+    }
+}
+
+impl Drop for PrivateTokenFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+fn private_token_file(path: &Path) -> anyhow::Result<PrivateTokenFile> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)
+            .context("open the development host's GPUI-agent token file")?;
+        let file = PrivateTokenFile {
+            file,
+            path: path.to_owned(),
+        };
+        file.file
+            .set_permissions(std::fs::Permissions::from_mode(0o600))?;
+        Ok(file)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        bail!("iOS Simulator GPUI agent attach requires macOS")
+    }
+}
+
 /// [`simctl`] with variables in its environment: `launch` passes those
 /// named `SIMCTL_CHILD_<name>` to the app as `<name>` ([`simctl_app_env`]).
 pub(crate) fn simctl_with_env(
@@ -1086,6 +1165,7 @@ pub(crate) fn simctl_with_env(
         .arg("simctl")
         .args(args)
         .envs(env.iter().map(|(name, value)| (name, value)))
+        .env_remove("SIMCTL_CHILD_GPUI_AGENT_TOKEN")
         .output()
         .context("run xcrun simctl (is Xcode installed?)")?;
     if !output.status.success() {
@@ -1622,6 +1702,60 @@ mod tests {
                 "the error shows the token: {error}"
             );
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn simulator_token_files_are_private_even_when_reused() {
+        use std::{io::Write as _, os::unix::fs::PermissionsExt as _};
+
+        let directory = std::env::temp_dir().join(format!("nsh-ios-token-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("token");
+        let mut file = super::private_token_file(&path).unwrap();
+        file.write_all(b"first-token").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"first-token");
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        drop(file);
+        assert!(!path.exists());
+        std::fs::write(&path, b"stale-token").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let file = super::private_token_file(&path).unwrap();
+        assert!(std::fs::read(&path).unwrap().is_empty());
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        drop(file);
+        assert!(!path.exists());
+        assert!(super::private_token_file(&directory.join("absent/token")).is_err());
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn simulator_token_files_are_removed_after_a_partial_write_fails() {
+        use std::io::Write as _;
+
+        let directory = std::env::temp_dir().join(format!(
+            "nsh-ios-token-write-failure-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("token");
+        let result = (|| -> anyhow::Result<()> {
+            let mut file = super::private_token_file(&path)?;
+            file.write_all(b"partial")?;
+            file.file = std::fs::File::open(&path)?;
+            file.write_all(b"remaining")?;
+            Ok(())
+        })();
+        assert!(result.is_err());
+        assert!(!path.exists());
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

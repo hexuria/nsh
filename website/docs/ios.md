@@ -35,6 +35,27 @@ terminal. `--device` picks a simulator by name or UDID. For a quicker loop
 without a simulator, `nsh run --target catalyst` on a Mac opens the same UIKit backend in an iPhone-sized
 [Mac Catalyst](./getting-started.md#mac-catalyst) window.
 
+## GPUI-agent in the simulator
+
+The TSX development host can serve GPUI-agent on the simulator's loopback interface, shared with the Mac:
+
+```sh
+export GPUI_AGENT_TOKEN="$(openssl rand -hex 32)"
+GPUI_AGENT=1 nsh run examples/gallery --target ios &
+gpui-agent hello
+gpui-agent snapshot --pretty
+gpui-agent screenshot --inline --out gallery.png
+```
+
+Keep `nsh run` and the GPUI-agent CLI in the same shell so they share the token. The default address is
+`127.0.0.1:17421`; `GPUI_AGENT_ADDR` may choose another loopback socket address. The token is written with mode `0600`
+to the app's data container, then read once and deleted by the host. This private file carries the token across
+the launch boundary. Screenshots are stored in the app's cache; `--inline --out` saves them on the Mac. Attach ends
+when the view or development session closes. Simulator debug hosts provide this development endpoint;
+release apps, physical-device hosts and Mac Catalyst hosts follow their regular application lifecycle.
+If agent startup fails, the development session continues and reports the error in the `nsh run` terminal.
+Agent attach and `nsh test` keep independent models of the same running app.
+
 ## Packaging
 
 ```sh
