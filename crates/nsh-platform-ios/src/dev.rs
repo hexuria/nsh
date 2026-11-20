@@ -169,7 +169,9 @@ impl DevSession {
                     client.log(
                         nsh_dev::protocol::LogLevel::Error,
                         "nsh_platform_ios::dev",
-                        &format!("cannot start GPUI agent; continuing development without it: {error}"),
+                        &format!(
+                            "cannot start GPUI agent; continuing development without it: {error}"
+                        ),
                     );
                 }
                 tester.set_client(&client);
@@ -263,7 +265,7 @@ impl DevAgent {
         )?
         .with_screenshot_directory(screenshots);
         let worker = nsh_gpui_agent::spawn_worker(address, token, host)?;
-        view.set_test_model(model.clone());
+        view.set_agent_model(model.clone());
         Ok(Some(Self {
             model,
             alive,
