@@ -17,9 +17,9 @@ macOS 后端的行为是桌面应用：鼠标、触控板和键盘输入，可�
 
 ## GPUI-agent 开发工具
 
-debug TSX 开发宿主通过 `nsh-platform-macos/dev-agent` 使用共享适配器。
-这需要 debug 开发宿主：从源码仓库构建 `nsh` CLI，并使用该二进制启动。
-发行版 `nsh` 附带优化构建的宿主，不会启动共享监听器。
+从源码构建的 debug TSX 开发宿主通过 `nsh-platform-macos/dev-agent` 提供共享适配器。
+从源码仓库构建 `nsh` CLI，并使用该二进制启动 agent 会话。
+发行版 `nsh` CLI 为常规开发运行提供优化构建的宿主；共享 agent 的启动属于源码 debug 宿主的能力。
 
 ```sh
 cargo build -p nsh-cli
@@ -39,11 +39,11 @@ gpui-agent screenshot --inline --out gallery.png
 ```
 
 从快照中选择目标 ID。桌面适配器支持原生点击、滚动、悬停、拖动、调整视口和内联 PNG 截图。
-必须提供令牌，监听地址仅限回环地址；不要把令牌写入日志或提交到仓库。
-重新加载会重置语义模型，关闭 surface 会停止 worker。打包应用不启用此功能，
-优化构建的开发宿主也不会启动共享监听器。Rust-root 应用使用自己的 runner，而非此 TSX 宿主。
-现有 `gpui-agent`、`gpui-agent-server` 功能和进程内 API 保持不变；
-同时启用 `gpui-agent-server` 时，仅启动原有私有服务器。
+监听器绑定回环地址，并通过令牌进行身份验证；请在本地 shell 环境中妥善保管令牌。
+重新加载会重置语义模型，关闭 surface 会停止 worker。共享 agent 会话使用从源码构建的 debug 开发宿主，
+打包应用和优化构建的宿主则遵循常规应用生命周期。Rust-root 应用使用专用 runner。
+现有 `gpui-agent`、`gpui-agent-server` 功能继续提供原有进程内 API；
+启用 `gpui-agent-server` 时，原有私有服务器负责协议监听。
 
 ## 环境要求
 

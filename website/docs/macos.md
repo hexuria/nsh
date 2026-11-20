@@ -19,10 +19,11 @@ over the window and a menu bar.
 
 ## GPUI-agent development tooling
 
-The debug TSX development host includes the shared `nsh-gpui-agent` adapter
-through `nsh-platform-macos/dev-agent`. This requires a debug development host:
-build the `nsh` CLI from a source checkout and run that binary. Distributed
-`nsh` ships an optimized host, which starts no shared listener.
+The source-built debug TSX development host provides the shared `nsh-gpui-agent`
+adapter through `nsh-platform-macos/dev-agent`. Build the `nsh` CLI from a source
+checkout and run that binary for agent sessions. The distributed `nsh` CLI supplies
+an optimized host for standard development runs; shared-agent startup is a
+source-built debug-host capability.
 
 ```sh
 cargo build -p nsh-cli
@@ -42,15 +43,15 @@ gpui-agent screenshot --inline --out gallery.png
 ```
 
 Choose a target ID from the snapshot. The desktop adapter supports native press,
-scroll, hover, drag, viewport resizing and inline PNG screenshots. The token is
-required and the listener accepts only loopback addresses. Keep tokens out of logs
-and checked-in files. Reloading resets the semantic model; closing the surface stops
-its worker. Packaged apps do not enable this feature, and optimized development
-hosts do not start the shared listener. Rust-root apps use their own runner rather
-than this TSX development host.
+scroll, hover, drag, viewport resizing and inline PNG screenshots. The listener
+binds to a loopback address with token authentication. Keep tokens private in your
+local shell environment. Reloading resets the semantic model; closing the surface
+stops its worker. Shared-agent sessions use the source-built debug development host,
+while packaged apps and optimized hosts follow their regular application lifecycle.
+Rust-root apps use their dedicated runner.
 
-The existing `gpui-agent` and `gpui-agent-server` features and in-process APIs are
-unchanged. If `gpui-agent-server` is also enabled, only the private server starts.
+The existing `gpui-agent` and `gpui-agent-server` features retain their in-process
+APIs. Enabling `gpui-agent-server` selects the private server as the protocol listener.
 
 ## Requirements
 
