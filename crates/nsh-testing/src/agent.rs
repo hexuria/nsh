@@ -3553,10 +3553,10 @@ mod tests {
     type LongPressRecords = Arc<Mutex<Vec<(Point<Points>, Duration)>>>;
     type TextBoundsTable = [((NodeId, u32, u32), Bounds<Points>)];
 
-    #[derive(Default)]
     /// A recorded native action: its name, target window and point.
     type WindowAction = (&'static str, NodeId, Option<Point<Points>>);
 
+    #[derive(Default)]
     struct WindowRecords {
         selected: Mutex<NodeId>,
         targets: Mutex<Vec<NodeId>>,
