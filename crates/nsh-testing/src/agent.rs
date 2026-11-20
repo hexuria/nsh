@@ -2024,7 +2024,7 @@ impl Agent {
         self.native.keyboard(shown).and_then(|()| self.settled())
     }
 
-    /// Focuses input `id`, types `text`, and waits for the resulting state.
+    /// Types `text` into input `id`, focusing it first when needed, and waits for the resulting state.
     pub fn type_node(&self, id: NodeId, text: &str) -> Result<(), String> {
         let at = self.node_point(id)?;
         let node = self
@@ -2036,7 +2036,9 @@ impl Agent {
         if !node.input {
             return Err(format!("node {id} is not a text input"));
         }
-        self.native.press(at);
+        if self.native.focused() != Some(id) {
+            self.native.press(at);
+        }
         self.native.type_text(text);
         self.settled()
     }
@@ -3641,6 +3643,7 @@ mod tests {
         calls: Mutex<Vec<&'static str>>,
         presses: Mutex<Vec<Point<Points>>>,
         pastes: Mutex<Vec<String>>,
+        typed_text: Mutex<Vec<String>>,
         rotations: Mutex<Vec<bool>>,
         keyboards: Mutex<Vec<bool>>,
     }
@@ -3668,7 +3671,14 @@ mod tests {
         fn long_press(&self, _: Point<Points>, _: Duration) {}
         fn scroll(&self, _: Point<Points>, _: Point<Points>) {}
         fn drag(&self, _: Point<Points>, _: Point<Points>) {}
-        fn type_text(&self, _: &str) {}
+        fn type_text(&self, text: &str) {
+            self.records.calls.lock().unwrap().push("type");
+            self.records
+                .typed_text
+                .lock()
+                .unwrap()
+                .push(text.to_string());
+        }
         fn key(&self, _: Key) {}
         fn input_text(&self, _: NodeId) -> Option<String> {
             None
@@ -3848,6 +3858,37 @@ mod tests {
         assert_eq!(
             *records.pastes.lock().unwrap(),
             vec!["replacement".to_string()]
+        );
+    }
+
+    #[test]
+    fn type_node_keeps_focus_on_a_focused_input() {
+        let (agent, records) = system_action_agent(true, Some(2), None, None);
+
+        agent.type_node(2, "typed text").unwrap();
+
+        assert_eq!(*records.calls.lock().unwrap(), vec!["type"]);
+        assert!(records.presses.lock().unwrap().is_empty());
+        assert_eq!(
+            *records.typed_text.lock().unwrap(),
+            vec!["typed text".to_string()]
+        );
+    }
+
+    #[test]
+    fn type_node_focuses_an_unfocused_input_before_typing() {
+        let (agent, records) = system_action_agent(true, None, None, None);
+
+        agent.type_node(2, "typed text").unwrap();
+
+        assert_eq!(*records.calls.lock().unwrap(), vec!["press", "type"]);
+        assert_eq!(
+            *records.presses.lock().unwrap(),
+            vec![point(px(50.0), px(50.0))]
+        );
+        assert_eq!(
+            *records.typed_text.lock().unwrap(),
+            vec!["typed text".to_string()]
         );
     }
 
