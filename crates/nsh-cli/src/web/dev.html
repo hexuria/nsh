@@ -55,7 +55,23 @@
   // `GPUI_AGENT=1`, which hands it over before the page's scripts run): the
   // server asks this page its agent's questions. Kept here, out of the
   // page's reach, for every connection of the page's life.
-  const AGENT = globalThis.__nshAgentKey ?? null;
+  function fromHash() {
+    const parts = location.hash.slice(1).split("&");
+    const supplied = parts.filter((part) => part.startsWith("gpui-agent="));
+    if (supplied.length) {
+      const rest = parts.filter((part) => !part.startsWith("gpui-agent="));
+      history.replaceState(history.state, "", `${location.pathname}${location.search}${rest.length ? `#${rest.join("&")}` : ""}`);
+      if (supplied.length !== 1) return null;
+      const key = supplied[0].slice("gpui-agent=".length);
+      if (!/^[0-9a-f]{32}$/.test(key)) return null;
+      sessionStorage.setItem("nsh-agent-key", key);
+      return key;
+    }
+    const key = sessionStorage.getItem("nsh-agent-key");
+    return key && /^[0-9a-f]{32}$/.test(key) ? key : null;
+  }
+  let AGENT = globalThis.__nshAgentKey ?? fromHash();
+  if (typeof AGENT !== "string" || !/^[0-9a-f]{32}$/.test(AGENT)) AGENT = null;
   delete globalThis.__nshAgentKey;
   const status = document.getElementById("status");
   const problem = document.getElementById("problem");

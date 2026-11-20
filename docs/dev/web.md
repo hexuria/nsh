@@ -234,7 +234,8 @@ build to the same file) and takes `nsh.js` from the crate.
   input's value, where a dialog's button is, where a text's characters are: each run knows its first character's
   offset). The input itself is the browser's trusted input, sent by the CLI. A GPUI agent attached to
   `nsh run --target web` (`GPUI_AGENT=1`) drives a page of its own the same way, asking also where hits land and what
-  has focus (`docs/dev/tooling.md` "Web GPUI-agent development").
+  has focus. `GPUI_AGENT_WEB_TAB=1` instead pairs a user-opened tab and dispatches synthetic DOM input
+  (`docs/dev/tooling.md` "Web GPUI-agent development").
 
 ### Runtimes linked for each app
 

@@ -52,10 +52,101 @@ pub(crate) fn set_size(page: &Page, width: Points, height: Points) -> Result<(),
 pub(crate) struct WebNative {
     page: Arc<Page>,
     server: Arc<DevServer>,
+    scene: WebScene,
     /// A GPUI agent's (`nsh run`, [`crate::web_agent`]): it answers what
     /// strict mode asks (hits, focus, text bounds, the keys it can send);
     /// a test's agent keeps the trait's defaults, as before.
     agent: bool,
+}
+
+pub(crate) struct WebScene {
+    server: Arc<DevServer>,
+    tab_mode: bool,
+}
+
+impl WebScene {
+    pub(crate) fn new(server: Arc<DevServer>, tab_mode: bool) -> Self {
+        Self { server, tab_mode }
+    }
+
+    fn query<T: serde::de::DeserializeOwned>(&self, query: SceneQuery) -> Result<T, String> {
+        let value = self
+            .server
+            .step(TestStep::Scene { query }, ASK)
+            .map_err(|error| {
+                if self.tab_mode && !self.server.has_tester() {
+                    "no tab has opened the agent's page yet".to_owned()
+                } else {
+                    error
+                }
+            })?;
+        serde_json::from_value(value).map_err(|e| format!("the page answered oddly: {e}"))
+    }
+
+    pub(crate) fn hit_at(&self, at: Point<Points>) -> Result<Option<NodeId>, String> {
+        self.query(SceneQuery::HitAt {
+            x: at.x.0,
+            y: at.y.0,
+        })
+    }
+
+    pub(crate) fn bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
+        self.query::<Option<[f32; 4]>>(SceneQuery::Bounds { id })
+            .ok()
+            .flatten()
+            .map(|[x, y, width, height]| {
+                Bounds::new(
+                    point(Points(x), Points(y)),
+                    Size::new(Points(width), Points(height)),
+                )
+            })
+    }
+
+    pub(crate) fn text_bounds(&self, id: NodeId, start: u32, end: u32) -> Option<Bounds<Points>> {
+        self.query::<Option<[f32; 4]>>(SceneQuery::TextBounds { id, start, end })
+            .ok()
+            .flatten()
+            .map(|[x, y, width, height]| {
+                Bounds::new(
+                    point(Points(x), Points(y)),
+                    Size::new(Points(width), Points(height)),
+                )
+            })
+    }
+
+    pub(crate) fn focused(&self) -> Option<NodeId> {
+        self.query::<Option<u32>>(SceneQuery::Focused)
+            .ok()
+            .flatten()
+            .and_then(|id| NodeId::try_from(id).ok())
+    }
+
+    pub(crate) fn input_text(&self, id: NodeId) -> Option<String> {
+        self.query(SceneQuery::InputText { id }).ok().flatten()
+    }
+
+    pub(crate) fn viewport(&self) -> Size<Points> {
+        let [width, height] = self
+            .query::<[f32; 2]>(SceneQuery::Viewport)
+            .unwrap_or([0.0, 0.0]);
+        Size::new(Points(width), Points(height))
+    }
+
+    pub(crate) fn animating(&self) -> bool {
+        self.query::<bool>(SceneQuery::Animating).unwrap_or(false)
+    }
+
+    pub(crate) fn app_focused(&self) -> bool {
+        self.query::<bool>(SceneQuery::AppFocused).unwrap_or(false)
+    }
+
+    pub(crate) fn focus_node(&self, id: NodeId) -> Result<(), String> {
+        if self.query::<bool>(SceneQuery::Focus { id })? {
+            Ok(())
+        } else {
+            Err(format!("node {id} cannot receive native focus"))
+        }
+    }
 }
 
 /// Modifier bits of the protocol's input events.
@@ -65,7 +156,7 @@ const META: u32 = 4;
 const SHIFT: u32 = 8;
 
 /// A key's DOM `key` and `code` names, as the browser's events carry them.
-fn dom_key(key: nsh_core::keymap::Key, shift: bool) -> Option<(String, String)> {
+pub(crate) fn dom_key(key: nsh_core::keymap::Key, shift: bool) -> Option<(String, String)> {
     use nsh_core::keymap::Key;
     let named = |key: &str, code: &str| Some((key.to_owned(), code.to_owned()));
     match key {
@@ -113,6 +204,7 @@ impl WebNative {
     pub(crate) fn new(page: Arc<Page>, server: Arc<DevServer>, agent: bool) -> WebNative {
         WebNative {
             page,
+            scene: WebScene::new(server.clone(), false),
             server,
             agent,
         }
@@ -120,8 +212,7 @@ impl WebNative {
 
     /// What the page answers of `query`.
     fn query<T: serde::de::DeserializeOwned>(&self, query: SceneQuery) -> Result<T, String> {
-        let value = self.server.step(TestStep::Scene { query }, ASK)?;
-        serde_json::from_value(value).map_err(|e| format!("the page answered oddly: {e}"))
+        self.scene.query(query)
     }
 
     fn call(&self, method: &str, params: Value) {
@@ -201,7 +292,9 @@ impl WebNative {
 /// `keys` (a keystroke as `nsh/keymap` names it, `mod` the browser's
 /// platform's command key) and the DOM key it is sent as. An error for
 /// what a browser's keyboard has no key for.
-fn browser_keys(keys: &str) -> Result<(nsh_core::keymap::Keystroke, (String, String)), String> {
+pub(crate) fn browser_keys(
+    keys: &str,
+) -> Result<(nsh_core::keymap::Keystroke, (String, String)), String> {
     let stroke = nsh_core::keymap::Keystroke::parse_with(keys, cfg!(target_os = "macos"))
         .map_err(|e| e.to_string())?;
     let dom = dom_key(stroke.key, stroke.modifiers.shift)
@@ -219,24 +312,11 @@ impl Native for WebNative {
         if !self.agent {
             return Err(nsh_testing::agent::NATIVE_HIT_TEST_UNSUPPORTED.into());
         }
-        self.query(SceneQuery::HitAt {
-            x: at.x.0,
-            y: at.y.0,
-        })
+        self.scene.hit_at(at)
     }
 
     fn text_bounds(&self, text: NodeId, start: u32, end: u32) -> Option<Bounds<Points>> {
-        let [x, y, width, height] = self
-            .query::<Option<[f32; 4]>>(SceneQuery::TextBounds {
-                id: text,
-                start,
-                end,
-            })
-            .ok()??;
-        Some(Bounds::new(
-            point(Points(x), Points(y)),
-            Size::new(Points(width), Points(height)),
-        ))
+        self.scene.text_bounds(text, start, end)
     }
 
     fn validate_keys(&self, keys: &str) -> Result<(), String> {
@@ -250,32 +330,19 @@ impl Native for WebNative {
         if !self.agent {
             return Err(nsh_testing::agent::NATIVE_FOCUS_UNSUPPORTED.into());
         }
-        if self.query::<bool>(SceneQuery::Focus { id })? {
-            Ok(())
-        } else {
-            Err(format!("node {id} cannot receive native focus"))
-        }
+        self.scene.focus_node(id)
     }
 
     fn app_focused(&self) -> bool {
-        self.agent && self.query::<bool>(SceneQuery::AppFocused).unwrap_or(false)
+        self.agent && self.scene.app_focused()
     }
 
     fn bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
-        let [x, y, width, height] = self
-            .query::<Option<[f32; 4]>>(SceneQuery::Bounds { id })
-            .ok()??;
-        Some(Bounds::new(
-            point(Points(x), Points(y)),
-            Size::new(Points(width), Points(height)),
-        ))
+        self.scene.bounds(id)
     }
 
     fn viewport(&self) -> Size<Points> {
-        let [width, height] = self
-            .query::<[f32; 2]>(SceneQuery::Viewport)
-            .unwrap_or([0.0, 0.0]);
-        Size::new(Points(width), Points(height))
+        self.scene.viewport()
     }
 
     fn press(&self, at: Point<Points>) {
@@ -324,22 +391,7 @@ impl Native for WebNative {
     }
 
     fn focused(&self) -> Option<NodeId> {
-        // A field is a child of its view, which holds the view's id.
-        let found = self
-            .page
-            .call(
-                "Runtime.evaluate",
-                json!({
-                    "expression": "(() => { let n = document.activeElement; \
-                        while (n && n._id === undefined) n = n.parentElement; \
-                        return n ? n._id : null })()",
-                    "returnByValue": true,
-                }),
-            )
-            .ok()?;
-        found["result"]["value"]
-            .as_u64()
-            .and_then(|id| NodeId::try_from(id).ok())
+        self.scene.focused()
     }
 
     fn paste(&self, content: &nsh_core::PasteEvent) -> Result<(), String> {
@@ -493,9 +545,7 @@ impl Native for WebNative {
     }
 
     fn input_text(&self, id: NodeId) -> Option<String> {
-        self.query::<Option<String>>(SceneQuery::InputText { id })
-            .ok()
-            .flatten()
+        self.scene.input_text(id)
     }
 
     fn back(&self) -> Result<(), String> {
@@ -528,7 +578,7 @@ impl Native for WebNative {
     }
 
     fn animating(&self) -> bool {
-        self.query::<bool>(SceneQuery::Animating).unwrap_or(false)
+        self.scene.animating()
     }
 
     fn screenshot(&self) -> Result<Vec<u8>, String> {
