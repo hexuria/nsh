@@ -86,6 +86,7 @@ WORKFLOWS = {
         "packages": [
             "gallery-native", "rust-exports-native", "post-editor-native", "tasks-rs",
             "nsh-cli", "nsh-platform-web", "nsh-platform-apple", "nsh-platform-ios",
+            "nsh-platform-macos", "nsh-macos-host", "nsh-macos-app",
         ],
         # `nsh test` runs the examples' tests.
         "files": [

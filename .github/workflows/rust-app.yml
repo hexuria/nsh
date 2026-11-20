@@ -20,6 +20,8 @@ on:
       - "crates/nsh-i18n/**"
       - "crates/nsh-js/**"
       - "crates/nsh-macros/**"
+      - "crates/nsh-macos-app/**"
+      - "crates/nsh-macos-host/**"
       - "crates/nsh-base/**"
       - "crates/nsh-package/**"
       - "crates/nsh-updater/**"
@@ -69,6 +71,26 @@ jobs:
     permissions:
       actions: read
     uses: ./.github/workflows/changed.yml
+
+  macos-dev-host:
+    needs: changed
+    if: ${{ !cancelled() && needs.changed.outputs.run != 'false' && (github.event_name != 'pull_request' || (github.event.action != 'closed' && !github.event.pull_request.draft)) }}
+    environment:
+      name: ci-debounce
+      deployment: false
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Cargo
+        uses: ./.github/actions/cargo
+        with:
+          cache: macos-dev-host
+      - name: Clippy
+        run: cargo clippy -p nsh-platform-macos -p nsh-macos-host -p nsh-macos-app --all-targets --features nsh-platform-macos/dev -- -D warnings
 
   check:
     needs: changed
