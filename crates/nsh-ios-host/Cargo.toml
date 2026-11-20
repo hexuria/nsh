@@ -18,3 +18,6 @@ nsh-platform-ios = { workspace = true, features = ["dev"] }
 nsh-dev.workspace = true
 nsh-engine = { workspace = true, features = ["js"] }
 log.workspace = true
+
+[target.'cfg(all(target_os = "ios", target_abi = "sim"))'.dependencies]
+nsh-platform-ios = { workspace = true, features = ["dev-agent"] }

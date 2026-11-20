@@ -62,11 +62,26 @@ pub(crate) fn register(key: u64, view: Weak<Inner>) {
 /// The view the agent acts on, by key (its calls must be `Send`).
 pub(crate) struct IosNative {
     key: u64,
+    available: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 }
 
 impl IosNative {
     pub(crate) fn new(key: u64) -> Self {
-        IosNative { key }
+        IosNative {
+            key,
+            available: None,
+        }
+    }
+
+    #[cfg(feature = "dev-agent")]
+    pub(crate) fn attached(
+        key: u64,
+        available: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    ) -> Self {
+        Self {
+            key,
+            available: Some(available),
+        }
     }
 
     /// `f` with the view and its window on the main queue, waited for;
@@ -335,6 +350,37 @@ fn bounds_in(view: &UIView, rect: CGRect, window: &UIWindow) -> Option<Bounds<Po
 }
 
 impl Native for IosNative {
+    fn available(&self) -> bool {
+        self.available
+            .as_ref()
+            .is_none_or(|alive| alive.load(std::sync::atomic::Ordering::Acquire))
+    }
+
+    fn hit_at(&self, at: Point<Points>) -> Result<Option<NodeId>, String> {
+        self.on_main(move |view, window| {
+            let point = objc2_core_foundation::CGPoint::new(f64::from(at.x.0), f64::from(at.y.0));
+            let Some(hit) = window.hitTest_withEvent(point, None) else {
+                return Ok(None);
+            };
+            view.with_mounter(|mounter| {
+                let mut current = Some(hit);
+                while let Some(native) = current {
+                    let tag = native.tag();
+                    if tag >= 0
+                        && let Some(owner) = mounter.ui_view(tag as NodeId)
+                        && std::ptr::eq::<UIView>(&*owner, &*native)
+                    {
+                        return Some(tag as NodeId);
+                    }
+                    current = native.superview();
+                }
+                Some(NodeId::MAX)
+            })
+            .ok_or_else(|| "native surface is unavailable".to_owned())
+        })
+        .unwrap_or_else(|| Err("the window is gone".to_owned()))
+    }
+
     fn bounds(&self, id: NodeId) -> Option<Bounds<Points>> {
         self.on_main(move |view, window| {
             let ui = view.with_mounter(|m| m.ui_view(id))??;

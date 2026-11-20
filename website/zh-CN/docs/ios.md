@@ -32,6 +32,23 @@ nsh run App.tsx --target ios                          # TSX 应用
 按名称或 UDID 选择模拟器。想要不用模拟器、更快的开发循环，在 Mac 上运行 `nsh run --target catalyst`，会在一个 iPhone 尺寸的
 [Mac Catalyst](./getting-started.md#mac-catalyst) 窗口中打开同一个 UIKit 后端。
 
+## 在模拟器中使用 GPUI-agent
+
+TSX 开发宿主可以通过与 Mac 共享的模拟器回环网络提供 GPUI-agent：
+
+```sh
+export GPUI_AGENT_TOKEN="$(openssl rand -hex 32)"
+GPUI_AGENT=1 nsh run examples/gallery --target ios &
+gpui-agent hello
+gpui-agent snapshot --pretty
+gpui-agent screenshot --inline --out gallery.png
+```
+
+在同一个 shell 中运行 `nsh run` 和 GPUI-agent CLI，以共享令牌。默认地址为 `127.0.0.1:17421`，
+`GPUI_AGENT_ADDR` 可以选择其他回环地址。令牌以 `0600` 权限写入应用的数据容器，宿主读取一次后立即删除，
+不会放入启动参数或应用的环境变量中。截图保存在应用缓存中，`--inline --out` 将图片保存到 Mac。
+视图或开发会话结束时，服务随之关闭。此功能仅面向模拟器调试宿主，不用于发布应用、真机或 Mac Catalyst。
+
 ## 打包
 
 ```sh

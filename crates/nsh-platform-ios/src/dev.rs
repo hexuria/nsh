@@ -87,6 +87,8 @@ pub(crate) struct DevSession {
     /// Keeps the client (and its thread) alive.
     _client: Arc<DevClient>,
     ui: Rc<RefCell<DevUi>>,
+    #[cfg(feature = "dev-agent")]
+    _agent: Option<DevAgent>,
 }
 
 impl DevSession {
@@ -101,6 +103,14 @@ impl DevSession {
         // queue is serial, so it comes before the bundle).
         let key = NEXT_KEY.fetch_add(1, Ordering::Relaxed);
         crate::agent::register(key, view.clone());
+        #[cfg(feature = "dev-agent")]
+        let agent = match DevAgent::start(key, &view) {
+            Ok(agent) => agent,
+            Err(error) => {
+                log::error!("cannot start GPUI agent: {error}");
+                return None;
+            }
+        };
         let tested = Arc::new(MainThreadBound::new(view.clone(), mtm));
         let tester = nsh_testing::agent::Tester::new(move |model| {
             let tested = tested.clone();
@@ -159,6 +169,8 @@ impl DevSession {
                 Some(DevSession {
                     _client: client,
                     ui,
+                    #[cfg(feature = "dev-agent")]
+                    _agent: agent,
                 })
             }
             Err(err) => {
@@ -182,6 +194,71 @@ impl DevSession {
             log::info!("reloading after an update that could not be applied in place");
             Inner::load(view, bundle.into());
         }
+    }
+}
+
+#[cfg(feature = "dev-agent")]
+struct DevAgent {
+    alive: Arc<AtomicBool>,
+    _worker: nsh_gpui_agent::WorkerHandle,
+}
+
+#[cfg(feature = "dev-agent")]
+impl DevAgent {
+    fn start(key: u64, view: &std::rc::Weak<Inner>) -> Result<Option<Self>, String> {
+        if !matches!(std::env::var("GPUI_AGENT").as_deref(), Ok("1" | "true")) {
+            return Ok(None);
+        }
+        if !cfg!(target_abi = "sim") {
+            return Err("GPUI agent attach requires the iOS Simulator".into());
+        }
+        if !cfg!(debug_assertions) {
+            return Err("GPUI agent attach is unavailable in release builds".into());
+        }
+        let home = std::env::var_os("HOME").ok_or("app data container is unavailable")?;
+        let token_path = std::path::PathBuf::from(home).join("Library/Caches/gpui-agent-token");
+        let token = std::fs::read_to_string(&token_path);
+        let removed = std::fs::remove_file(&token_path);
+        let token = token.map_err(|_| "cannot read the GPUI-agent token file")?;
+        removed.map_err(|_| "cannot remove the GPUI-agent token file")?;
+        let address = std::env::var("GPUI_AGENT_ADDR").unwrap_or_else(|_| "127.0.0.1:17421".into());
+        let address = address
+            .parse()
+            .map_err(|_| "GPUI-agent address is invalid")?;
+        nsh_gpui_agent::validate_worker_config(address, &token)?;
+        let view = view.upgrade().ok_or("native surface is unavailable")?;
+        let model = Arc::new(nsh_testing::agent::Model::default());
+        let alive = Arc::new(AtomicBool::new(true));
+        let native = crate::agent::IosNative::attached(key, alive.clone());
+        let agent = Arc::new(nsh_testing::agent::Agent::requiring_native_hit_test(
+            model.clone(),
+            Box::new(native),
+        ));
+        let screenshots = std::path::PathBuf::from(
+            std::env::var_os("HOME").ok_or("app data container is unavailable")?,
+        )
+        .join("Library/Caches/gpui-agent");
+        std::fs::create_dir_all(&screenshots)
+            .map_err(|_| "cannot create GPUI-agent screenshot directory")?;
+        let host = nsh_gpui_agent::NshAgentHost::new(
+            "Native Shell",
+            nsh_gpui_agent::PlatformKind::Mobile,
+            agent,
+        )?
+        .with_screenshot_directory(screenshots);
+        let worker = nsh_gpui_agent::spawn_worker(address, token, host)?;
+        view.set_test_model(model);
+        Ok(Some(Self {
+            alive,
+            _worker: worker,
+        }))
+    }
+}
+
+#[cfg(feature = "dev-agent")]
+impl Drop for DevAgent {
+    fn drop(&mut self) {
+        self.alive.store(false, Ordering::Release);
     }
 }
 
