@@ -246,12 +246,12 @@ final class TestAgent {
             long now = SystemClock.uptimeMillis();
             MotionEvent event = MotionEvent.obtain(now, now, MotionEvent.ACTION_HOVER_ENTER,
                     x, y, 0);
-            event.setSource(android.view.InputDevice.SOURCE_MOUSE);
+            event.setSource(InputDevice.SOURCE_MOUSE);
             root.dispatchGenericMotionEvent(event);
             event.recycle();
             event = MotionEvent.obtain(now, now, MotionEvent.ACTION_HOVER_MOVE,
                     x, y, 0);
-            event.setSource(android.view.InputDevice.SOURCE_MOUSE);
+            event.setSource(InputDevice.SOURCE_MOUSE);
             root.dispatchGenericMotionEvent(event);
             event.recycle();
             return true;
@@ -273,7 +273,7 @@ final class TestAgent {
             }
             View root = touchTarget != null ? touchTarget : target(host);
             MotionEvent e = MotionEvent.obtain(downTime, now, action, x, y, 0);
-            e.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+            e.setSource(InputDevice.SOURCE_TOUCHSCREEN);
             root.dispatchTouchEvent(e);
             e.recycle();
             if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) touchTarget = null;
@@ -303,7 +303,7 @@ final class TestAgent {
                     int action = at == 0 ? MotionEvent.ACTION_DOWN
                             : at == last ? MotionEvent.ACTION_UP : MotionEvent.ACTION_MOVE;
                     MotionEvent e = MotionEvent.obtain(start, due, action, xs[at], ys[at], 0);
-                    e.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+                    e.setSource(InputDevice.SOURCE_TOUCHSCREEN);
                     window.dispatchTouchEvent(e);
                     e.recycle();
                     if (at == last) done.countDown();
@@ -384,7 +384,7 @@ final class TestAgent {
             View window = target(host);
             long now = SystemClock.uptimeMillis();
             KeyEvent down = new KeyEvent(now, now, KeyEvent.ACTION_DOWN, code, 0, meta,
-                    KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, android.view.InputDevice.SOURCE_KEYBOARD);
+                    KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD);
             if ((meta & KeyEvent.META_CTRL_ON) == 0 || !window.dispatchKeyShortcutEvent(down)) {
                 window.dispatchKeyEvent(down);
             }
