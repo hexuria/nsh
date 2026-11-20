@@ -18,13 +18,15 @@ macOS 后端的行为是桌面应用：鼠标、触控板和键盘输入，可�
 ## GPUI-agent 开发工具
 
 debug TSX 开发宿主通过 `nsh-platform-macos/dev-agent` 使用共享适配器。
-启动前设置：
+这需要 debug 开发宿主：从源码仓库构建 `nsh` CLI，并使用该二进制启动。
+发行版 `nsh` 附带优化构建的宿主，不会启动共享监听器。
 
 ```sh
+cargo build -p nsh-cli
 export GPUI_AGENT=1
 export GPUI_AGENT_ADDR=127.0.0.1:17421
 export GPUI_AGENT_TOKEN="$(openssl rand -hex 32)"
-nsh run examples/gallery/App.tsx --target macos
+./target/debug/nsh run examples/gallery/App.tsx --target macos
 ```
 
 保持宿主运行，在另一个终端使用相同的环境变量：

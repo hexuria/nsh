@@ -20,13 +20,16 @@ over the window and a menu bar.
 ## GPUI-agent development tooling
 
 The debug TSX development host includes the shared `nsh-gpui-agent` adapter
-through `nsh-platform-macos/dev-agent`. Opt in before launching the app:
+through `nsh-platform-macos/dev-agent`. This requires a debug development host:
+build the `nsh` CLI from a source checkout and run that binary. Distributed
+`nsh` ships an optimized host, which starts no shared listener.
 
 ```sh
+cargo build -p nsh-cli
 export GPUI_AGENT=1
 export GPUI_AGENT_ADDR=127.0.0.1:17421
 export GPUI_AGENT_TOKEN="$(openssl rand -hex 32)"
-nsh run examples/gallery/App.tsx --target macos
+./target/debug/nsh run examples/gallery/App.tsx --target macos
 ```
 
 Keep the host running and use the same environment in another terminal:
