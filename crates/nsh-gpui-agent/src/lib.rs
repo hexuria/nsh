@@ -347,6 +347,11 @@ impl NshAgentHost {
     ) -> Result<DispatchResult, String> {
         let viewport = self.agent.native_viewport();
         let (width, height) = (viewport.width.0, viewport.height.0);
+        if !(width > 0.0 && height > 0.0) && (distance.is_none() || target.is_none()) {
+            return Err(
+                "the app has not laid out yet; wait for it to be ready or pass a distance".into(),
+            );
+        }
         let horizontal = matches!(
             direction,
             gpui_agent::SwipeDirection::Left | gpui_agent::SwipeDirection::Right
@@ -955,6 +960,7 @@ mod tests {
         available: bool,
         input: Option<String>,
         viewport_unlaid: bool,
+        viewport: Size<Points>,
         presses: Arc<std::sync::Mutex<Vec<Point<Points>>>>,
         drags: DragRecords,
     }
@@ -965,6 +971,7 @@ mod tests {
                 available,
                 input,
                 viewport_unlaid,
+                viewport: Size::new(Points(50.0), Points(50.0)),
                 presses: Arc::default(),
                 drags: Arc::default(),
             }
@@ -998,7 +1005,7 @@ mod tests {
         }
 
         fn viewport(&self) -> Size<Points> {
-            Size::new(Points(50.0), Points(50.0))
+            self.viewport
         }
 
         fn hit_at(&self, _: Point<Points>) -> Result<Option<NodeId>, String> {
@@ -1278,6 +1285,40 @@ mod tests {
                 Point::new(Points(10.0), Points(30.0)),
             )]
         );
+    }
+
+    #[test]
+    fn swipe_rejects_unlaid_out_viewport_when_distance_or_start_needs_it() {
+        let drags = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut native = SnapshotNative::new(true, None, false);
+        native.viewport = Size::new(Points(0.0), Points(0.0));
+        native.drags = drags.clone();
+        let agent = Arc::new(Agent::requiring_native_hit_test(
+            Arc::new(SnapshotScene(Ok(sample_nodes()), 1, Default::default())),
+            Box::new(native),
+        ));
+        let mut host = NshAgentHost::new("test", PlatformKind::Mobile, agent).unwrap();
+        let error = "the app has not laid out yet; wait for it to be ready or pass a distance";
+
+        assert_eq!(
+            host.dispatch(&Op::Swipe {
+                target: Some("visible".into()),
+                direction: gpui_agent::SwipeDirection::Right,
+                distance: None,
+            })
+            .unwrap_err(),
+            error
+        );
+        assert_eq!(
+            host.dispatch(&Op::Swipe {
+                target: None,
+                direction: gpui_agent::SwipeDirection::Right,
+                distance: Some(20.0),
+            })
+            .unwrap_err(),
+            error
+        );
+        assert!(drags.lock().unwrap().is_empty());
     }
 
     #[test]
