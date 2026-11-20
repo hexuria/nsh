@@ -468,6 +468,19 @@ fn start(surface: &Rc<Surface>, request: &Request) -> Start {
             Ok(DispatchResult::json(keybinding_list_json(&infos)))
         }
         Op::WaitUntil { .. } => Err("wait_until is served by the server".into()),
+        // Operations this host does not list in `hello.features`.
+        Op::Events { .. } => Err(gpui_agent::unsupported_op("events")),
+        Op::Blob { .. } => Err(gpui_agent::unsupported_op("blob")),
+        Op::Press { .. } => Err(gpui_agent::unsupported_op("press")),
+        Op::Scroll { .. } => Err(gpui_agent::unsupported_op("scroll")),
+        Op::Hover { .. } => Err(gpui_agent::unsupported_op("hover")),
+        Op::Drag { .. } => Err(gpui_agent::unsupported_op("drag")),
+        Op::Swipe { .. } => Err(gpui_agent::unsupported_op("swipe")),
+        Op::LongPress { .. } => Err(gpui_agent::unsupported_op("long_press")),
+        Op::Pinch { .. } => Err(gpui_agent::unsupported_op("pinch")),
+        Op::Viewport { .. } => Err(gpui_agent::unsupported_op("viewport")),
+        Op::Paste { .. } => Err(gpui_agent::unsupported_op("paste")),
+        Op::System { .. } => Err(gpui_agent::unsupported_op("system")),
     };
     Start::Done(Box::new(response(id, result)))
 }
