@@ -254,6 +254,13 @@ fn targeted_key_and_group_rejection(
         main.firstResponder()
             .is_some_and(|responder| responder.downcast_ref::<NSView>() == Some(&*view))
     );
+    // The targeted key must move focus back to the child itself.
+    main.makeFirstResponder(None);
+    assert!(
+        !main
+            .firstResponder()
+            .is_some_and(|responder| responder.downcast_ref::<NSView>() == Some(&*view))
+    );
     let owned = native.take().unwrap();
     let agent = worker(move || {
         let agent = Agent::requiring_native_hit_test(model.clone(), owned);
