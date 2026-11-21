@@ -1061,7 +1061,7 @@ interface TrayModule {
 
 `Tray.set` shows the app's icon in the system tray, or changes it; `null` removes it. There is one per app. The tray is the notification area on Windows, the right side of the menu bar on macOS, and a StatusNotifierItem on Linux, which Plasma, Waybar and most panels show (GNOME needs the AppIndicator extension).
 
-`Tray.available()` says whether the system shows the icon (reactive): always on macOS and Windows — except in an app NSH is embedded in, which owns the tray itself and ignores `Tray.set`; on Linux while a panel hosts StatusNotifierItems (it follows panels that start or quit); `false` off the desktops. Where it is `false`, a window hidden to the tray could not be brought back: minimize it instead, and leave "hide to tray" out of the app's choices. In tests, `open(entry, { tray: false })` plays a desktop without one.
+`Tray.available()` says whether the system shows the icon (reactive): always on macOS and Windows — except in an app NSH is embedded in, which owns the tray itself and ignores `Tray.set`; on Linux while a panel hosts StatusNotifierItems (it follows panels that start or quit), where it reads `false` at launch until the check answers — read it when the app needs it, not once at start-up; `false` off the desktops. Where it is `false`, a window hidden to the tray could not be brought back: minimize it instead, and leave "hide to tray" out of the app's choices. In tests, `open(entry, { tray: false })` plays a desktop without one.
 
 | Option | Description |
 | --- | --- |
