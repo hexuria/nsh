@@ -4,7 +4,7 @@
 
 ## Scope
 
-Prototype for Linux GTK 4 and Android, using `gpui-agent = "=0.2.0"` (wire protocol 2).
+Prototype for Linux GTK 4 and Android, using `gpui-agent = "=0.2.1"` (wire protocol 2).
 The macOS implementation was read as a behavior reference; it is not replaced by this branch.
 The proposed `rox/drafts/nsh-issue-agent-attach.md` was absent, so this implementation follows the four steps supplied in the task.
 
