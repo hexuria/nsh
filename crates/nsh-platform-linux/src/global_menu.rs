@@ -232,21 +232,35 @@ fn place(
         report(surface, up);
         return false;
     }
-    if let Some(wanted) = export_owner()
-        && !Rc::ptr_eq(&wanted, surface)
+    let export_to = export_owner();
+    if let Some(wanted) = export_to.as_ref()
+        && !Rc::ptr_eq(wanted, surface)
     {
         // Not this surface's: the export is the last setter's, whichever
         // order surfaces were walked in.
-        if !owner().is_some_and(|o| Rc::ptr_eq(&o, &wanted)) {
+        if !owner().is_some_and(|o| Rc::ptr_eq(&o, wanted)) {
             drop(EXPORT.with(|e| e.borrow_mut().take()));
-            if let Some(window) = crate::chrome::window(&wanted) {
-                let items = crate::chrome::application_menu(&wanted);
-                if place(&wanted, &window, items.as_deref(), up) {
-                    crate::chrome::show_menu_bar(&wanted);
+            if let Some(window) = crate::chrome::window(wanted) {
+                let items = crate::chrome::application_menu(wanted);
+                if place(wanted, &window, items.as_deref(), up) {
+                    crate::chrome::show_menu_bar(wanted);
                 }
             }
         }
         report(surface, up);
+        return false;
+    }
+    if export_to.is_none() && items.is_none() {
+        // No menu anywhere (the last `setApplicationMenu(null)` cleared
+        // it): the export ends rather than publish an empty menu, and the
+        // window's menu bar takes over.
+        let before = owner().filter(|o| !Rc::ptr_eq(o, surface));
+        drop(EXPORT.with(|e| e.borrow_mut().take()));
+        report(surface, up);
+        if let Some(before) = before {
+            report(&before, up);
+            crate::chrome::show_menu_bar(&before);
+        }
         return false;
     }
     // The surface that had the export, when it passes to this one.
@@ -801,6 +815,30 @@ mod tests {
                 calls.borrow()
             );
             let _ = bus.unregister_object(registration);
+        });
+    }
+
+    /// The last `setApplicationMenu(null)` ends the export rather than
+    /// publish an empty menu: `Menu.inGlobalMenu()` reads false.
+    #[test]
+    fn clearing_the_last_menu_ends_the_export() {
+        gtk_test::run(|| {
+            if session_bus().is_none() {
+                return;
+            }
+            drop(EXPORT.with(|e| e.borrow_mut().take()));
+            let surface = gtk_test::surface();
+            crate::system::watch_environment(&surface);
+            let window = gtk_test::show(&surface);
+            set_menu(&surface, Some(vec![action(1, "One's")]));
+            place(&surface, &window, Some(&[action(1, "One's")]), true);
+            assert!(owner().is_some());
+            assert!(surface.environment.get().global_menu);
+            set_menu(&surface, None);
+            place(&surface, &window, None, true);
+            assert!(owner().is_none(), "no empty menu stays in the panel");
+            assert!(!surface.environment.get().global_menu);
+            drop(window);
         });
     }
 
