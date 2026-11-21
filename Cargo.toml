@@ -54,7 +54,7 @@ nsh-platform-tui = { version = "0.6.0", path = "crates/nsh-platform-tui", defaul
 nsh-dev = { version = "0.6.0", path = "crates/nsh-dev" }
 nsh-testing = { version = "0.6.0", path = "crates/nsh-testing", default-features = false }
 nsh-gpui-agent = { version = "0.6.0", path = "crates/nsh-gpui-agent" }
-gpui-agent = "=0.2.1"
+gpui-agent = "=0.3.0"
 
 anyhow = "1"
 thiserror = "2"
