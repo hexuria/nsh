@@ -311,7 +311,7 @@ impl AppView {
         options: AppOptions,
         composed: bool,
     ) -> windows::core::Result<Rc<AppView>> {
-        let surface = Surface::new(initial_environment());
+        let surface = Surface::new(initial_environment(parent.is_none()));
         surface.appearance.set(options.appearance);
         if options.notifications {
             crate::notifications::start_app(
@@ -572,8 +572,12 @@ impl AppView {
     }
 }
 
-fn initial_environment() -> Environment {
+/// `top_level`: the window is the app's own. An embedded view's window is
+/// a child of the embedding app's — the command dispatcher ignores its
+/// tray commands, so it has no tray (`Tray.available()`).
+fn initial_environment(top_level: bool) -> Environment {
     Environment {
+        tray: top_level,
         window: Size::new(px(0.0), px(0.0)),
         color_scheme: ColorScheme::Light,
         os: Os::Windows,
@@ -937,6 +941,15 @@ mod tests {
         }
         // SAFETY: the test's own window.
         let _ = unsafe { DestroyWindow(view.hwnd()) };
+    }
+
+    /// `Tray.available()` is only an app's own window's: an embedded
+    /// view's window is a child, whose tray commands the dispatcher
+    /// ignores.
+    #[test]
+    fn only_a_top_level_window_reports_a_tray() {
+        assert!(!super::initial_environment(false).tray);
+        assert!(super::initial_environment(true).tray);
     }
 
     #[test]

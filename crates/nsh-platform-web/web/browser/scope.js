@@ -58,8 +58,8 @@ export function configureAPIs(nsh, modules, dom, active, env, page = {}) {
     isAvailable: false, titleBar: env.titleBar,
     Window, currentWindow: () => main, windows: () => [main], focusedWindow: () => null,
     windowState: () => null, displays: () => [],
-    Menu: { setApplicationMenu() {}, popup: () => Promise.resolve() },
-    Tray: { set() {} },
+    Menu: { inGlobalMenu: () => false, setApplicationMenu() {}, popup: () => Promise.resolve() },
+    Tray: { available: () => false, set() {} },
     GlobalShortcut: { register: () => Promise.resolve(false), unregister() {}, unregisterAll() {} },
   });
   for (const [name, tag] of Object.entries({View:"view",Text:"text",Scroll:"scroll",Overlay:"overlay",Image:"image",WebView:"webview",Video:"video",Shader:"shader"})) {

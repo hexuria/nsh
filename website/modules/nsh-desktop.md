@@ -844,6 +844,7 @@ const Menu: {
   setApplicationMenu(items: MenuItem[] | null): void;
   setMenuBar(mode: "shown" | "autoHide"): void;
   popup(items: MenuItem[], at?: Point): Promise<void>;
+  inGlobalMenu(): boolean;
 };
 ```
 
@@ -852,6 +853,7 @@ const Menu: {
 | `setApplicationMenu(items)` | Sets the application menu: one submenu per top-level item (`File`, `Edit`, ...). On macOS it is the menu bar, whose first menu is the app menu (AppKit titles it with the app's name). On Windows and Linux it is the window's menu bar, which is not shown while the title bar is hidden; its shortcuts still work, and a title bar of the app's own can open its menus with `Menu.popup`. `null` restores the platform's default menu. |
 | `setMenuBar(mode)` | On Windows and Linux in GPUI apps, where the window draws the application menu as a bar above the app: `"shown"` (the default) shows it always; `"autoHide"` shows it after Alt is pressed and released alone, until Alt alone hides it again, as in Windows and GNOME apps. F10 and Alt with a menu's initial open a menu either way, and the bar shows while it is open. macOS's menu bar is the system's. Rust: `set_menu_bar(mode)`. |
 | `popup(items, at?)` | Shows a context menu with its top left corner at `at` (the window's coordinates, in points: an `onContextMenu`'s `e.pagePosition`), or at the pointer. The promise resolves once the menu closes, whether an item was chosen or not: a button that opened it can stay pressed until then. |
+| `inGlobalMenu()` | Whether the application menu is in the desktop's global menu bar rather than in the window (reactive). On Linux under KDE Plasma with a Global Menu widget in a panel, NSH exports the menu to it and ties the window to it; this is `true` while it does. It turns `false` when the widget is removed, and the window's own menu bar comes back; `true` again when one is added. Set `NSH_GLOBAL_MENU=0` to keep the menu in the window. Always `false` elsewhere, macOS included (its menu bar is the system's). An app that draws its own menu row in a hidden title bar leaves it out while this holds. |
 
 In Rust, `set_application_menu(items)` takes a `Vec<MenuItem>` (`None` restores the platform's default menu), and `popup_menu(items)` (at the pointer) and `popup_menu_at(items, at)` return an `Answer<()>` that comes once the menu closes (awaiting it is optional). An item's handler runs under the owner that set the menu, while that owner lives.
 
@@ -1053,10 +1055,13 @@ text("More").on_press(|| {
 ```ts
 interface TrayModule {
   set(options: TrayOptions | null): void;
+  available(): boolean;
 }
 ```
 
 `Tray.set` shows the app's icon in the system tray, or changes it; `null` removes it. There is one per app. The tray is the notification area on Windows, the right side of the menu bar on macOS, and a StatusNotifierItem on Linux, which Plasma, Waybar and most panels show (GNOME needs the AppIndicator extension).
+
+`Tray.available()` says whether the system shows the icon (reactive): always on macOS and Windows — except in an app NSH is embedded in, which owns the tray itself and ignores `Tray.set`; on Linux while a panel hosts StatusNotifierItems (it follows panels that start or quit), where it reads `false` at launch until the check answers — read it when the app needs it, not once at start-up; `false` off the desktops. Where it is `false`, a window hidden to the tray could not be brought back: minimize it instead, and leave "hide to tray" out of the app's choices. In tests, `open(entry, { tray: false })` plays a desktop without one.
 
 | Option | Description |
 | --- | --- |

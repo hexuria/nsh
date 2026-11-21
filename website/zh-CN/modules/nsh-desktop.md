@@ -814,6 +814,7 @@ const Menu: {
   setApplicationMenu(items: MenuItem[] | null): void;
   setMenuBar(mode: "shown" | "autoHide"): void;
   popup(items: MenuItem[], at?: Point): Promise<void>;
+  inGlobalMenu(): boolean;
 };
 ```
 
@@ -822,6 +823,7 @@ const Menu: {
 | `setApplicationMenu(items)` | 设置应用菜单：每个顶层项是一个子菜单（`File`、`Edit`……）。在 macOS 上是菜单栏，第一个菜单是应用菜单（AppKit 以应用名作为标题）。在 Windows 和 Linux 上是窗口的菜单栏，隐藏标题栏时不显示；它的快捷键仍然有效，自定义标题栏可以用 `Menu.popup` 打开这些菜单。`null` 恢复平台默认菜单。 |
 | `setMenuBar(mode)` | 在 GPUI 应用的 Windows 和 Linux 上，窗口把应用菜单绘制成应用上方的菜单栏：`"shown"`（默认）始终显示；`"autoHide"` 在单独按下并松开 Alt 后显示，再次单独按 Alt 时隐藏，与 Windows 和 GNOME 应用一致。两种模式下 F10 和 Alt 加菜单首字母都会打开菜单，菜单打开期间菜单栏显示。macOS 的菜单栏是系统的。Rust：`set_menu_bar(mode)`。 |
 | `popup(items, at?)` | 显示右键菜单，左上角在 `at`（窗口坐标，单位为点：`onContextMenu` 的 `e.pagePosition`），省略时在指针处。菜单关闭时（无论是否选中了菜单项）返回的 Promise 会 resolve：打开它的按钮可以在此之前一直保持按下样式。 |
+| `inGlobalMenu()` | 应用菜单是否在桌面的全局菜单栏中，而不在窗口里（响应式）。在 Linux 的 KDE Plasma 上，面板里有全局菜单（Global Menu）小部件时，NSH 把菜单导出到它并把窗口与它关联；此期间为 `true`。移除该小部件时变为 `false`，窗口自己的菜单栏重新出现；再添加时又变为 `true`。设置 `NSH_GLOBAL_MENU=0` 可让菜单留在窗口里。其他平台始终为 `false`，包括 macOS（它的菜单栏是系统的）。在隐藏标题栏里自绘菜单行的应用，在它为 `true` 时不显示该行。 |
 
 在 Rust 中，`set_application_menu(items)` 接受 `Vec<MenuItem>`（`None` 恢复平台默认菜单），`popup_menu(items)`（在指针处）和 `popup_menu_at(items, at)` 返回一个 `Answer<()>`，菜单关闭时得到结果（可以不 await）。菜单项的处理函数在设置菜单的 owner 下运行，只在该 owner 存活期间有效。
 
@@ -1023,10 +1025,13 @@ text("更多").on_press(|| {
 ```ts
 interface TrayModule {
   set(options: TrayOptions | null): void;
+  available(): boolean;
 }
 ```
 
 `Tray.set` 在系统托盘显示应用图标，或修改它；传 `null` 移除。每个应用只有一个。托盘在 Windows 上是通知区域，在 macOS 上是菜单栏右侧，在 Linux 上是 StatusNotifierItem，Plasma、Waybar 和大多数面板都能显示（GNOME 需要 AppIndicator 扩展）。
+
+`Tray.available()` 表示系统是否显示该图标（响应式）：macOS 和 Windows 上始终为 `true`；Linux 上在有面板承载 StatusNotifierItem 时为 `true`（面板启动或退出时随之变化）；非桌面平台为 `false`。为 `false` 时，隐藏到托盘的窗口无法再被找回：应改为最小化，并且不要提供“隐藏到托盘”的选项。测试中可用 `open(entry, { tray: false })` 模拟没有托盘的桌面。
 
 | 选项 | 说明 |
 | --- | --- |

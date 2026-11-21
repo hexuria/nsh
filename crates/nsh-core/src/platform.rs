@@ -436,6 +436,24 @@ pub struct Environment {
     /// so it can turn `false` while the app runs, never back. A grid
     /// surface ([`Environment::cell`]) draws none.
     pub shaders: bool,
+    /// The system shows the app's tray icon (TS: `Tray.available()`, false
+    /// off the desktops). `true` by default, as on macOS and Windows —
+    /// except in an app NSH is embedded in, which owns the tray itself
+    /// (`Tray.set` does nothing there). On Linux, while a panel hosts
+    /// StatusNotifierItems (an `org.kde.StatusNotifierWatcher` is on the
+    /// session bus: Plasma, most panels, GNOME only with the AppIndicator
+    /// extension), live; it starts `false` until the bus answers, so an
+    /// app reads it when it needs it, not once at launch. Where it is
+    /// false a window hidden to the tray could not come back, so apps
+    /// minimize instead.
+    pub tray: bool,
+    /// The application menu is in the desktop's global menu bar rather than
+    /// in the window (TS: `Menu.inGlobalMenu()`): Linux under KDE Plasma
+    /// with a Global Menu widget, while the menu is exported and the window
+    /// tied to it; it turns false when the widget goes, and the window's
+    /// own menu bar comes back. `false` elsewhere, macOS included (its menu
+    /// bar is the system's, always).
+    pub global_menu: bool,
 }
 
 impl Environment {
@@ -517,6 +535,8 @@ impl Default for Environment {
             web_views: true,
             webview_requests: false,
             shaders: true,
+            tray: true,
+            global_menu: false,
         }
     }
 }

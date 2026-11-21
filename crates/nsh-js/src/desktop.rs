@@ -43,6 +43,11 @@ type Functions = Vec<(u32, JsValue)>;
 pub(crate) struct Menus {
     /// The application menu's functions (id, owned function).
     app: RefCell<Vec<(u32, JsValue)>>,
+    /// The application menu functions the current ones replaced: kept
+    /// one menu long — clicks issued against them may still be
+    /// dispatched after a click's carrying out replaces the menu
+    /// ([`on_menu`]).
+    retired: RefCell<Vec<(u32, JsValue)>>,
     /// The last context menu's functions.
     popup: RefCell<Vec<(u32, JsValue)>>,
     /// Trailing iOS header bar button functions, by screen node id.
@@ -66,6 +71,7 @@ impl Default for Menus {
     fn default() -> Self {
         Menus {
             app: RefCell::default(),
+            retired: RefCell::default(),
             popup: RefCell::default(),
             header: RefCell::default(),
             tray: RefCell::default(),
@@ -142,6 +148,7 @@ impl Menus {
             .app
             .get_mut()
             .drain(..)
+            .chain(self.retired.get_mut().drain(..))
             .chain(self.popup.get_mut().drain(..))
             .chain(self.tray.get_mut().drain(..))
             .chain(
@@ -437,6 +444,17 @@ fn keep(cx: *mut JsContext, slot: &RefCell<Vec<(u32, JsValue)>>, functions: Vec<
     }
 }
 
+/// `keep` for the application menu: the replaced functions retire one
+/// menu long — a click the panel dispatched before the replace still
+/// resolves its item's function ([`on_menu`]).
+fn keep_app(cx: *mut JsContext, functions: Vec<(u32, JsValue)>) {
+    let m = menus(cx);
+    let retired = m.retired.replace(m.app.replace(functions));
+    for (_, f) in retired {
+        free(cx, f);
+    }
+}
+
 fn send(cx: *mut JsContext, command: DesktopCommand) -> Result<(), JsValue> {
     dom::push_op(
         cx,
@@ -473,12 +491,12 @@ unsafe extern "C" fn set_application_menu(
     }
     let list = arg(argc, argv, 0);
     let result = if nullish(list) {
-        keep(cx, &menus(cx).app, Vec::new());
+        keep_app(cx, Vec::new());
         send(cx, DesktopCommand::SetMenu(None))
     } else {
         match decode(cx, list) {
             Ok((items, functions)) => {
-                keep(cx, &menus(cx).app, functions);
+                keep_app(cx, functions);
                 let items = MenuItem::with_inline_expanded(&items).into();
                 listen(cx).and_then(|()| send(cx, DesktopCommand::SetMenu(Some(items))))
             }
@@ -598,7 +616,7 @@ unsafe extern "C" fn on_menu(
         return UNDEFINED;
     }
     let m = menus(cx);
-    let f = [&m.app, &m.popup, &m.tray]
+    let f = [&m.app, &m.retired, &m.popup, &m.tray]
         .into_iter()
         .find_map(|slot| {
             slot.borrow()
@@ -1045,6 +1063,8 @@ fn tray(cx: *mut JsContext) -> JsValue {
         let o = qjs::JS_NewObject(cx);
         let set = reactive::new_function(cx, c"set", set_tray, 1);
         qjs::JS_SetPropertyStr(cx, o, c"set".as_ptr(), set);
+        let available = crate::env::tray(cx);
+        qjs::JS_SetPropertyStr(cx, o, c"available".as_ptr(), available);
         o
     }
 }
@@ -1192,6 +1212,8 @@ fn menu(cx: *mut JsContext) -> JsValue {
         qjs::JS_SetPropertyStr(cx, o, c"popup".as_ptr(), pop);
         let bar = reactive::new_function(cx, c"setMenuBar", set_menu_bar, 1);
         qjs::JS_SetPropertyStr(cx, o, c"setMenuBar".as_ptr(), bar);
+        let global = crate::env::global_menu(cx);
+        qjs::JS_SetPropertyStr(cx, o, c"inGlobalMenu".as_ptr(), global);
         o
     }
 }
@@ -1567,6 +1589,14 @@ export interface MenuModule {
    * the menu closes, chosen or dismissed: a button that opened it can look
    * pressed until then. */
   popup(items: readonly (MenuItem | null | undefined | false)[], at?: Point): Promise<void>;
+  /** Whether the application menu is in the desktop's global menu bar
+   * rather than in the window (reactive): on Linux under KDE Plasma with a
+   * Global Menu widget, once the menu is exported to it and the window tied
+   * to it. It turns `false` when the widget goes (the window's menu bar
+   * shows again) and `true` when one comes. Always `false` elsewhere,
+   * macOS included, whose menu bar is the system's. An app that draws its
+   * own menu row in a hidden title bar leaves it out while this holds. */
+  inGlobalMenu(): boolean;
 }
 
 /** A click on the tray's icon. */
@@ -1621,6 +1651,12 @@ export interface TrayModule {
   /** Shows the icon, or changes it (in an `effect`, it follows the signals
    * it reads); `null` removes it. One per app. */
   set(options: TrayOptions | null): void;
+  /** Whether the system shows the app's icon (reactive): always on macOS
+   * and Windows; on Linux while a panel hosts StatusNotifierItems
+   * (Plasma, most panels; GNOME only with the AppIndicator extension).
+   * `false` off the desktops. Where it is `false`, a window hidden to the
+   * tray could not be brought back: minimize it instead. */
+  available(): boolean;
 }
 
 /** Keystrokes the app hears whichever app has the keyboard. */
@@ -1670,5 +1706,77 @@ mod tests {
         names.sort();
         roles.sort();
         assert_eq!(names, roles);
+    }
+
+    /// A click a panel dispatched against a menu still runs after the
+    /// click before it replaced the menu: the replaced functions are
+    /// retired, not freed, one menu long.
+    #[test]
+    fn a_click_queued_before_the_menu_was_replaced_still_runs() {
+        use std::{cell::Cell, ffi::c_int};
+
+        use super::{UNDEFINED, keep_app, on_menu, reactive};
+
+        thread_local! {
+            static CALLS: Cell<u32> = const { Cell::new(0) };
+        }
+        unsafe extern "C" fn record(
+            _cx: *mut super::qjs::JSContext,
+            _this: super::JsValue,
+            _argc: c_int,
+            _argv: *mut super::JsValue,
+        ) -> super::JsValue {
+            CALLS.with(|c| c.set(c.get() + 1));
+            UNDEFINED
+        }
+
+        let host = crate::Host::new().unwrap();
+        host.with_raw(|cx| {
+            let event = |id: u32| {
+                // SAFETY: `cx` is the host's live context.
+                let e = unsafe { super::qjs::JS_NewObject(cx) };
+                // SAFETY: `e` is this block's live object, in `cx`.
+                unsafe {
+                    super::qjs::JS_SetPropertyStr(
+                        cx,
+                        e,
+                        c"id".as_ptr(),
+                        super::qjs::JS_NewFloat64(f64::from(id)),
+                    )
+                };
+                e
+            };
+            // SAFETY: `e` is a live object owned here; its result and
+            // `e` are freed once read.
+            let on = |id: u32| unsafe {
+                let mut e = event(id);
+                let r = on_menu(cx, UNDEFINED, 1, &mut e);
+                super::qjs::JS_FreeValue(cx, r);
+                super::qjs::JS_FreeValue(cx, e);
+            };
+            let function = || reactive::new_function(cx, c"f", record, 0);
+            let calls = || CALLS.with(|c| c.get());
+
+            // Item 7 of the menu in the panel was clicked; while that
+            // click was queued, the item before it replaced the menu.
+            keep_app(cx, vec![(7, function())]);
+            keep_app(cx, vec![(9, function())]);
+            on(7);
+            assert_eq!(calls(), 1, "the click's item still resolves");
+            on(9);
+            assert_eq!(calls(), 2);
+            // One menu long: a second replace frees the first's.
+            keep_app(cx, vec![(11, function())]);
+            on(7);
+            assert_eq!(calls(), 2, "a freed function cannot run");
+            on(11);
+            assert_eq!(calls(), 3);
+            // Clearing the menu retires its functions the same way.
+            keep_app(cx, Vec::new());
+            on(11);
+            assert_eq!(calls(), 4, "a click of the menu that was still runs");
+            on(9);
+            assert_eq!(calls(), 4);
+        });
     }
 }

@@ -6357,10 +6357,14 @@
 			windowState: () => null,
 			displays: () => [],
 			Menu: {
+				inGlobalMenu: () => false,
 				setApplicationMenu() {},
 				popup: () => Promise.resolve()
 			},
-			Tray: { set() {} },
+			Tray: {
+				available: () => false,
+				set() {}
+			},
 			GlobalShortcut: {
 				register: () => Promise.resolve(false),
 				unregister() {},

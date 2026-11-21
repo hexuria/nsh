@@ -37,8 +37,8 @@ use crate::surface::Surface;
 
 const ITEM_PATH: &str = "/StatusNotifierItem";
 const MENU_PATH: &str = "/MenuBar";
-const WATCHER: &str = "org.kde.StatusNotifierWatcher";
-const WATCHER_PATH: &str = "/StatusNotifierWatcher";
+pub(crate) const WATCHER: &str = "org.kde.StatusNotifierWatcher";
+pub(crate) const WATCHER_PATH: &str = "/StatusNotifierWatcher";
 const ITEM_INTERFACE: &str = "org.kde.StatusNotifierItem";
 pub(crate) const MENU_INTERFACE: &str = "com.canonical.dbusmenu";
 /// The sizes the icon is sent at, in pixels: panels pick the nearest.
@@ -791,6 +791,21 @@ mod tests {
                 .lookup_value("shortcut", None)
                 .is_none()
         );
+    }
+
+    #[test]
+    fn an_event_group_reports_every_clicked_item_in_order() {
+        let event = |id: i32, name: &str| (id, name.to_owned(), 0i32.to_variant(), 0u32);
+        let events = vec![
+            event(3, "clicked"),
+            event(5, "hovered"),
+            event(7, "clicked"),
+        ];
+        let params = (events,).to_variant();
+        assert_eq!(params.type_().as_str(), "(a(isvu))");
+        let mut clicked = Vec::new();
+        dbusmenu_call(&[], 1, "EventGroup", &params, &mut |id| clicked.push(id));
+        assert_eq!(clicked, vec![3, 7]);
     }
 
     #[test]

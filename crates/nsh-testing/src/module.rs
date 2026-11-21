@@ -289,6 +289,8 @@ impl Testing {
             host_handlers,
             module_fakes,
             url_scheme: options.url_scheme,
+            tray: options.tray,
+            global_menu: options.global_menu,
         };
         let opening = blocking(move || session.open(&entry, launch));
         let (app, storage, requests) = serve(server.as_ref(), opening)
@@ -439,6 +441,18 @@ pub struct OpenOptions {
     /// `schemes`), as from the system. Headless runs only: with
     /// `--target` it rejects (`ERR_NSH_TEST_UNSUPPORTED`).
     pub url_scheme: Option<String>,
+    /// The system shows the app's tray icon (true): `false` plays a desktop
+    /// whose panels host none (Linux without a StatusNotifierWatcher, GNOME
+    /// without the AppIndicator extension), where `Tray.available()` is
+    /// false. Headless runs only: with `--target` the platform says, and
+    /// the option rejects (`ERR_NSH_TEST_UNSUPPORTED`).
+    pub tray: Option<bool>,
+    /// The application menu is in the desktop's global menu bar (false):
+    /// `true` plays KDE Plasma with a Global Menu widget, where
+    /// `Menu.inGlobalMenu()` is true. Headless runs only: with `--target`
+    /// the platform says, and the option rejects
+    /// (`ERR_NSH_TEST_UNSUPPORTED`).
+    pub global_menu: Option<bool>,
     /// Stand-ins for exports of the native modules the app imports (its
     /// crate's, `nsh/base`'s, the runtime's), by the module's specifier,
     /// then by export (`"save"`) or member of one (`"Keychain.get"`): a
@@ -1512,6 +1526,10 @@ pub(crate) struct Launch {
     pub(crate) module_fakes: bool,
     /// The link that launched the app (a headless run's only).
     pub(crate) url_scheme: Option<String>,
+    /// Whether the system shows a tray icon (headless runs only).
+    pub(crate) tray: Option<bool>,
+    /// Whether the menu is in a global menu bar (headless runs only).
+    pub(crate) global_menu: Option<bool>,
 }
 
 /// The network an app opens with, made where it starts (it is `Send`).

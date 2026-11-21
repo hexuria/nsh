@@ -698,6 +698,8 @@ impl Session {
                     _ => Idiom::Desktop,
                 },
                 host: page_host.is_some(),
+                tray: launch.tray.unwrap_or(true),
+                global_menu: launch.global_menu.unwrap_or(false),
                 ..Default::default()
             },
             ui_sets: self.run.ui_sets.clone(),
@@ -943,6 +945,18 @@ fn check_launch(entry: &str, launch: &Launch, target: Option<&HostTarget>) -> Re
         return unsupported(
             "url",
             "the system hands links to packaged apps: run the test without --target",
+        );
+    }
+    if launch.tray.is_some() {
+        return unsupported(
+            "tray",
+            "the platform says whether its panels show a tray icon: run the test without --target",
+        );
+    }
+    if launch.global_menu.is_some() {
+        return unsupported(
+            "globalMenu",
+            "the platform says whether the desktop has a global menu bar: run the test without --target",
         );
     }
     let Some(target) = target else {
@@ -1321,6 +1335,8 @@ mod tests {
             host_handlers: false,
             module_fakes: false,
             url_scheme: None,
+            tray: None,
+            global_menu: None,
         }
     }
 
@@ -1357,6 +1373,19 @@ mod tests {
             "{error}"
         );
         assert_eq!(code_of(&error), Some(UNSUPPORTED));
+
+        // The tray and the global menu bar: the platform's to say.
+        let mut trayless = launch();
+        trayless.tray = Some(false);
+        let mut global = launch();
+        global.global_menu = Some(true);
+        for (option, desk) in [("tray", trayless), ("globalMenu", global)] {
+            let error = check(&desk, &macos).unwrap_err();
+            assert!(
+                error.contains(&format!("`{option}` is unsupported on --target macos")),
+                "{error}"
+            );
+        }
 
         // A size: a desktop's window takes it, a device's screen does not.
         let mut sized = launch();
