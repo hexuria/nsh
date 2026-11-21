@@ -437,12 +437,13 @@ pub struct Environment {
     /// surface ([`Environment::cell`]) draws none.
     pub shaders: bool,
     /// The system shows the app's tray icon (TS: `Tray.available()`, false
-    /// off the desktops). `true` by default, as on macOS and Windows; on
-    /// Linux, while a panel hosts StatusNotifierItems (an
-    /// `org.kde.StatusNotifierWatcher` is on the session bus: Plasma, most
-    /// panels, GNOME only with the AppIndicator extension), live. Where it
-    /// is false a window hidden to the tray could not come back, so apps
-    /// minimize instead.
+    /// off the desktops). `true` by default, as on macOS and Windows —
+    /// except in an app NSH is embedded in, which owns the tray itself
+    /// (`Tray.set` does nothing there). On Linux, while a panel hosts
+    /// StatusNotifierItems (an `org.kde.StatusNotifierWatcher` is on the
+    /// session bus: Plasma, most panels, GNOME only with the AppIndicator
+    /// extension), live. Where it is false a window hidden to the tray
+    /// could not come back, so apps minimize instead.
     pub tray: bool,
     /// The application menu is in the desktop's global menu bar rather than
     /// in the window (TS: `Menu.inGlobalMenu()`): Linux under KDE Plasma
