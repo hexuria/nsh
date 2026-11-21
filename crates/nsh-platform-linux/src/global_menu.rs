@@ -137,6 +137,10 @@ enum Tie {
         xid: u32,
         #[allow(dead_code)]
         bus: gio::DBusConnection,
+        /// This `RegisterWindow` call's own number: a refusal of an
+        /// earlier registration must not undo this newer tie.
+        #[allow(dead_code)]
+        registration: u64,
     },
     /// Neither backend could (an unknown GDK backend): nothing shows.
     None,
@@ -145,7 +149,7 @@ enum Tie {
 #[cfg(feature = "global-menu")]
 impl Drop for Tie {
     fn drop(&mut self) {
-        if let Tie::X11 { xid, bus } = self {
+        if let Tie::X11 { xid, bus, .. } = self {
             unregister_x11(bus, *xid);
         }
     }
@@ -163,6 +167,9 @@ thread_local! {
     static EXPORT: RefCell<Option<Export>> = const { RefCell::new(None) };
     /// The registrar is on the bus (`None`: not asked yet).
     static REGISTRAR_UP: Cell<Option<bool>> = const { Cell::new(None) };
+    /// Each `RegisterWindow` call's own number: a refusal answered late
+    /// belongs to one tie, not to whichever the window has now.
+    static NEXT_REGISTRATION: Cell<u64> = const { Cell::new(0) };
 }
 
 /// `surface`'s menu is in the Global Menu: exported, and its window tied
@@ -408,10 +415,12 @@ fn tie_surface(bus: &gio::DBusConnection, window: &gtk::Window, surface: &gdk::S
         return Tie::Wayland(menu);
     }
     if let Some(xid) = x11_window(surface) {
-        register_x11(bus, xid);
+        let registration = NEXT_REGISTRATION.with(|n| n.replace(n.get() + 1));
+        register_x11(bus, xid, registration);
         return Tie::X11 {
             xid,
             bus: bus.clone(),
+            registration,
         };
     }
     log::warn!("nsh: the Global Menu cannot be tied to this window (neither Wayland nor X11)");
@@ -432,7 +441,7 @@ fn x11_window(surface: &gdk::Surface) -> Option<u32> {
 
 /// Tells the registrar which menu window `xid` has.
 #[cfg_attr(not(feature = "global-menu"), allow(dead_code))]
-fn register_x11(bus: &gio::DBusConnection, xid: u32) {
+fn register_x11(bus: &gio::DBusConnection, xid: u32, registration: u64) {
     let Ok(path) = glib::variant::ObjectPath::try_from(MENU_PATH.to_owned()) else {
         return;
     };
@@ -449,22 +458,23 @@ fn register_x11(bus: &gio::DBusConnection, xid: u32) {
         move |result| {
             if let Err(e) = result {
                 log::warn!("nsh: the Global Menu's registrar refused the window: {e}");
-                untie(xid);
+                untie(registration);
             }
         },
     );
 }
 
-/// The registrar refused `xid`'s `RegisterWindow`: the window was never
+/// The registrar refused registration `number`: the window was never
 /// tied after all — the export stays untied, the app is told the menu is
 /// its window's again (`Menu.inGlobalMenu()` false) and the bar shows.
+/// A newer tie of the same window has a newer number and is left alone.
 #[cfg_attr(not(feature = "global-menu"), allow(dead_code))]
-fn untie(xid: u32) {
+fn untie(number: u64) {
     let surface = EXPORT.with(|e| {
         let mut e = e.borrow_mut();
         let x = e.as_mut()?;
         let (_, tie) = x.tied.as_mut()?;
-        if matches!(tie, Tie::X11 { xid: tied, .. } if *tied == xid) {
+        if matches!(tie, Tie::X11 { registration, .. } if *registration == number) {
             *tie = Tie::None;
         }
         x.surface.upgrade()
@@ -744,7 +754,7 @@ mod tests {
             };
             drop(EXPORT.with(|e| e.borrow_mut().take()));
             // A registrar of the test's own, recording its calls.
-            let (registration, calls) = fake_registrar(&bus, true);
+            let (registration, calls) = fake_registrar(&bus, 0);
 
             let one = gtk_test::surface();
             let two = gtk_test::surface();
@@ -811,10 +821,10 @@ mod tests {
     type Calls = Rc<RefCell<Vec<(String, u32)>>>;
 
     /// The registrar's name and object, recorded method calls: a fake
-    /// registrar on the tests' session bus. `answers` decides whether
-    /// `RegisterWindow` succeeds.
+    /// registrar on the tests' session bus. The first `failures`
+    /// `RegisterWindow` calls are refused, the rest succeed.
     #[cfg(feature = "global-menu")]
-    fn fake_registrar(bus: &gio::DBusConnection, answers: bool) -> (gio::RegistrationId, Calls) {
+    fn fake_registrar(bus: &gio::DBusConnection, failures: usize) -> (gio::RegistrationId, Calls) {
         let reply = bus
             .call_sync(
                 Some("org.freedesktop.DBus"),
@@ -849,7 +859,7 @@ mod tests {
                     method.to_owned(),
                     params.child_value(0).get::<u32>().unwrap_or(0),
                 ));
-                if answers {
+                if recorded.borrow().len() > failures {
                     invocation.return_value(None);
                 } else {
                     invocation.return_dbus_error("org.nsh.test.Refused", "the panel refused");
@@ -895,7 +905,7 @@ mod tests {
                 return;
             };
             drop(EXPORT.with(|e| e.borrow_mut().take()));
-            let (registration, _calls) = fake_registrar(&bus, false);
+            let (registration, _calls) = fake_registrar(&bus, usize::MAX);
             let surface = gtk_test::surface();
             crate::system::watch_environment(&surface);
             let window = gtk_test::show(&surface);
@@ -916,6 +926,71 @@ mod tests {
             assert!(
                 gtk_test::wait_until(|| !surface.environment.get().global_menu),
                 "a refused window is not reported as exported"
+            );
+            let _ = bus.unregister_object(registration);
+            release_name(&bus, REGISTRAR);
+            drop(window);
+        });
+    }
+
+    /// A refusal answered for an earlier `RegisterWindow` must not
+    /// untie the registration the window has now.
+    #[cfg(feature = "global-menu")]
+    #[test]
+    fn a_late_refusal_leaves_the_newer_tie() {
+        gtk_test::run(|| {
+            let Some(bus) = session_bus() else {
+                return;
+            };
+            drop(EXPORT.with(|e| e.borrow_mut().take()));
+            // The first registration is refused, the next succeeds.
+            let (registration, calls) = fake_registrar(&bus, 1);
+            let surface = gtk_test::surface();
+            crate::system::watch_environment(&surface);
+            let window = gtk_test::show(&surface);
+            if window.surface().and_then(|s| x11_window(&s)).is_none() {
+                return;
+            }
+            set_menu(&surface, Some(vec![action(1, "One's")]));
+            let items = crate::chrome::application_menu(&surface);
+            place(&surface, &window, items.as_deref(), true);
+            // The export ends and starts again for the same window
+            // (registrar cycling, for instance): a new registration of
+            // the same xid is pending before the first one's refusal
+            // can land.
+            drop(EXPORT.with(|e| e.borrow_mut().take()));
+            place(&surface, &window, items.as_deref(), true);
+            assert!(
+                gtk_test::wait_until(|| calls
+                    .borrow()
+                    .iter()
+                    .filter(|(m, _)| m == "RegisterWindow")
+                    .count()
+                    == 2),
+                "the window registered twice: {:?}",
+                calls.borrow()
+            );
+            // Let the registrar's replies land.
+            let cx = glib::MainContext::default();
+            let until = std::time::Instant::now() + std::time::Duration::from_millis(250);
+            while std::time::Instant::now() < until {
+                if !cx.iteration(false) {
+                    std::thread::sleep(std::time::Duration::from_millis(2));
+                }
+            }
+            assert!(
+                surface.environment.get().global_menu,
+                "the stale refusal left the newer tie alone"
+            );
+            assert_eq!(
+                calls
+                    .borrow()
+                    .iter()
+                    .filter(|(m, _)| m == "UnregisterWindow")
+                    .count(),
+                1,
+                "only the dropped export unregistered: {:?}",
+                calls.borrow()
             );
             let _ = bus.unregister_object(registration);
             release_name(&bus, REGISTRAR);
