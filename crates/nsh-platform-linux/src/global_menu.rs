@@ -130,9 +130,25 @@ enum Tie {
     /// Held for its `Drop`, which releases KWin's appmenu object.
     #[cfg(feature = "global-menu")]
     Wayland(#[allow(dead_code)] wayland::Appmenu),
-    X11,
+    /// The registrar's `RegisterWindow`; `Drop` takes it back
+    /// (`UnregisterWindow`), so a handover frees the previous window.
+    X11 {
+        #[allow(dead_code)]
+        xid: u32,
+        #[allow(dead_code)]
+        bus: gio::DBusConnection,
+    },
     /// Neither backend could (an unknown GDK backend): nothing shows.
     None,
+}
+
+#[cfg(feature = "global-menu")]
+impl Drop for Tie {
+    fn drop(&mut self) {
+        if let Tie::X11 { xid, bus } = self {
+            unregister_x11(bus, *xid);
+        }
+    }
 }
 
 impl Drop for Export {
@@ -379,7 +395,10 @@ fn tie_surface(bus: &gio::DBusConnection, window: &gtk::Window, surface: &gdk::S
     }
     if let Some(xid) = x11_window(surface) {
         register_x11(bus, xid);
-        return Tie::X11;
+        return Tie::X11 {
+            xid,
+            bus: bus.clone(),
+        };
     }
     log::warn!("nsh: the Global Menu cannot be tied to this window (neither Wayland nor X11)");
     Tie::None
@@ -416,6 +435,29 @@ fn register_x11(bus: &gio::DBusConnection, xid: u32) {
         |result| {
             if let Err(e) = result {
                 log::warn!("nsh: the Global Menu's registrar refused the window: {e}");
+            }
+        },
+    );
+}
+
+/// Tells the registrar window `xid` no longer has the menu.
+#[cfg(feature = "global-menu")]
+fn unregister_x11(bus: &gio::DBusConnection, xid: u32) {
+    bus.call(
+        Some(REGISTRAR),
+        REGISTRAR_PATH,
+        REGISTRAR,
+        "UnregisterWindow",
+        Some(&(xid,).to_variant()),
+        None,
+        gio::DBusCallFlags::NONE,
+        5000,
+        gio::Cancellable::NONE,
+        |result| {
+            if let Err(e) = result {
+                // The registrar is gone half the times this runs (the
+                // widget went, the export ended with it).
+                log::debug!("nsh: the window was not untied from the Global Menu: {e}");
             }
         },
     );
@@ -652,6 +694,113 @@ mod tests {
             assert_eq!(chosen[0].1, 30);
             assert_eq!(chosen[1].1, 70);
             drop(EXPORT.with(|e| e.borrow_mut().take()));
+        });
+    }
+
+    #[cfg(feature = "global-menu")]
+    #[test]
+    fn a_handover_unregisters_the_previous_window() {
+        gtk_test::run(|| {
+            let Some(bus) = session_bus() else {
+                return;
+            };
+            drop(EXPORT.with(|e| e.borrow_mut().take()));
+            // A registrar of the test's own, recording its calls.
+            let calls: Rc<RefCell<Vec<(String, u32)>>> = Rc::default();
+            let reply = bus
+                .call_sync(
+                    Some("org.freedesktop.DBus"),
+                    "/org/freedesktop/DBus",
+                    "org.freedesktop.DBus",
+                    "RequestName",
+                    Some(&(REGISTRAR, 0u32).to_variant()),
+                    None,
+                    gio::DBusCallFlags::NONE,
+                    5000,
+                    gio::Cancellable::NONE,
+                )
+                .expect("the name answers");
+            assert_eq!(
+                reply.get::<(u32,)>().map(|(code,)| code),
+                Some(1),
+                "the registrar's name is owned"
+            );
+            let xml = "<node><interface name='com.canonical.AppMenu.Registrar'>\
+                       <method name='RegisterWindow'><arg type='u' direction='in'/>\
+                       <arg type='o' direction='in'/></method>\
+                       <method name='UnregisterWindow'><arg type='u' direction='in'/></method>\
+                       </interface></node>";
+            let info = gio::DBusNodeInfo::for_xml(xml).unwrap();
+            let interface = info.lookup_interface(REGISTRAR).unwrap();
+            let recorded = calls.clone();
+            let registration = bus
+                .register_object(REGISTRAR_PATH, &interface)
+                .method_call(move |_, _, _, _, method, params, invocation| {
+                    recorded.borrow_mut().push((
+                        method.to_owned(),
+                        params.child_value(0).get::<u32>().unwrap_or(0),
+                    ));
+                    invocation.return_value(None);
+                })
+                .build()
+                .expect("the registrar object registers");
+
+            let one = gtk_test::surface();
+            let two = gtk_test::surface();
+            crate::system::watch_environment(&one);
+            crate::system::watch_environment(&two);
+            // `one` exports first: `two` has no window yet, so `SetMenu`
+            // only stores its menu.
+            set_menu(&two, Some(vec![action(1, "Second's")]));
+            let w1 = gtk_test::show(&one);
+            set_menu(&one, Some(vec![action(2, "First's")]));
+            let x1 = w1
+                .surface()
+                .and_then(|s| x11_window(&s))
+                .expect("an X11 window");
+            place(
+                &one,
+                &w1,
+                crate::chrome::application_menu(&one).as_deref(),
+                true,
+            );
+            assert!(owner().is_some_and(|o| Rc::ptr_eq(&o, &one)));
+            assert!(
+                gtk_test::wait_until(|| calls.borrow().iter().any(|(m, _)| m == "RegisterWindow")),
+                "the first window registers"
+            );
+            // `two`'s `SetMenu` makes it the last setter; the export
+            // moves to it and its window takes the registration.
+            set_menu(&two, Some(vec![action(1, "Second's")]));
+            let w2 = gtk_test::show(&two);
+            let x2 = w2
+                .surface()
+                .and_then(|s| x11_window(&s))
+                .expect("an X11 window");
+            place(
+                &two,
+                &w2,
+                crate::chrome::application_menu(&two).as_deref(),
+                true,
+            );
+            assert!(owner().is_some_and(|o| Rc::ptr_eq(&o, &two)));
+            assert!(!one.environment.get().global_menu);
+            assert!(two.environment.get().global_menu);
+            let until = || {
+                let calls = calls.borrow();
+                calls
+                    .iter()
+                    .any(|&(ref m, x)| m == "RegisterWindow" && x == x2)
+                    && calls
+                        .iter()
+                        .any(|&(ref m, x)| m == "UnregisterWindow" && x == x1)
+            };
+            assert!(
+                gtk_test::wait_until(until),
+                "the previous window is untied: {:?}",
+                calls.borrow()
+            );
+            let _ = bus.unregister_object(registration);
         });
     }
 
