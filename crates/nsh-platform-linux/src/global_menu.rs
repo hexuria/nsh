@@ -633,6 +633,13 @@ mod tests {
         gio::bus_get_sync(gio::BusType::Session, gio::Cancellable::NONE).ok()
     }
 
+    /// Whether the display backend is X11, the only backend the
+    /// registrar's window registrations apply to.
+    #[cfg(feature = "global-menu")]
+    fn x11_display() -> bool {
+        gdk::Display::default().is_some_and(|d| d.is::<gdk4_x11::X11Display>())
+    }
+
     #[test]
     fn a_widget_keeps_the_panel_on_the_menu_set_last_not_the_last_surface() {
         gtk_test::run(|| {
@@ -753,6 +760,10 @@ mod tests {
                 return;
             };
             drop(EXPORT.with(|e| e.borrow_mut().take()));
+            // X11-only: other backends do not register with the registrar.
+            if !x11_display() {
+                return;
+            }
             // A registrar of the test's own, recording its calls.
             let (registration, calls) = fake_registrar(&bus, 0);
 
@@ -765,11 +776,10 @@ mod tests {
             set_menu(&two, Some(vec![action(1, "Second's")]));
             let w1 = gtk_test::show(&one);
             set_menu(&one, Some(vec![action(2, "First's")]));
-            let Some(x1) = w1.surface().and_then(|s| x11_window(&s)) else {
-                let _ = bus.unregister_object(registration);
-                release_name(&bus, REGISTRAR);
-                return;
-            };
+            let x1 = w1
+                .surface()
+                .and_then(|s| x11_window(&s))
+                .expect("an X11 window");
             place(
                 &one,
                 &w1,
@@ -785,11 +795,10 @@ mod tests {
             // moves to it and its window takes the registration.
             set_menu(&two, Some(vec![action(1, "Second's")]));
             let w2 = gtk_test::show(&two);
-            let Some(x2) = w2.surface().and_then(|s| x11_window(&s)) else {
-                let _ = bus.unregister_object(registration);
-                release_name(&bus, REGISTRAR);
-                return;
-            };
+            let x2 = w2
+                .surface()
+                .and_then(|s| x11_window(&s))
+                .expect("an X11 window");
             place(
                 &two,
                 &w2,
@@ -910,9 +919,14 @@ mod tests {
             let surface = gtk_test::surface();
             crate::system::watch_environment(&surface);
             let window = gtk_test::show(&surface);
-            if window.surface().and_then(|s| x11_window(&s)).is_none() {
+            // X11-only: other backends do not register with the registrar.
+            if !x11_display() {
                 return;
             }
+            window
+                .surface()
+                .and_then(|s| x11_window(&s))
+                .expect("an X11 window");
             let (registration, _calls) = fake_registrar(&bus, usize::MAX);
             set_menu(&surface, Some(vec![action(1, "One's")]));
             place(
@@ -948,9 +962,14 @@ mod tests {
             let surface = gtk_test::surface();
             crate::system::watch_environment(&surface);
             let window = gtk_test::show(&surface);
-            let Some(xid) = window.surface().and_then(|s| x11_window(&s)) else {
+            // X11-only: other backends do not register with the registrar.
+            if !x11_display() {
                 return;
-            };
+            }
+            let xid = window
+                .surface()
+                .and_then(|s| x11_window(&s))
+                .expect("an X11 window");
             // The first registration is refused, the next succeeds.
             let (registration, calls) = fake_registrar(&bus, 1);
             set_menu(&surface, Some(vec![action(1, "One's")]));
