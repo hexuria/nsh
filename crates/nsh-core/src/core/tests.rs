@@ -48756,6 +48756,37 @@ mod folded_runs {
     }
 
     #[test]
+    fn a_full_slab_keeps_a_blocks_folded_text() {
+        let mut c = core();
+        block(&mut c, 2);
+        apply(&mut c, vec![run(3, "hello"), insert(2, 3, None)]);
+        apply(
+            &mut c,
+            vec![Op::Create {
+                id: 4,
+                tag: Tag::View,
+            }],
+        );
+        c.commit();
+        // The quota tightened under them: materializing the run fails,
+        // the insert propagates it and the text stays where it was.
+        c.set_max_nodes(3);
+        assert!(matches!(
+            c.apply(insert(2, 4, None)),
+            Err(ApplyError::TooManyNodes(3))
+        ));
+        assert_eq!(c.text_content(2), "hello");
+        assert_eq!(c.folded.len(), 1);
+        assert_eq!(raw_nodes(&c), 0);
+        // Given room again, the same insert succeeds.
+        c.set_max_nodes(10);
+        apply(&mut c, vec![insert(2, 4, None)]);
+        assert_eq!(raw_nodes(&c), 1);
+        assert_eq!(c.text_content(2), "hello");
+        assert!(c.folded.is_empty());
+    }
+
+    #[test]
     fn a_run_in_a_span_folds_and_keeps_its_place() {
         // <Text>a<Text bold>b</Text>c</Text>
         let mut c = core();
