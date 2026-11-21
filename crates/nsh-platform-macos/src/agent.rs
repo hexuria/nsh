@@ -385,8 +385,20 @@ impl Native for MacNative {
                 }
                 None => hit,
             };
-            let mut current = Some(hit);
             let mounter = surface.mounter.borrow();
+            // A lifted input's pad is hosted outside its view's subtree
+            // (`crate::text_input`): the press it takes goes to the
+            // input's editor, so the hit is the input's own, not an
+            // occlusion by the view the pad sits on.
+            if let Some((&id, _)) = mounter.views.iter().find(|(_, view)| {
+                view.state()
+                    .input
+                    .as_ref()
+                    .is_some_and(|input| crate::text_input::pad_owns(input, &hit))
+            }) {
+                return Some(id);
+            }
+            let mut current = Some(hit);
             while let Some(native) = current {
                 if let Some(view) = crate::view::NshView::from_ns(&native)
                     && let Some(owner) = mounter.views.get(&view.id())
