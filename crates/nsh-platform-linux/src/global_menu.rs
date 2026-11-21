@@ -765,7 +765,8 @@ mod tests {
                 return;
             }
             // A registrar of the test's own, recording its calls.
-            let (registration, calls) = fake_registrar(&bus, 0);
+            let registrar = Registrar::claim(&bus, 0);
+            let calls = registrar.calls.clone();
 
             let one = gtk_test::surface();
             let two = gtk_test::surface();
@@ -822,14 +823,44 @@ mod tests {
                 "the previous window is untied: {:?}",
                 calls.borrow()
             );
-            let _ = bus.unregister_object(registration);
-            release_name(&bus, REGISTRAR);
         });
     }
 
     /// The registrar's recorded `(method, window)` calls.
     #[cfg(feature = "global-menu")]
     type Calls = Rc<RefCell<Vec<(String, u32)>>>;
+
+    /// A claimed registrar name: the object registration and bus name
+    /// are released on every exit, so a panicking test cannot leave
+    /// the shared session bus's name claimed for the next test.
+    #[cfg(feature = "global-menu")]
+    struct Registrar<'a> {
+        bus: &'a gio::DBusConnection,
+        registration: Option<gio::RegistrationId>,
+        calls: Calls,
+    }
+
+    #[cfg(feature = "global-menu")]
+    impl<'a> Registrar<'a> {
+        fn claim(bus: &'a gio::DBusConnection, failures: usize) -> Self {
+            let (registration, calls) = fake_registrar(bus, failures);
+            Self {
+                bus,
+                registration: Some(registration),
+                calls,
+            }
+        }
+    }
+
+    #[cfg(feature = "global-menu")]
+    impl Drop for Registrar<'_> {
+        fn drop(&mut self) {
+            if let Some(id) = self.registration.take() {
+                let _ = self.bus.unregister_object(id);
+            }
+            release_name(self.bus, REGISTRAR);
+        }
+    }
 
     /// The registrar's name and object, recorded method calls: a fake
     /// registrar on the tests' session bus. The first `failures`
@@ -927,7 +958,7 @@ mod tests {
                 .surface()
                 .and_then(|s| x11_window(&s))
                 .expect("an X11 window");
-            let (registration, _calls) = fake_registrar(&bus, usize::MAX);
+            let _registrar = Registrar::claim(&bus, usize::MAX);
             set_menu(&surface, Some(vec![action(1, "One's")]));
             place(
                 &surface,
@@ -943,8 +974,6 @@ mod tests {
                 gtk_test::wait_until(|| !surface.environment.get().global_menu),
                 "a refused window is not reported as exported"
             );
-            let _ = bus.unregister_object(registration);
-            release_name(&bus, REGISTRAR);
             drop(window);
         });
     }
@@ -971,7 +1000,8 @@ mod tests {
                 .and_then(|s| x11_window(&s))
                 .expect("an X11 window");
             // The first registration is refused, the next succeeds.
-            let (registration, calls) = fake_registrar(&bus, 1);
+            let registrar = Registrar::claim(&bus, 1);
+            let calls = registrar.calls.clone();
             set_menu(&surface, Some(vec![action(1, "One's")]));
             let items = crate::chrome::application_menu(&surface);
             place(&surface, &window, items.as_deref(), true);
@@ -1025,8 +1055,6 @@ mod tests {
                 "only the dropped export unregistered: {:?}",
                 calls.borrow()
             );
-            let _ = bus.unregister_object(registration);
-            release_name(&bus, REGISTRAR);
             drop(window);
         });
     }
