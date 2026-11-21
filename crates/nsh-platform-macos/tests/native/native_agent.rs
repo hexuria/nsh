@@ -10,6 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use nsh_base::input;
 use nsh_core::{NodeId, ROOT_ID, element::desktop::window, prelude::*};
 use nsh_dev::protocol::{StepOutcome, TestStep};
 use nsh_platform_macos::{
@@ -65,6 +66,35 @@ fn Windows() -> impl IntoElement {
                             KEYS.fetch_add(1, Ordering::SeqCst);
                         }),
                 ),
+        )
+        .child(
+            view()
+                .absolute()
+                .left(px(0.0))
+                .top(px(220.0))
+                .w(px(180.0))
+                .h(px(60.0))
+                .origin_top_left()
+                .scale(2.0)
+                .child(
+                    input()
+                        .absolute()
+                        .left(px(10.0))
+                        .top(px(10.0))
+                        .w(px(80.0))
+                        .h(px(20.0))
+                        .test_id("lifted-field")
+                        .default_value("Hi"),
+                ),
+        )
+        .child(
+            view()
+                .test_id("pad-cover")
+                .absolute()
+                .left(px(140.0))
+                .top(px(240.0))
+                .w(px(60.0))
+                .h(px(40.0)),
         )
         .child(
             window()
@@ -152,6 +182,25 @@ fn second_window_hit_test(model: &Model, native: &mut Option<Box<dyn Native>>) {
         assert!(native.target_window(NodeId::MAX).is_err());
     });
     println!("native_agent: second_window_hit_test");
+}
+
+fn lifted_pad_hit_at(model: &Model, native: &mut Option<Box<dyn Native>>) {
+    let field = node(model, "lifted-field");
+    let cover = node(model, "pad-cover");
+    call(native, move |native| {
+        let bounds = native.bounds(field).unwrap();
+        // The input's pad rides on the host container above the scaled
+        // view: a press on it (over the editor or in its padding) is the
+        // input's own hit, not an occlusion by the hosting view.
+        assert_eq!(native.hit_at(bounds.center()).unwrap(), Some(field));
+        let padding =
+            nsh_core::geometry::point(bounds.origin.x + px(3.0), bounds.origin.y + px(3.0));
+        assert_eq!(native.hit_at(padding).unwrap(), Some(field));
+        // A sibling stacked over the pad keeps its presses.
+        let covered = native.bounds(cover).unwrap().center();
+        assert_eq!(native.hit_at(covered).unwrap(), Some(cover));
+    });
+    println!("native_agent: lifted_pad_hit_at");
 }
 
 fn foreign_native_view_has_no_node(native: &mut Option<Box<dyn Native>>, main: &NSWindow) {
@@ -364,7 +413,15 @@ pub(super) fn run() {
     // Embedded windows do not use run_app's key-window lifecycle.
     main.makeKeyWindow();
     application_focus(mtm, &mut native, &main);
+    until("the lifted input", || {
+        model
+            .semantic_tree()
+            .unwrap()
+            .iter()
+            .any(|node| node.test_id.as_deref() == Some("lifted-field"))
+    });
     second_window_hit_test(&model, &mut native);
+    lifted_pad_hit_at(&model, &mut native);
     foreign_native_view_has_no_node(&mut native, &main);
     let agent =
         targeted_key_and_group_rejection(model.clone(), &mut native, &main, &surface.view());

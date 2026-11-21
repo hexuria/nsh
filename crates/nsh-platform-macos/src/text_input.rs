@@ -2984,6 +2984,13 @@ pub(crate) fn pad_contains(view: &NSView, point: NSPoint) -> bool {
     true
 }
 
+/// Whether `hit` is `input`'s pad or inside it. A lifted pad is hosted
+/// outside the input's own view (`set_raised`), so such a hit is not a
+/// descendant of that view even though the press belongs to the input.
+pub(crate) fn pad_owns(input: &InputState, hit: &NSView) -> bool {
+    hit.isDescendantOf(&input.pad)
+}
+
 /// The 2D transform from `view`'s content space to `host`'s: frames,
 /// transforms and the scroll offsets and zooms of the containers between
 /// them, composed as a row-vector projective matrix (`[x y 1] · m`).
