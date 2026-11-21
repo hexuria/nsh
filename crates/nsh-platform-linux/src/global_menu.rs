@@ -25,18 +25,19 @@
 //!   GTK makes the window's surface anew (it realizes it again).
 //! - While exported, GTK's `PopoverMenuBar` never shows (the menu is in the
 //!   panel); its shortcuts stay on the window.
-//! - **One export a thread**: with several surfaces (an app's window and an
-//!   embedded view), the export is the surface's that has a menu, the last
-//!   to set one when several do; a surface without a menu leaves it be
-//!   ([`left_to_another`]). Only the exporting surface hides its bar and
-//!   says `Menu.inGlobalMenu()`.
+//! - **One export a thread**: with several surfaces (an app's window and
+//!   an embedded view), the export is the surface's that has a menu, the
+//!   last to set one when several do ([`export_owner`]): whichever order
+//!   surfaces are walked in ([`registrar_changed`]), any other leaves it
+//!   be. Only the exporting surface hides its bar and says
+//!   `Menu.inGlobalMenu()`.
 //!
 //! Without the `global-menu` feature (no X11 or Wayland bindings), the
 //! window cannot be tied to the menu, so [`available`] is false.
 
 use std::{
     cell::{Cell, RefCell},
-    rc::Weak,
+    rc::{Rc, Weak},
     sync::OnceLock,
 };
 
@@ -153,73 +154,92 @@ thread_local! {
 /// is true. The export is one per thread: another surface's window keeps
 /// its own bar.
 pub(crate) fn active(surface: &Surface) -> bool {
-    available()
-        && EXPORT.with(|e| {
-            e.borrow().as_ref().is_some_and(|x| {
-                std::ptr::eq(x.surface.as_ptr(), surface)
-                    && x.tied
-                        .as_ref()
-                        .is_some_and(|(_, tie)| !matches!(tie, Tie::None))
-            })
-        })
+    available() && owned(surface)
 }
 
-/// Tells the app where its menu is (`Menu.inGlobalMenu()`).
-fn report(surface: &Surface) {
+/// The export is `surface`'s, its window tied to the menu.
+fn owned(surface: &Surface) -> bool {
+    EXPORT.with(|e| {
+        e.borrow().as_ref().is_some_and(|x| {
+            std::ptr::eq(x.surface.as_ptr(), surface)
+                && x.tied
+                    .as_ref()
+                    .is_some_and(|(_, tie)| !matches!(tie, Tie::None))
+        })
+    })
+}
+
+/// Tells the app where its menu is (`Menu.inGlobalMenu()`), the Global
+/// Menu's presence answered as `up`.
+fn report(surface: &Surface, up: bool) {
     let mut env = surface.environment.get();
-    env.global_menu = active(surface);
+    env.global_menu = up && owned(surface);
     surface.set_environment(env);
 }
 
 /// The surface the export is for, while it lives.
-fn owner() -> Option<std::rc::Rc<Surface>> {
+fn owner() -> Option<Rc<Surface>> {
     EXPORT.with(|e| e.borrow().as_ref().and_then(|x| x.surface.upgrade()))
 }
 
-/// A surface without a menu leaves the export to one that has a menu (an
-/// app's window beside an embedded view): were it to export its empty
-/// menu, the app's would leave the panel. True when `surface` is such a
-/// one; had it the export (its menu was just removed), the export goes to
-/// the first surface with a menu.
-fn left_to_another(surface: &std::rc::Rc<Surface>) -> bool {
-    let another = crate::system::surfaces()
+/// The surface the export belongs to: of those with a menu, the last to
+/// set one ([`crate::chrome::menu_order`]).
+fn export_owner() -> Option<Rc<Surface>> {
+    crate::system::surfaces()
         .into_iter()
-        .find(|s| !std::rc::Rc::ptr_eq(s, surface) && crate::chrome::has_menu(s));
-    let Some(another) = another else {
-        return false;
-    };
-    if owner().is_some_and(|o| std::rc::Rc::ptr_eq(&o, surface)) {
-        drop(EXPORT.with(|e| e.borrow_mut().take()));
-        crate::chrome::menu_place_changed(&another);
-    }
-    true
+        .filter(|s| crate::chrome::has_menu(s))
+        .max_by_key(|s| crate::chrome::menu_order(s))
 }
 
 /// Exports `items` (none: an empty menu) for `window`'s Global Menu, and
 /// ties the window to it. False when the Global Menu is not there.
 pub(crate) fn export(
-    surface: &std::rc::Rc<Surface>,
+    surface: &Rc<Surface>,
     window: &gtk::Window,
     items: Option<&[MenuItem]>,
 ) -> bool {
-    if !available() {
+    place(surface, window, items, available())
+}
+
+/// `export`, with the Global Menu's presence answered (`up` — the tests
+/// answer it).
+fn place(
+    surface: &Rc<Surface>,
+    window: &gtk::Window,
+    items: Option<&[MenuItem]>,
+    up: bool,
+) -> bool {
+    if !up {
         // The widget went (or never was): the export ends, the window's
         // menu bar takes the menu.
         drop(EXPORT.with(|e| e.borrow_mut().take()));
-        report(surface);
+        report(surface, up);
         return false;
     }
-    if items.is_none() && left_to_another(surface) {
-        report(surface);
+    if let Some(wanted) = export_owner()
+        && !Rc::ptr_eq(&wanted, surface)
+    {
+        // Not this surface's: the export is the last setter's, whichever
+        // order surfaces were walked in.
+        if !owner().is_some_and(|o| Rc::ptr_eq(&o, &wanted)) {
+            drop(EXPORT.with(|e| e.borrow_mut().take()));
+            if let Some(window) = crate::chrome::window(&wanted) {
+                let items = crate::chrome::application_menu(&wanted);
+                if place(&wanted, &window, items.as_deref(), up) {
+                    crate::chrome::show_menu_bar(&wanted);
+                }
+            }
+        }
+        report(surface, up);
         return false;
     }
     // The surface that had the export, when it passes to this one.
-    let before = owner().filter(|o| !std::rc::Rc::ptr_eq(o, surface));
+    let before = owner().filter(|o| !Rc::ptr_eq(o, surface));
     let entries = tray::number(items.unwrap_or(&[]), true);
     let made = EXPORT.with(|e| {
         let mut e = e.borrow_mut();
         if let Some(export) = e.as_mut() {
-            export.surface = std::rc::Rc::downgrade(surface);
+            export.surface = Rc::downgrade(surface);
             export.entries = entries;
             export.revision += 1;
             let _ = export.bus.emit_signal(
@@ -242,10 +262,10 @@ pub(crate) fn export(
     if made {
         tie(window);
     }
-    report(surface);
+    report(surface, up);
     if let Some(before) = before {
         // Its menu left the panel: its window's bar shows again.
-        report(&before);
+        report(&before, up);
         crate::chrome::show_menu_bar(&before);
     }
     made
@@ -466,7 +486,114 @@ mod wayland {
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
+
+    use nsh_core::desktop::{DesktopCommand, MenuAction};
+
     use super::*;
+    use crate::gtk_test;
+
+    fn action(id: u32, label: &str) -> MenuItem {
+        MenuItem::Action(MenuAction {
+            id,
+            label: label.into(),
+            shortcut: None,
+            enabled: true,
+            checked: None,
+            role: None,
+            when: nsh_core::keymap::When::Always,
+            icon: None,
+            symbol: None,
+            destructive: false,
+        })
+    }
+
+    /// `SetMenu`, as the app's command does it.
+    fn set_menu(surface: &Rc<Surface>, items: Option<Vec<MenuItem>>) {
+        crate::chrome::command(
+            surface,
+            &DesktopCommand::SetMenu(items.map(|items| items.into())),
+        );
+    }
+
+    /// `place` for each of the thread's surfaces, as `registrar_changed`
+    /// does them — with `up` answered (there is no registrar on the
+    /// tests' bus).
+    fn place_every_surface(up: bool) {
+        for surface in crate::system::surfaces() {
+            let items = crate::chrome::application_menu(&surface);
+            if let Some(window) = crate::chrome::window(&surface) {
+                place(&surface, &window, items.as_deref(), up);
+            }
+        }
+    }
+
+    /// The session bus, or `None` where the test cannot publish (it does
+    /// not run then, as `gtk_test::run` skips without a display).
+    fn session_bus() -> Option<gio::DBusConnection> {
+        gio::bus_get_sync(gio::BusType::Session, gio::Cancellable::NONE).ok()
+    }
+
+    #[test]
+    fn a_widget_keeps_the_panel_on_the_menu_set_last_not_the_last_surface() {
+        gtk_test::run(|| {
+            if session_bus().is_none() {
+                return;
+            }
+            drop(EXPORT.with(|e| e.borrow_mut().take()));
+            // `surfaces()` lists `one` before `two`; `one` set its menu
+            // most recently.
+            let one = gtk_test::surface();
+            let two = gtk_test::surface();
+            crate::system::watch_environment(&one);
+            crate::system::watch_environment(&two);
+            let _w1 = gtk_test::show(&one);
+            let _w2 = gtk_test::show(&two);
+            set_menu(&two, Some(vec![action(1, "Second's")]));
+            set_menu(&one, Some(vec![action(2, "First's")]));
+            // A Global Menu widget appears.
+            place_every_surface(true);
+            assert!(
+                owner().is_some_and(|o| Rc::ptr_eq(&o, &one)),
+                "the last setter's menu is the panel's"
+            );
+            assert!(one.environment.get().global_menu);
+            assert!(!two.environment.get().global_menu);
+        });
+    }
+
+    #[test]
+    fn the_export_follows_the_last_setter_when_the_owner_s_menu_goes() {
+        gtk_test::run(|| {
+            if session_bus().is_none() {
+                return;
+            }
+            drop(EXPORT.with(|e| e.borrow_mut().take()));
+            let one = gtk_test::surface();
+            let two = gtk_test::surface();
+            crate::system::watch_environment(&one);
+            crate::system::watch_environment(&two);
+            let w1 = gtk_test::show(&one);
+            let w2 = gtk_test::show(&two);
+            set_menu(&two, Some(vec![action(1, "Second's")]));
+            set_menu(&one, Some(vec![action(2, "First's")]));
+            // `one`, the last setter, owns the export.
+            place_every_surface(true);
+            assert!(owner().is_some_and(|o| Rc::ptr_eq(&o, &one)));
+            // `one`'s menu goes: the export moves to `two`, the only
+            // surface left with a menu.
+            set_menu(&one, None);
+            place(&one, &w1, None, true);
+            assert!(
+                owner().is_some_and(|o| Rc::ptr_eq(&o, &two)),
+                "the export is the last setter still standing"
+            );
+            assert!(!one.environment.get().global_menu);
+            assert!(two.environment.get().global_menu);
+            drop(w1);
+            drop(w2);
+        });
+    }
 
     #[test]
     fn the_global_menu_needs_kde_and_the_registrar_and_no_opt_out() {

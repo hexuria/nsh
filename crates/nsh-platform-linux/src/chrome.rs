@@ -83,6 +83,9 @@ pub(crate) struct Chrome {
     controls: RefCell<Option<(gtk::WindowControls, gtk::WindowControls)>>,
     /// The application menu.
     menu: RefCell<Option<Arc<[MenuItem]>>>,
+    /// When the menu was set: the Global Menu's export goes to the last
+    /// setter ([`crate::global_menu`]).
+    menu_order: Cell<u64>,
     /// The app's context menu shown, and its items (`nsh test --target
     /// linux` chooses from it).
     #[cfg(feature = "dev")]
@@ -127,7 +130,7 @@ pub(crate) fn menu_bar_slot(surface: &Surface) -> Option<gtk::Box> {
 }
 
 /// The window the surface is in.
-fn window(surface: &Surface) -> Option<gtk::Window> {
+pub(crate) fn window(surface: &Surface) -> Option<gtk::Window> {
     surface.root.root().and_downcast::<gtk::Window>()
 }
 
@@ -182,6 +185,7 @@ pub(crate) fn command(surface: &Rc<Surface>, command: &DesktopCommand) {
         DesktopCommand::Request(request) => crate::window::main_request(surface, request),
         DesktopCommand::SetMenu(menu) => {
             *c.menu.borrow_mut() = menu.clone();
+            c.menu_order.set(next_menu_order());
             if let Some(window) = window(surface) {
                 install_menu(surface, &window);
             }
@@ -697,6 +701,30 @@ impl Builder<'_> {
 /// Whether the app set an application menu on `surface`.
 pub(crate) fn has_menu(surface: &Surface) -> bool {
     surface.chrome.menu.borrow().is_some()
+}
+
+/// The application menu `surface` has.
+pub(crate) fn application_menu(surface: &Surface) -> Option<Arc<[MenuItem]>> {
+    surface.chrome.menu.borrow().clone()
+}
+
+thread_local! {
+    /// Counts the `SetMenu`s: the Global Menu's export is the last
+    /// setter's ([`crate::global_menu::export_owner`]).
+    static MENU_SETS: Cell<u64> = const { Cell::new(0) };
+}
+
+fn next_menu_order() -> u64 {
+    MENU_SETS.with(|n| {
+        let next = n.get() + 1;
+        n.set(next);
+        next
+    })
+}
+
+/// When `surface` set its application menu (0: never).
+pub(crate) fn menu_order(surface: &Surface) -> u64 {
+    surface.chrome.menu_order.get()
 }
 
 /// KDE's Global Menu came or went ([`crate::global_menu`]): the menu is
