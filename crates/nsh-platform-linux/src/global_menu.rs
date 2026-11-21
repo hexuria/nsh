@@ -42,7 +42,7 @@ use std::{
 };
 
 use gtk4::{self as gtk, gdk, gio, glib, prelude::*};
-use nsh_core::desktop::MenuItem;
+use nsh_core::desktop::{MenuItem, MenuRole};
 
 use crate::{
     surface::Surface,
@@ -282,19 +282,17 @@ fn publish(surface: &std::rc::Rc<Surface>, entries: Vec<Entry>) -> Option<Export
         .register_object(MENU_PATH, &interface)
         .method_call(|_, _, _, _, method, params, invocation| {
             // Every item an `EventGroup` clicked, in order (outside the
-            // borrow: `clicked` reads the export too).
-            let mut chosen = Vec::new();
+            // borrow: `clicks` reads the export too).
+            let mut ids = Vec::new();
             let reply = EXPORT.with(|e| {
                 let e = e.borrow();
                 let (entries, revision) = e
                     .as_ref()
                     .map_or((&[][..], 0), |x| (&x.entries[..], x.revision));
-                tray::dbusmenu_call(entries, revision, method, &params, &mut |id| {
-                    chosen.push(id)
-                })
+                tray::dbusmenu_call(entries, revision, method, &params, &mut |id| ids.push(id))
             });
-            for id in chosen {
-                clicked(id);
+            for (surface, action, role) in clicks(&ids) {
+                dispatch(surface, action, role);
             }
             invocation.return_value(reply.as_ref());
         })
@@ -312,17 +310,31 @@ fn publish(surface: &std::rc::Rc<Surface>, entries: Vec<Entry>) -> Option<Export
     })
 }
 
-/// Entry `id` was chosen in the panel.
-fn clicked(id: i32) {
-    let found = EXPORT.with(|e| {
+/// The action entry `id` carries out.
+fn click_item(entries: &[Entry], id: i32) -> Option<(u32, Option<MenuRole>)> {
+    entries
+        .get(usize::try_from(id).ok()?.checked_sub(1)?)?
+        .action
+}
+
+/// What each clicked `id` runs, all resolved in one read of the export —
+/// the menu the click saw, before the first one's carrying out can
+/// replace it.
+fn clicks(ids: &[i32]) -> Vec<(Weak<Surface>, u32, Option<MenuRole>)> {
+    EXPORT.with(|e| {
         let e = e.borrow();
-        let x = e.as_ref()?;
-        let entry = x.entries.get(usize::try_from(id).ok()?.checked_sub(1)?)?;
-        Some((x.surface.clone(), entry.action?))
-    });
-    let Some((surface, (action, role))) = found else {
-        return;
-    };
+        let Some(x) = e.as_ref() else {
+            return Vec::new();
+        };
+        ids.iter()
+            .filter_map(|&id| click_item(&x.entries, id))
+            .map(|(action, role)| (x.surface.clone(), action, role))
+            .collect()
+    })
+}
+
+/// `action` was chosen in the panel, for `surface`.
+fn dispatch(surface: Weak<Surface>, action: u32, role: Option<MenuRole>) {
     // Out of the bus call: the app's function may change the menu.
     glib::idle_add_local_once(move || {
         if let Some(surface) = surface.upgrade() {
@@ -592,6 +604,54 @@ mod tests {
             assert!(two.environment.get().global_menu);
             drop(w1);
             drop(w2);
+        });
+    }
+
+    #[test]
+    fn a_group_s_clicks_are_the_menu_the_click_saw() {
+        gtk_test::run(|| {
+            let Some(bus) = session_bus() else {
+                return;
+            };
+            let surface = gtk_test::surface();
+            // Entries 3 and 7 are actions; the click names them.
+            let items: Vec<MenuItem> = (1..=7)
+                .map(|i| action(i * 10, &format!("Item {i}")))
+                .collect();
+            let entries = tray::number(&items, true);
+            EXPORT.with(|e| {
+                *e.borrow_mut() = Some(Export {
+                    surface: Rc::downgrade(&surface),
+                    bus,
+                    registration: None,
+                    entries,
+                    revision: 1,
+                    tied: None,
+                })
+            });
+            // An `EventGroup` with clicks of entries 3 and 7: every id
+            // resolves to its action before any runs.
+            let mut ids = Vec::new();
+            let event = |id: i32| (id, "clicked".to_owned(), 0i32.to_variant(), 0u32);
+            let params = (vec![event(3), event(7)],).to_variant();
+            EXPORT.with(|e| {
+                let e = e.borrow();
+                let x = e.as_ref().unwrap();
+                tray::dbusmenu_call(&x.entries, x.revision, "EventGroup", &params, &mut |id| {
+                    ids.push(id)
+                });
+            });
+            let chosen = clicks(&ids);
+            // The first one's carrying out replaces the menu…
+            EXPORT.with(|e| {
+                e.borrow_mut().as_mut().unwrap().entries =
+                    tray::number(&[action(99, "Another")], true);
+            });
+            // …and both clicks still run what the clicked menu had.
+            assert_eq!(chosen.len(), 2);
+            assert_eq!(chosen[0].1, 30);
+            assert_eq!(chosen[1].1, 70);
+            drop(EXPORT.with(|e| e.borrow_mut().take()));
         });
     }
 
