@@ -172,6 +172,9 @@ pub struct Graph {
     programs: Vec<Program>,
     /// Ends of composite steps (and when they ended), for their programs.
     leaf_ends: Vec<(Finished, f64)>,
+    /// `run_programs` has taken `programs` to advance them: the ends leaf
+    /// runs produce in that window still belong to those live programs.
+    advancing: bool,
     next_leaf: AnimationId,
     /// Values a composite step started in this frame.
     started: Vec<NodeId>,
@@ -738,7 +741,7 @@ impl Graph {
     /// Ends of composite steps go to their programs, not to JS.
     fn route_leaf_ends(&mut self, finished: &mut Vec<Finished>) {
         if finished.iter().any(|f| f.animation >= LEAF_IDS) {
-            if !self.programs.is_empty() {
+            if !self.programs.is_empty() || self.advancing {
                 // Interrupted: when does not matter (the program stops).
                 self.leaf_ends.extend(
                     finished
@@ -1399,6 +1402,7 @@ impl Graph {
     /// stepped to `now` at once. Returns true if a value changed.
     fn run_programs(&mut self, now: f64, finished: &mut Vec<Finished>) -> bool {
         let mut changed = false;
+        self.advancing = true;
         for _ in 0..16 {
             self.route_leaf_ends(finished);
             let mut programs = std::mem::take(&mut self.programs);
@@ -1430,6 +1434,7 @@ impl Graph {
                 }
             }
         }
+        self.advancing = false;
         self.route_leaf_ends(finished);
         if self.programs.is_empty() {
             // Ends of steps no program waits for.
@@ -2551,6 +2556,90 @@ mod tests {
         let stopped = g.value(2).unwrap();
         g.tick(0.5, &mut f);
         assert_eq!(g.value(2), Some(stopped));
+        assert!(!g.is_animating());
+    }
+
+    /// A resetting loop runs `Graph::set` while `run_programs` holds the
+    /// programs vec: a leaf end another program waited for in that window
+    /// must still reach it, or that program waits forever.
+    #[test]
+    fn a_reset_keeps_the_end_of_the_leaf_it_replaced() {
+        let mut g = Graph::default();
+        let mut f = Vec::new();
+        values(&mut g, &mut f, &[1, 2, 3]);
+        // Program 8: a long run on value 1.
+        g.apply(
+            AnimationOp::StartComposite {
+                animation: 8,
+                key: 1,
+                spec: Composite::Run {
+                    node: 1,
+                    driver: timing(100.0, 1000.0),
+                },
+            },
+            &mut f,
+        );
+        g.tick(0.0, &mut f);
+        // Program 9: a sequence that replaces 8's leaf on value 1, beside a
+        // resetting loop of zero-duration runs.
+        g.apply(
+            AnimationOp::StartComposite {
+                animation: 9,
+                key: 2,
+                spec: Composite::Parallel {
+                    children: vec![
+                        Composite::Sequence(vec![
+                            Composite::Run {
+                                node: 2,
+                                driver: timing(1.0, 0.0),
+                            },
+                            Composite::Run {
+                                node: 1,
+                                driver: timing(50.0, 100.0),
+                            },
+                        ]),
+                        Composite::Loop {
+                            child: Box::new(Composite::Run {
+                                node: 3,
+                                driver: timing(1.0, 0.0),
+                            }),
+                            iterations: Some(2),
+                            reset: true,
+                        },
+                    ],
+                    stop_together: false,
+                },
+            },
+            &mut f,
+        );
+        g.tick(0.05, &mut f);
+        // 8's leaf was replaced: the program ends interrupted exactly once.
+        assert_eq!(
+            f,
+            vec![Finished {
+                animation: 8,
+                finished: false,
+                value: None,
+            }]
+        );
+        // 9's second run animates value 1 and finishes: the graph idles.
+        run(&mut g, &mut f, 0.05, 0.3);
+        assert_eq!(g.value(1), Some(50.0));
+        assert_eq!(
+            f,
+            vec![
+                Finished {
+                    animation: 8,
+                    finished: false,
+                    value: None,
+                },
+                Finished {
+                    animation: 9,
+                    finished: true,
+                    value: None,
+                },
+            ]
+        );
         assert!(!g.is_animating());
     }
 
