@@ -765,10 +765,11 @@ mod tests {
             set_menu(&two, Some(vec![action(1, "Second's")]));
             let w1 = gtk_test::show(&one);
             set_menu(&one, Some(vec![action(2, "First's")]));
-            let x1 = w1
-                .surface()
-                .and_then(|s| x11_window(&s))
-                .expect("an X11 window");
+            let Some(x1) = w1.surface().and_then(|s| x11_window(&s)) else {
+                let _ = bus.unregister_object(registration);
+                release_name(&bus, REGISTRAR);
+                return;
+            };
             place(
                 &one,
                 &w1,
@@ -784,10 +785,11 @@ mod tests {
             // moves to it and its window takes the registration.
             set_menu(&two, Some(vec![action(1, "Second's")]));
             let w2 = gtk_test::show(&two);
-            let x2 = w2
-                .surface()
-                .and_then(|s| x11_window(&s))
-                .expect("an X11 window");
+            let Some(x2) = w2.surface().and_then(|s| x11_window(&s)) else {
+                let _ = bus.unregister_object(registration);
+                release_name(&bus, REGISTRAR);
+                return;
+            };
             place(
                 &two,
                 &w2,
@@ -905,13 +907,13 @@ mod tests {
                 return;
             };
             drop(EXPORT.with(|e| e.borrow_mut().take()));
-            let (registration, _calls) = fake_registrar(&bus, usize::MAX);
             let surface = gtk_test::surface();
             crate::system::watch_environment(&surface);
             let window = gtk_test::show(&surface);
             if window.surface().and_then(|s| x11_window(&s)).is_none() {
                 return;
             }
+            let (registration, _calls) = fake_registrar(&bus, usize::MAX);
             set_menu(&surface, Some(vec![action(1, "One's")]));
             place(
                 &surface,
@@ -943,14 +945,14 @@ mod tests {
                 return;
             };
             drop(EXPORT.with(|e| e.borrow_mut().take()));
-            // The first registration is refused, the next succeeds.
-            let (registration, calls) = fake_registrar(&bus, 1);
             let surface = gtk_test::surface();
             crate::system::watch_environment(&surface);
             let window = gtk_test::show(&surface);
             if window.surface().and_then(|s| x11_window(&s)).is_none() {
                 return;
             }
+            // The first registration is refused, the next succeeds.
+            let (registration, calls) = fake_registrar(&bus, 1);
             set_menu(&surface, Some(vec![action(1, "One's")]));
             let items = crate::chrome::application_menu(&surface);
             place(&surface, &window, items.as_deref(), true);
