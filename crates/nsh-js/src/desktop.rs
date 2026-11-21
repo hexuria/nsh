@@ -1733,7 +1733,9 @@ mod tests {
         let host = crate::Host::new().unwrap();
         host.with_raw(|cx| {
             let event = |id: u32| {
+                // SAFETY: `cx` is the host's live context.
                 let e = unsafe { super::qjs::JS_NewObject(cx) };
+                // SAFETY: `e` is this block's live object, in `cx`.
                 unsafe {
                     super::qjs::JS_SetPropertyStr(
                         cx,
@@ -1744,6 +1746,8 @@ mod tests {
                 };
                 e
             };
+            // SAFETY: `e` is a live object owned here; its result and
+            // `e` are freed once read.
             let on = |id: u32| unsafe {
                 let mut e = event(id);
                 let r = on_menu(cx, UNDEFINED, 1, &mut e);
