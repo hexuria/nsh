@@ -446,12 +446,33 @@ fn register_x11(bus: &gio::DBusConnection, xid: u32) {
         gio::DBusCallFlags::NONE,
         5000,
         gio::Cancellable::NONE,
-        |result| {
+        move |result| {
             if let Err(e) = result {
                 log::warn!("nsh: the Global Menu's registrar refused the window: {e}");
+                untie(xid);
             }
         },
     );
+}
+
+/// The registrar refused `xid`'s `RegisterWindow`: the window was never
+/// tied after all — the export stays untied, the app is told the menu is
+/// its window's again (`Menu.inGlobalMenu()` false) and the bar shows.
+#[cfg_attr(not(feature = "global-menu"), allow(dead_code))]
+fn untie(xid: u32) {
+    let surface = EXPORT.with(|e| {
+        let mut e = e.borrow_mut();
+        let x = e.as_mut()?;
+        let (_, tie) = x.tied.as_mut()?;
+        if matches!(tie, Tie::X11 { xid: tied, .. } if *tied == xid) {
+            *tie = Tie::None;
+        }
+        x.surface.upgrade()
+    });
+    if let Some(surface) = surface {
+        report(&surface, true);
+        crate::chrome::show_menu_bar(&surface);
+    }
 }
 
 /// Tells the registrar window `xid` no longer has the menu.
@@ -720,44 +741,7 @@ mod tests {
             };
             drop(EXPORT.with(|e| e.borrow_mut().take()));
             // A registrar of the test's own, recording its calls.
-            let calls: Rc<RefCell<Vec<(String, u32)>>> = Rc::default();
-            let reply = bus
-                .call_sync(
-                    Some("org.freedesktop.DBus"),
-                    "/org/freedesktop/DBus",
-                    "org.freedesktop.DBus",
-                    "RequestName",
-                    Some(&(REGISTRAR, 0u32).to_variant()),
-                    None,
-                    gio::DBusCallFlags::NONE,
-                    5000,
-                    gio::Cancellable::NONE,
-                )
-                .expect("the name answers");
-            assert_eq!(
-                reply.get::<(u32,)>().map(|(code,)| code),
-                Some(1),
-                "the registrar's name is owned"
-            );
-            let xml = "<node><interface name='com.canonical.AppMenu.Registrar'>\
-                       <method name='RegisterWindow'><arg type='u' direction='in'/>\
-                       <arg type='o' direction='in'/></method>\
-                       <method name='UnregisterWindow'><arg type='u' direction='in'/></method>\
-                       </interface></node>";
-            let info = gio::DBusNodeInfo::for_xml(xml).unwrap();
-            let interface = info.lookup_interface(REGISTRAR).unwrap();
-            let recorded = calls.clone();
-            let registration = bus
-                .register_object(REGISTRAR_PATH, &interface)
-                .method_call(move |_, _, _, _, method, params, invocation| {
-                    recorded.borrow_mut().push((
-                        method.to_owned(),
-                        params.child_value(0).get::<u32>().unwrap_or(0),
-                    ));
-                    invocation.return_value(None);
-                })
-                .build()
-                .expect("the registrar object registers");
+            let (registration, calls) = fake_registrar(&bus, true);
 
             let one = gtk_test::surface();
             let two = gtk_test::surface();
@@ -815,11 +799,64 @@ mod tests {
                 calls.borrow()
             );
             let _ = bus.unregister_object(registration);
+            release_name(&bus, REGISTRAR);
         });
     }
 
-    /// The last `setApplicationMenu(null)` ends the export rather than
-    /// publish an empty menu: `Menu.inGlobalMenu()` reads false.
+    /// The registrar's recorded `(method, window)` calls.
+    #[cfg(feature = "global-menu")]
+    type Calls = Rc<RefCell<Vec<(String, u32)>>>;
+
+    /// The registrar's name and object, recorded method calls: a fake
+    /// registrar on the tests' session bus. `answers` decides whether
+    /// `RegisterWindow` succeeds.
+    #[cfg(feature = "global-menu")]
+    fn fake_registrar(bus: &gio::DBusConnection, answers: bool) -> (gio::RegistrationId, Calls) {
+        let reply = bus
+            .call_sync(
+                Some("org.freedesktop.DBus"),
+                "/org/freedesktop/DBus",
+                "org.freedesktop.DBus",
+                "RequestName",
+                Some(&(REGISTRAR, 0u32).to_variant()),
+                None,
+                gio::DBusCallFlags::NONE,
+                5000,
+                gio::Cancellable::NONE,
+            )
+            .expect("the name answers");
+        assert_eq!(
+            reply.get::<(u32,)>().map(|(code,)| code),
+            Some(1),
+            "the registrar's name is owned"
+        );
+        let xml = "<node><interface name='com.canonical.AppMenu.Registrar'>\
+                   <method name='RegisterWindow'><arg type='u' direction='in'/>\
+                   <arg type='o' direction='in'/></method>\
+                   <method name='UnregisterWindow'><arg type='u' direction='in'/></method>\
+                   </interface></node>";
+        let info = gio::DBusNodeInfo::for_xml(xml).unwrap();
+        let interface = info.lookup_interface(REGISTRAR).unwrap();
+        let calls: Rc<RefCell<Vec<(String, u32)>>> = Rc::default();
+        let recorded = calls.clone();
+        let registration = bus
+            .register_object(REGISTRAR_PATH, &interface)
+            .method_call(move |_, _, _, _, method, params, invocation| {
+                recorded.borrow_mut().push((
+                    method.to_owned(),
+                    params.child_value(0).get::<u32>().unwrap_or(0),
+                ));
+                if answers {
+                    invocation.return_value(None);
+                } else {
+                    invocation.return_dbus_error("org.nsh.test.Refused", "the panel refused");
+                }
+            })
+            .build()
+            .expect("the registrar object registers");
+        (registration, calls)
+    }
+
     #[test]
     fn clearing_the_last_menu_ends_the_export() {
         gtk_test::run(|| {
@@ -834,12 +871,67 @@ mod tests {
             place(&surface, &window, Some(&[action(1, "One's")]), true);
             assert!(owner().is_some());
             assert!(surface.environment.get().global_menu);
+            // The app clears the only menu: the export ends rather than
+            // stay an empty menu, and `Menu.inGlobalMenu()` reads false.
             set_menu(&surface, None);
             place(&surface, &window, None, true);
             assert!(owner().is_none(), "no empty menu stays in the panel");
             assert!(!surface.environment.get().global_menu);
             drop(window);
         });
+    }
+
+    #[cfg(feature = "global-menu")]
+    #[test]
+    fn a_refused_registration_frees_the_window() {
+        gtk_test::run(|| {
+            let Some(bus) = session_bus() else {
+                return;
+            };
+            drop(EXPORT.with(|e| e.borrow_mut().take()));
+            let (registration, _calls) = fake_registrar(&bus, false);
+            let surface = gtk_test::surface();
+            crate::system::watch_environment(&surface);
+            let window = gtk_test::show(&surface);
+            if window.surface().and_then(|s| x11_window(&s)).is_none() {
+                return;
+            }
+            set_menu(&surface, Some(vec![action(1, "One's")]));
+            place(
+                &surface,
+                &window,
+                crate::chrome::application_menu(&surface).as_deref(),
+                true,
+            );
+            // Tied optimistically, before the registrar answers.
+            assert!(surface.environment.get().global_menu);
+            // The refusal frees the window: the menu is the window's
+            // again (`Menu.inGlobalMenu()` false, the bar back).
+            assert!(
+                gtk_test::wait_until(|| !surface.environment.get().global_menu),
+                "a refused window is not reported as exported"
+            );
+            let _ = bus.unregister_object(registration);
+            release_name(&bus, REGISTRAR);
+            drop(window);
+        });
+    }
+
+    /// The name goes back to the bus (the connection is shared: another
+    /// test owning it later would find it taken).
+    #[cfg(feature = "global-menu")]
+    fn release_name(bus: &gio::DBusConnection, name: &str) {
+        let _ = bus.call_sync(
+            Some("org.freedesktop.DBus"),
+            "/org/freedesktop/DBus",
+            "org.freedesktop.DBus",
+            "ReleaseName",
+            Some(&(name,).to_variant()),
+            None,
+            gio::DBusCallFlags::NONE,
+            5000,
+            gio::Cancellable::NONE,
+        );
     }
 
     #[test]
