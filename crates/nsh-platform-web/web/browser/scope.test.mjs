@@ -7,6 +7,9 @@ test("desktop tray and global shortcuts retain their off-platform behavior", asy
   const modules = { exports: new Map([["nsh/desktop", desktop]]) };
   configureAPIs({}, modules, {}, () => true, { titleBar: () => ({ height: 0 }) });
   assert.equal(desktop.isAvailable, false);
+  // An app gating its own menu row on these still renders.
+  assert.equal(desktop.Menu.inGlobalMenu(), false);
+  assert.equal(desktop.Tray.available(), false);
   desktop.Tray.set({ tooltip: "Gallery", menu: [] });
   desktop.Tray.set(null);
   let pressed = false;
