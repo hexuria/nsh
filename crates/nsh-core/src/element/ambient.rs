@@ -1772,10 +1772,10 @@ fn bind_key(keystroke: &str, options: KeyOptions, claim: bool, handler: impl Fn(
     let os = os();
     let parsed = crate::keymap::Keystroke::parse_with(keystroke, apple_keys())
         .unwrap_or_else(|e| panic!("on_key: {e}"));
-    if let Some(why) = parsed.reserved(os) {
-        if !claim || why == "it quits the app" {
-            panic!("on_key: {keystroke:?} cannot be bound: {why}");
-        }
+    if let Some(why) = parsed.reserved(os)
+        && (!claim || why == "it quits the app")
+    {
+        panic!("on_key: {keystroke:?} cannot be bound: {why}");
     }
     let owner = Owner::current();
     let handler: super::keys::KeyHandler = Rc::new(move |k: &str| owner.run(|| handler(k)));
