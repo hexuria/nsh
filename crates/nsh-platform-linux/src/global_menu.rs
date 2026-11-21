@@ -842,13 +842,60 @@ mod tests {
 
     #[cfg(feature = "global-menu")]
     impl<'a> Registrar<'a> {
+        /// A fake registrar on the tests' session bus, recording method
+        /// calls: the first `failures` `RegisterWindow` calls are
+        /// refused, the rest succeed. The guard exists before the
+        /// object registers, so a setup panic still frees the name.
         fn claim(bus: &'a gio::DBusConnection, failures: usize) -> Self {
-            let (registration, calls) = fake_registrar(bus, failures);
-            Self {
+            let reply = bus
+                .call_sync(
+                    Some("org.freedesktop.DBus"),
+                    "/org/freedesktop/DBus",
+                    "org.freedesktop.DBus",
+                    "RequestName",
+                    Some(&(REGISTRAR, 0u32).to_variant()),
+                    None,
+                    gio::DBusCallFlags::NONE,
+                    5000,
+                    gio::Cancellable::NONE,
+                )
+                .expect("the name answers");
+            let mut registrar = Self {
                 bus,
-                registration: Some(registration),
-                calls,
-            }
+                registration: None,
+                calls: Calls::default(),
+            };
+            assert_eq!(
+                reply.get::<(u32,)>().map(|(code,)| code),
+                Some(1),
+                "the registrar's name is owned"
+            );
+            let xml = "<node><interface name='com.canonical.AppMenu.Registrar'>\
+                       <method name='RegisterWindow'><arg type='u' direction='in'/>\
+                       <arg type='o' direction='in'/></method>\
+                       <method name='UnregisterWindow'><arg type='u' direction='in'/></method>\
+                       </interface></node>";
+            let info = gio::DBusNodeInfo::for_xml(xml).unwrap();
+            let interface = info.lookup_interface(REGISTRAR).unwrap();
+            let recorded = registrar.calls.clone();
+            registrar.registration = Some(
+                bus.register_object(REGISTRAR_PATH, &interface)
+                    .method_call(move |_, _, _, _, method, params, invocation| {
+                        recorded.borrow_mut().push((
+                            method.to_owned(),
+                            params.child_value(0).get::<u32>().unwrap_or(0),
+                        ));
+                        if recorded.borrow().len() > failures {
+                            invocation.return_value(None);
+                        } else {
+                            invocation
+                                .return_dbus_error("org.nsh.test.Refused", "the panel refused");
+                        }
+                    })
+                    .build()
+                    .expect("the registrar object registers"),
+            );
+            registrar
         }
     }
 
@@ -860,56 +907,6 @@ mod tests {
             }
             release_name(self.bus, REGISTRAR);
         }
-    }
-
-    /// The registrar's name and object, recorded method calls: a fake
-    /// registrar on the tests' session bus. The first `failures`
-    /// `RegisterWindow` calls are refused, the rest succeed.
-    #[cfg(feature = "global-menu")]
-    fn fake_registrar(bus: &gio::DBusConnection, failures: usize) -> (gio::RegistrationId, Calls) {
-        let reply = bus
-            .call_sync(
-                Some("org.freedesktop.DBus"),
-                "/org/freedesktop/DBus",
-                "org.freedesktop.DBus",
-                "RequestName",
-                Some(&(REGISTRAR, 0u32).to_variant()),
-                None,
-                gio::DBusCallFlags::NONE,
-                5000,
-                gio::Cancellable::NONE,
-            )
-            .expect("the name answers");
-        assert_eq!(
-            reply.get::<(u32,)>().map(|(code,)| code),
-            Some(1),
-            "the registrar's name is owned"
-        );
-        let xml = "<node><interface name='com.canonical.AppMenu.Registrar'>\
-                   <method name='RegisterWindow'><arg type='u' direction='in'/>\
-                   <arg type='o' direction='in'/></method>\
-                   <method name='UnregisterWindow'><arg type='u' direction='in'/></method>\
-                   </interface></node>";
-        let info = gio::DBusNodeInfo::for_xml(xml).unwrap();
-        let interface = info.lookup_interface(REGISTRAR).unwrap();
-        let calls: Rc<RefCell<Vec<(String, u32)>>> = Rc::default();
-        let recorded = calls.clone();
-        let registration = bus
-            .register_object(REGISTRAR_PATH, &interface)
-            .method_call(move |_, _, _, _, method, params, invocation| {
-                recorded.borrow_mut().push((
-                    method.to_owned(),
-                    params.child_value(0).get::<u32>().unwrap_or(0),
-                ));
-                if recorded.borrow().len() > failures {
-                    invocation.return_value(None);
-                } else {
-                    invocation.return_dbus_error("org.nsh.test.Refused", "the panel refused");
-                }
-            })
-            .build()
-            .expect("the registrar object registers");
-        (registration, calls)
     }
 
     #[test]
