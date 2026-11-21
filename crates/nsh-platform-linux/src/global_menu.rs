@@ -646,6 +646,8 @@ mod tests {
                 owner().is_some_and(|o| Rc::ptr_eq(&o, &one)),
                 "the last setter's menu is the panel's"
             );
+            // (Without `global-menu` no window's menu is the panel's.)
+            #[cfg(feature = "global-menu")]
             assert!(one.environment.get().global_menu);
             assert!(!two.environment.get().global_menu);
         });
@@ -678,6 +680,7 @@ mod tests {
                 "the export is the last setter still standing"
             );
             assert!(!one.environment.get().global_menu);
+            #[cfg(feature = "global-menu")]
             assert!(two.environment.get().global_menu);
             drop(w1);
             drop(w2);
@@ -870,6 +873,9 @@ mod tests {
             set_menu(&surface, Some(vec![action(1, "One's")]));
             place(&surface, &window, Some(&[action(1, "One's")]), true);
             assert!(owner().is_some());
+            // Only with the feature does the panel claim the window's
+            // menu (without `global-menu` the tie is `Tie::None`).
+            #[cfg(feature = "global-menu")]
             assert!(surface.environment.get().global_menu);
             // The app clears the only menu: the export ends rather than
             // stay an empty menu, and `Menu.inGlobalMenu()` reads false.
