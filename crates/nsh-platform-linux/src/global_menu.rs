@@ -948,9 +948,9 @@ mod tests {
             let surface = gtk_test::surface();
             crate::system::watch_environment(&surface);
             let window = gtk_test::show(&surface);
-            if window.surface().and_then(|s| x11_window(&s)).is_none() {
+            let Some(xid) = window.surface().and_then(|s| x11_window(&s)) else {
                 return;
-            }
+            };
             // The first registration is refused, the next succeeds.
             let (registration, calls) = fake_registrar(&bus, 1);
             set_menu(&surface, Some(vec![action(1, "One's")]));
@@ -972,14 +972,26 @@ mod tests {
                 "the window registered twice: {:?}",
                 calls.borrow()
             );
-            // Let the registrar's replies land.
-            let cx = glib::MainContext::default();
-            let until = std::time::Instant::now() + std::time::Duration::from_millis(250);
-            while std::time::Instant::now() < until {
-                if !cx.iteration(false) {
-                    std::thread::sleep(std::time::Duration::from_millis(2));
-                }
-            }
+            // One more call, its reply ordered after the refused
+            // call's: when it lands, the refusal's callback has run.
+            let answered = Rc::new(Cell::new(false));
+            let flag = answered.clone();
+            bus.call(
+                Some(REGISTRAR),
+                REGISTRAR_PATH,
+                REGISTRAR,
+                "UnregisterWindow",
+                Some(&(0u32,).to_variant()),
+                None,
+                gio::DBusCallFlags::NONE,
+                5000,
+                gio::Cancellable::NONE,
+                move |_| flag.set(true),
+            );
+            assert!(
+                gtk_test::wait_until(|| answered.get()),
+                "the refused call's reply was handled"
+            );
             assert!(
                 surface.environment.get().global_menu,
                 "the stale refusal left the newer tie alone"
@@ -988,7 +1000,7 @@ mod tests {
                 calls
                     .borrow()
                     .iter()
-                    .filter(|(m, _)| m == "UnregisterWindow")
+                    .filter(|&(m, x)| m == "UnregisterWindow" && *x == xid)
                     .count(),
                 1,
                 "only the dropped export unregistered: {:?}",
