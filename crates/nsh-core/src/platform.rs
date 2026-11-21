@@ -442,8 +442,10 @@ pub struct Environment {
     /// (`Tray.set` does nothing there). On Linux, while a panel hosts
     /// StatusNotifierItems (an `org.kde.StatusNotifierWatcher` is on the
     /// session bus: Plasma, most panels, GNOME only with the AppIndicator
-    /// extension), live. Where it is false a window hidden to the tray
-    /// could not come back, so apps minimize instead.
+    /// extension), live; it starts `false` until the bus answers, so an
+    /// app reads it when it needs it, not once at launch. Where it is
+    /// false a window hidden to the tray could not come back, so apps
+    /// minimize instead.
     pub tray: bool,
     /// The application menu is in the desktop's global menu bar rather than
     /// in the window (TS: `Menu.inGlobalMenu()`): Linux under KDE Plasma
