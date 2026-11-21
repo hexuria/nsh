@@ -38,7 +38,7 @@ use crate::surface::Surface;
 const ITEM_PATH: &str = "/StatusNotifierItem";
 const MENU_PATH: &str = "/MenuBar";
 pub(crate) const WATCHER: &str = "org.kde.StatusNotifierWatcher";
-const WATCHER_PATH: &str = "/StatusNotifierWatcher";
+pub(crate) const WATCHER_PATH: &str = "/StatusNotifierWatcher";
 const ITEM_INTERFACE: &str = "org.kde.StatusNotifierItem";
 pub(crate) const MENU_INTERFACE: &str = "com.canonical.dbusmenu";
 /// The sizes the icon is sent at, in pixels: panels pick the nearest.

@@ -57,9 +57,11 @@
 //!   `/etc/timezone`'s;
 //! - the tray (`Tray.available()`): whether a panel hosts
 //!   StatusNotifierItems, that is whether `org.kde.StatusNotifierWatcher`
-//!   has an owner on the session bus: followed from the start (false
-//!   until the bus answers, so start-up waits on no round trip), through a
-//!   panel that starts, quits or restarts ([`watch_name`]).
+//!   is on the session bus and answers `IsStatusNotifierHostRegistered`
+//!   (the watcher alone, without a tray widget, is not enough): followed
+//!   from the start (false until the bus answers, so start-up waits on no
+//!   round trip), through a panel that starts, quits or restarts
+//!   ([`watch_name`], [`watch_tray_host`]).
 //!
 //! Safe area and keyboard height are zero: desktop windows have neither.
 //!
@@ -199,8 +201,12 @@ struct System {
     overlays: Vec<Overlay>,
     /// The menus' style sheet, in the app's colors ([`crate::menu_style`]).
     menu_style: Option<gtk::CssProvider>,
-    /// A panel hosts tray icons (the StatusNotifierWatcher is on the bus).
+    /// A panel hosts tray icons (the StatusNotifierWatcher's
+    /// `IsStatusNotifierHostRegistered`).
     tray_host: bool,
+    /// Counts the watcher's owners: answers asked of an earlier owner do
+    /// not count ([`ask_tray_host`]).
+    tray_owner: u64,
 }
 
 thread_local! {
@@ -806,12 +812,90 @@ pub(crate) fn watch_name(name: &str, known: Option<bool>, changed: impl Fn(bool)
 }
 
 /// Follows whether a panel hosts tray icons (`Tray.available()`): false
-/// until the bus answers, so start-up waits on no round trip.
+/// until the bus answers, so start-up waits on no round trip. The watcher
+/// alone is not enough — Plasma runs it without a tray widget in a panel;
+/// a panel hosting StatusNotifierItems is its `IsStatusNotifierHostRegistered`
+/// (followed on its `StatusNotifierHost(Un)registered` signals).
 fn watch_tray_host() {
-    watch_name(crate::tray::WATCHER, Some(false), |on| {
-        SYSTEM.with(|s| s.borrow_mut().tray_host = on);
-        system_changed();
+    gio::DBusProxy::for_bus(
+        gio::BusType::Session,
+        gio::DBusProxyFlags::DO_NOT_LOAD_PROPERTIES,
+        None,
+        crate::tray::WATCHER,
+        crate::tray::WATCHER_PATH,
+        crate::tray::WATCHER,
+        gio::Cancellable::NONE,
+        |proxy| {
+            let proxy = match proxy {
+                Ok(proxy) => proxy,
+                Err(err) => return log::debug!("no tray watcher: {err}"),
+            };
+            proxy.connect_g_signal(|_, _, signal, _| {
+                if matches!(
+                    signal,
+                    "StatusNotifierHostRegistered" | "StatusNotifierHostUnregistered"
+                ) {
+                    ask_tray_host();
+                }
+            });
+            SYSTEM.with(|s| s.borrow_mut().proxies.push(proxy));
+            watch_name(crate::tray::WATCHER, Some(false), |on| {
+                let generation = SYSTEM.with(|s| {
+                    let mut s = s.borrow_mut();
+                    s.tray_owner += 1;
+                    s.tray_owner
+                });
+                if on {
+                    ask_tray_host();
+                } else {
+                    tray_host(false, generation);
+                }
+            });
+        },
+    );
+}
+
+/// Asks the watcher whether a panel hosts StatusNotifierItems.
+fn ask_tray_host() {
+    let Ok(bus) = gio::bus_get_sync(gio::BusType::Session, gio::Cancellable::NONE) else {
+        return;
+    };
+    let generation = SYSTEM.with(|s| s.borrow().tray_owner);
+    bus.call(
+        Some(crate::tray::WATCHER),
+        crate::tray::WATCHER_PATH,
+        "org.freedesktop.DBus.Properties",
+        "Get",
+        Some(&(crate::tray::WATCHER, "IsStatusNotifierHostRegistered").to_variant()),
+        Some(glib::VariantTy::new("(v)").expect("a valid type")),
+        gio::DBusCallFlags::NONE,
+        5000,
+        gio::Cancellable::NONE,
+        move |result| {
+            let on = result
+                .ok()
+                .and_then(|reply| reply.get::<(glib::Variant,)>())
+                .and_then(|(value,)| value.get::<bool>())
+                .unwrap_or(false);
+            tray_host(on, generation);
+        },
+    );
+}
+
+/// `Tray.available()` as the panel answered it; every surface follows a
+/// change. `generation` is the watcher's owner the answer was asked of:
+/// a reply from an earlier owner does not count.
+fn tray_host(on: bool, generation: u64) {
+    let changed = SYSTEM.with(|s| {
+        let mut s = s.borrow_mut();
+        if s.tray_owner != generation {
+            return false;
+        }
+        std::mem::replace(&mut s.tray_host, on) != on
     });
+    if changed {
+        system_changed();
+    }
 }
 
 /// Follows AT-SPI's `ScreenReaderEnabled` (Orca and the like set it).
@@ -1917,5 +2001,101 @@ mod tests {
         assert_eq!(font_scale(-1), 1.0);
         assert_eq!(font_scale(96 * 1024), 1.0);
         assert_eq!(font_scale(120 * 1024), 1.25);
+    }
+
+    /// A watcher on the bus is not a panel: `Tray.available()` follows
+    /// the watcher's `IsStatusNotifierHostRegistered`, on its signals.
+    #[test]
+    fn a_panel_not_just_the_watcher_hosts_the_tray() {
+        crate::gtk_test::run(|| {
+            let Some(bus) = gio::bus_get_sync(gio::BusType::Session, gio::Cancellable::NONE).ok()
+            else {
+                return;
+            };
+            // The watchers are installed once (`install`): the surface's
+            // environment follows the answer the fake panel gives.
+            let surface = crate::gtk_test::surface();
+            watch_environment(&surface);
+            // The watcher, whose `IsStatusNotifierHostRegistered` the test
+            // sets.
+            let reply = bus
+                .call_sync(
+                    Some("org.freedesktop.DBus"),
+                    "/org/freedesktop/DBus",
+                    "org.freedesktop.DBus",
+                    "RequestName",
+                    Some(&(crate::tray::WATCHER, 0u32).to_variant()),
+                    None,
+                    gio::DBusCallFlags::NONE,
+                    5000,
+                    gio::Cancellable::NONE,
+                )
+                .expect("the name answers");
+            assert_eq!(
+                reply.get::<(u32,)>().map(|(code,)| code),
+                Some(1),
+                "the watcher's name is owned"
+            );
+            let hosted = std::rc::Rc::new(std::cell::Cell::new(false));
+            let xml = "<node><interface name='org.freedesktop.DBus.Properties'>\
+                       <method name='Get'><arg type='s' direction='in'/>\
+                       <arg type='s' direction='in'/><arg type='v' direction='out'/>\
+                       </method></interface></node>";
+            let info = gio::DBusNodeInfo::for_xml(xml).unwrap();
+            let interface = info
+                .lookup_interface("org.freedesktop.DBus.Properties")
+                .unwrap();
+            let answering = hosted.clone();
+            let registration = bus
+                .register_object(crate::tray::WATCHER_PATH, &interface)
+                .method_call(move |_, _, _, _, method, _, invocation| {
+                    if method == "Get" {
+                        let value = answering.get();
+                        invocation.return_value(Some(&(value.to_variant(),).to_variant()));
+                    }
+                })
+                .build()
+                .expect("the watcher object registers");
+            // A panel comes: availability turns on.
+            hosted.set(true);
+            let _ = bus.emit_signal(
+                None,
+                crate::tray::WATCHER_PATH,
+                crate::tray::WATCHER,
+                "StatusNotifierHostRegistered",
+                None,
+            );
+            assert!(
+                crate::gtk_test::wait_until(|| surface.environment.get().tray),
+                "a registered host hosts the tray"
+            );
+            // It goes (no tray widget, or it quit): off again.
+            hosted.set(false);
+            let _ = bus.emit_signal(
+                None,
+                crate::tray::WATCHER_PATH,
+                crate::tray::WATCHER,
+                "StatusNotifierHostUnregistered",
+                None,
+            );
+            assert!(
+                crate::gtk_test::wait_until(|| !surface.environment.get().tray),
+                "the watcher's last host leaving ends the tray"
+            );
+            let _ = bus.unregister_object(registration);
+            // The name goes back to the bus (the connection is shared:
+            // a later test owning it would find it taken).
+            let _ = bus.call_sync(
+                Some("org.freedesktop.DBus"),
+                "/org/freedesktop/DBus",
+                "org.freedesktop.DBus",
+                "ReleaseName",
+                Some(&(crate::tray::WATCHER,).to_variant()),
+                None,
+                gio::DBusCallFlags::NONE,
+                5000,
+                gio::Cancellable::NONE,
+            );
+        });
     }
 }
