@@ -222,6 +222,7 @@ covers [nsh/desktop] currentWindow
 covers [nsh/desktop] windows
 covers [nsh/desktop] focusedWindow
 covers [nsh/desktop] Menu
+covers [nsh/desktop] Tray
 covers [nsh/desktop] Application
 # mod-device
 tap id:case-mod-device
