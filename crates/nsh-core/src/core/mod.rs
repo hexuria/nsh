@@ -2655,6 +2655,11 @@ impl<M: TextEngine> Core<M> {
                     return Err(ApplyError::IdOutOfRange(id));
                 }
                 if self.fold_runs {
+                    // A run kept without a node is a live one for the
+                    // quota too: `alloc` cannot see it.
+                    if self.nodes.len().saturating_add(self.runs.len()) >= self.max_nodes {
+                        return Err(ApplyError::TooManyNodes(self.max_nodes));
+                    }
                     self.runs.insert(
                         id,
                         Run {
@@ -3801,7 +3806,8 @@ impl<M: TextEngine> Core<M> {
 
     fn alloc(&mut self, id: NodeId, kind: Kind) -> Result<Key, ApplyError> {
         let idx = id as usize;
-        if self.nodes.len() >= self.max_nodes {
+        // Runs kept without a node (`runs`) are live nodes for the quota.
+        if self.nodes.len().saturating_add(self.runs.len()) >= self.max_nodes {
             return Err(ApplyError::TooManyNodes(self.max_nodes));
         }
         if idx > self.slots.extent().saturating_add(self.max_nodes) {

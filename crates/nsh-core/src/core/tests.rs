@@ -48723,6 +48723,39 @@ mod folded_runs {
     }
 
     #[test]
+    fn folded_runs_count_for_the_node_quota() {
+        let mut c = core();
+        c.set_max_nodes(3);
+        // The root is one node: two runs folded reach the quota.
+        apply(&mut c, vec![run(2, "a"), run(3, "b")]);
+        assert!(matches!(
+            c.apply(run(4, "c")),
+            Err(ApplyError::TooManyNodes(3))
+        ));
+        // A node of another kind does not fit either.
+        assert!(matches!(
+            c.apply(Op::Create {
+                id: 4,
+                tag: Tag::View
+            }),
+            Err(ApplyError::TooManyNodes(3))
+        ));
+        // Releasing a run frees a place.
+        apply(&mut c, vec![Op::Release { id: 3 }]);
+        apply(
+            &mut c,
+            vec![Op::Create {
+                id: 4,
+                tag: Tag::View,
+            }],
+        );
+        assert!(matches!(
+            c.apply(run(5, "d")),
+            Err(ApplyError::TooManyNodes(3))
+        ));
+    }
+
+    #[test]
     fn a_run_in_a_span_folds_and_keeps_its_place() {
         // <Text>a<Text bold>b</Text>c</Text>
         let mut c = core();
