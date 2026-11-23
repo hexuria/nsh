@@ -69,6 +69,14 @@ thread_local! {
 
 static NEXT_KEY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
+/// A development surface's identity and UI thread, safe to keep on another thread.
+#[cfg(feature = "dev")]
+#[derive(Clone)]
+pub struct DevSurface {
+    key: u64,
+    ui: crate::window::UiThread,
+}
+
 /// Forwards batches from the engine thread to the main thread.
 struct Sink {
     /// The window to wake (an `HWND` as an integer: window handles may be
@@ -237,6 +245,8 @@ pub(crate) struct Surface {
     /// The model of a test session's app (`nsh test --target windows`).
     #[cfg(feature = "dev")]
     test_model: RefCell<Option<std::sync::Arc<nsh_testing::agent::Model>>>,
+    #[cfg(feature = "dev")]
+    attachment: RefCell<Option<nsh_testing::agent::SurfaceAttachment>>,
     /// The time of the current (last) frame (seconds since the surface was
     /// made).
     now: Cell<f64>,
@@ -293,6 +303,11 @@ pub(crate) struct Surface {
 }
 
 impl Surface {
+    /// Drops the development host's attachment when its window closes.
+    #[cfg(feature = "dev")]
+    pub(crate) fn release_attachment(&self) {
+        self.attachment.borrow_mut().take();
+    }
     /// A surface with no app and no window yet.
     pub(crate) fn new(environment: Environment) -> Rc<Surface> {
         let key = NEXT_KEY.fetch_add(1, Ordering::Relaxed);
@@ -338,6 +353,8 @@ impl Surface {
             keeper: Cell::new(None),
             #[cfg(feature = "dev")]
             test_model: RefCell::default(),
+            #[cfg(feature = "dev")]
+            attachment: RefCell::default(),
             now: Cell::new(0.0),
             epoch: std::time::Instant::now(),
             on_error: RefCell::new(None),
@@ -363,6 +380,13 @@ impl Surface {
             main_unshown: Cell::new(true),
         });
         SURFACES.with(|s| s.borrow_mut().insert(key, Rc::downgrade(&surface)));
+        #[cfg(feature = "dev")]
+        {
+            let dev_surface = DevSurface { key, ui: surface.ui_thread() };
+            *surface.attachment.borrow_mut() = nsh_testing::agent::surface_opened(
+                &nsh_testing::agent::OpenedSurface::new(&dev_surface),
+            );
+        }
         let weak = Rc::downgrade(&surface);
         root.set_invalidate(Rc::new(move |view, rect| {
             if let Some(surface) = weak.upgrade() {
@@ -934,6 +958,10 @@ impl Surface {
                 if let Some(model) = &*self.test_model.borrow() {
                     model.error(message.to_string());
                 }
+                #[cfg(feature = "dev")]
+                if let Some(model) = self.attachment.borrow().as_ref().and_then(|a| a.model.as_ref()) {
+                    model.error(message.to_string());
+                }
                 if let Some(f) = &*self.on_error.borrow() {
                     f(&message);
                 }
@@ -978,6 +1006,10 @@ impl Surface {
         self.mounter.borrow_mut().end_batch(self);
         #[cfg(feature = "dev")]
         if let Some(model) = &*self.test_model.borrow() {
+            model.apply(batch);
+        }
+        #[cfg(feature = "dev")]
+        if let Some(model) = self.attachment.borrow().as_ref().and_then(|a| a.model.as_ref()) {
             model.apply(batch);
         }
         crate::access::batch_applied(self);
@@ -1205,6 +1237,8 @@ impl Surface {
 
 impl Drop for Surface {
     fn drop(&mut self) {
+        #[cfg(feature = "dev")]
+        self.attachment.get_mut().take();
         let key = self.key;
         let _ = SURFACES.try_with(|s| s.borrow_mut().remove(&key));
     }

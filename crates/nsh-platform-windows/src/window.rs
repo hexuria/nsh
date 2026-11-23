@@ -1655,6 +1655,8 @@ fn handle(
             crate::presence::session_changed(surface, wparam.0 as u32);
         }
         WM_DESTROY => {
+            #[cfg(feature = "dev")]
+            surface.release_attachment();
             crate::window_close::destroyed(surface);
             crate::tray::destroyed(hwnd);
             crate::global_shortcut::destroyed(hwnd);

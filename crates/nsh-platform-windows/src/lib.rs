@@ -86,6 +86,8 @@ pub use windows;
 
 #[cfg(feature = "dev")]
 pub use crate::app::set_root;
+#[cfg(feature = "dev")]
+pub use crate::surface::DevSurface;
 pub use crate::{
     app::{
         AppOptions, AppSource, AppView, debug_output, fatal_error, run_app, set_components,
