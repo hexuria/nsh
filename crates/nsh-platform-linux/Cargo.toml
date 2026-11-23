@@ -23,8 +23,6 @@ global-menu = ["dep:gdk4-x11", "dep:gdk4-wayland", "dep:wayland-client", "dep:wa
 js = ["nsh-engine/js-core"]
 # Development support: dev server client, log forwarding, error overlay.
 dev = ["global-menu", "js", "shader", "editor", "emoji-picker", "highlight", "math", "plot", "rich-editor", "term", "zlib", "crypto", "websocket", "updater", "dep:nsh-dev", "dep:nsh-testing", "svg", "net", "sound"]
-# GPUI-agent is linked only into development hosts, never release apps.
-dev-agent = ["dev", "dep:nsh-gpui-agent", "nsh-gpui-agent/dev-agent"]
 # Web views with WebKitGTK 6.0 (`libwebkitgtk-6.0-dev` to build,
 # `libwebkitgtk-6.0-4` to run); without it a web view shows a placeholder.
 webview = ["dep:webkit6"]
@@ -76,6 +74,10 @@ sound = ["dep:gstreamer", "dep:gstreamer-app", "dep:gstreamer-audio"]
 log.workspace = true
 
 # Empty off Linux (like the other platform crates off their targets).
+gdk4-x11 = { version = "0.11", optional = true }
+gdk4-wayland = { version = "0.11", features = ["wayland_crate"], optional = true }
+wayland-client = { version = "0.31", optional = true }
+wayland-protocols-plasma = { version = "0.3", features = ["client"], optional = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 nsh-core.workspace = true
 nsh-engine.workspace = true
@@ -95,11 +97,6 @@ ttf-parser.workspace = true
 crossbeam-channel.workspace = true
 nsh-dev = { workspace = true, features = ["client"], optional = true }
 nsh-testing = { workspace = true, features = ["agent"], optional = true }
-nsh-gpui-agent = { workspace = true, optional = true }
 # 2.42: downloads (`WebKitDownload`), which the web view's destination
 # decisions use.
 webkit6 = { workspace = true, optional = true, features = ["v2_42"] }
-gdk4-x11 = { version = "0.11", optional = true }
-gdk4-wayland = { version = "0.11", features = ["wayland_crate"], optional = true }
-wayland-client = { version = "0.31", optional = true }
-wayland-protocols-plasma = { version = "0.3", features = ["client"], optional = true }
