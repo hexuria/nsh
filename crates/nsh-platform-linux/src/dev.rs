@@ -130,6 +130,45 @@ impl DevSurfaceView<'_> {
         crate::key_focus::focus(&view);
         true
     }
+
+    /// The ids of the app's own windows currently mounted
+    /// (`Window`/`Window.open` dialog roots).
+    pub fn app_windows(&self) -> Vec<nsh_core::NodeId> {
+        crate::window::app_window_ids(self.surface)
+    }
+
+    /// The node whose view takes a press at `at` in the app window
+    /// `id`'s coordinates (`None` while it is not mounted).
+    pub fn window_node_at(
+        &self,
+        id: nsh_core::NodeId,
+        at: nsh_core::geometry::Point<nsh_core::geometry::Points>,
+    ) -> Option<nsh_core::NodeId> {
+        let (_, view) = crate::window::window_and_view(self.surface, id)?;
+        crate::input::pick_node(&view, at.x.0, at.y.0)
+    }
+
+    /// Whether the app window `id` is focused (`None` while it is not
+    /// mounted).
+    pub fn window_focused(&self, id: nsh_core::NodeId) -> Option<bool> {
+        let (window, _) = crate::window::window_and_view(self.surface, id)?;
+        Some(crate::window::is_focused(&window))
+    }
+
+    /// Resizes the app window `id`, as the window module does for an
+    /// `attributes.size` change (`false` while it is not mounted).
+    pub fn resize_window(
+        &self,
+        id: nsh_core::NodeId,
+        width: nsh_core::geometry::Points,
+        height: nsh_core::geometry::Points,
+    ) -> bool {
+        let Some((window, _)) = crate::window::window_and_view(self.surface, id) else {
+            return false;
+        };
+        window.set_default_size(width.0 as i32, height.0 as i32);
+        true
+    }
 }
 
 /// The client of the most recent session: logs go there.
