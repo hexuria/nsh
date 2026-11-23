@@ -77,6 +77,29 @@ pub struct DevSurface {
     ui: crate::window::UiThread,
 }
 
+/// A development surface borrowed on its UI thread.
+#[cfg(feature = "dev")]
+pub struct DevSurfaceRef<'a> {
+    surface: &'a Rc<Surface>,
+}
+
+#[cfg(feature = "dev")]
+impl DevSurface {
+    /// The same native input driver used by platform tests.
+    pub fn native(&self) -> Box<dyn nsh_testing::agent::Native> {
+        Box::new(crate::agent::WindowsNative::new(self.key, self.ui))
+    }
+
+    /// Runs `f` on the UI thread, with `None` if the surface no longer exists.
+    pub fn invoke(&self, f: impl FnOnce(Option<DevSurfaceRef<'_>>) + Send + 'static) {
+        let key = self.key;
+        self.ui.invoke(move || {
+            let surface = Surface::by_key(key);
+            f(surface.as_ref().map(|surface| DevSurfaceRef { surface }));
+        });
+    }
+}
+
 /// Forwards batches from the engine thread to the main thread.
 struct Sink {
     /// The window to wake (an `HWND` as an integer: window handles may be
