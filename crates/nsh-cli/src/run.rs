@@ -810,6 +810,13 @@ fn run_android(
     }
     let env = android_app_env(&crate::package::read_config(entry)?);
     start.extend(env.iter().map(String::as_str));
+    let mut launch = crate::android_launch::AndroidLaunch::new(&sdk, &serial);
+    let _launch_attachment = if let Some(hook) = crate::android_launch::hook() {
+        hook(&mut launch)?
+    } else {
+        None
+    };
+    start.extend(launch.extras().iter().map(String::as_str));
     let step = ui::Step::start("launching the development host");
     android::adb(&sdk, &serial, &start)?;
     step.finish();
@@ -1113,7 +1120,7 @@ fn android_env_extras(
 
 /// `text` as one word of a POSIX shell's command line: `adb shell` joins its
 /// arguments into a line the device's shell parses again.
-fn shell_quote(text: &str) -> String {
+pub(crate) fn shell_quote(text: &str) -> String {
     format!("'{}'", text.replace('\'', r"'\''"))
 }
 
