@@ -61,7 +61,7 @@ struct Click {
 }
 
 /// The surface the agent acts on, by key (its calls must be `Send`).
-pub(crate) struct MacNative {
+pub struct MacNative {
     key: u64,
     /// The last left button press, which the next one may follow.
     last_click: Mutex<Option<Click>>,
@@ -70,7 +70,8 @@ pub(crate) struct MacNative {
 }
 
 impl MacNative {
-    pub(crate) fn new(key: u64) -> Self {
+    /// The driver for the surface with `key`.
+    pub fn new(key: u64) -> Self {
         MacNative {
             key,
             last_click: Mutex::new(None),

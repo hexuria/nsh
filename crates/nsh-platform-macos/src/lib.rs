@@ -24,7 +24,7 @@
 
 mod access;
 #[cfg(feature = "dev")]
-mod agent;
+pub mod agent;
 mod animation;
 mod app;
 mod blur;
