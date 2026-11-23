@@ -4258,6 +4258,11 @@ impl Mounter {
         self.control.dispatch_event(id, kind, EventPayload::None);
     }
 
+    /// Sends an event with a payload to the engine.
+    pub(crate) fn dispatch_payload(&self, id: NodeId, kind: EventKind, payload: EventPayload) {
+        self.control.dispatch_event(id, kind, payload);
+    }
+
     /// Whether the user may pop the top screen of stack `id`.
     pub(crate) fn stack_can_pop(&self, id: NodeId) -> bool {
         if let Some(split) = self.splits.get(&id) {
