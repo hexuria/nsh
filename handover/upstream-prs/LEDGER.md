@@ -14,7 +14,7 @@ States: `not started`, `already upstream`, `issue open`, `agreed`, `declined`, `
 | B04 | not started | | | a09f40be6 | | windows: a web view opens the file page its app loaded (macOS has it upstream, PR #1496); requires Windows machine |
 | B05 | not started | | | 1b09f2403 | | windows: take the keyboard back from web views when a press lands outside them; requires Windows machine |
 | B06 | ready, not sent | | | 3bd56a954 | | Branch `up/macos-text-input-arrows`, commit `513870a83` pushed to hexuria; compare link handed to the owner. Native input_focus Up/Down assertions pass; its existing caret-position check fails on this machine on upstream main too |
-| B07 | not started | | | abe8d514c | | ios: read the dev session from the held view state on reload |
+| B07 | not for upstream | | | abe8d514c | | ios: the changed line sits under the fork-only `dev-agent` feature (`reset_agent_scene`), which upstream main does not have; nothing to send |
 | B08 | not started | | | 38bcc1126 5afbb7d19 | | js: retire replaced app-menu callbacks |
 | B09 | not started | | | 88b940945 | | macos: draw views at the scale they are shown at |
 | B10 | not started | | | b20ad1c63 | | macos: keep the lines canvases set their texts in |
