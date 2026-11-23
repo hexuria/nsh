@@ -107,6 +107,20 @@ impl<'a> MountedViews<'a> {
             .with_mounter(|mounter| mounter.ui_view(id))
             .flatten()
     }
+
+    /// Fires key binding `id` as a `KeyCommand` on the root, as the
+    /// keymap reports one it matched (`false` while nothing is mounted).
+    pub fn key_command(&self, id: u32) -> bool {
+        self.inner
+            .with_mounter(|mounter| {
+                mounter.dispatch_payload(
+                    nsh_core::ROOT_ID,
+                    nsh_core::EventKind::KeyCommand,
+                    nsh_core::EventPayload::Value(nsh_core::PayloadValue::Number(f64::from(id))),
+                );
+            })
+            .is_some()
+    }
 }
 
 /// A development session's native surface, usable from a worker thread.
