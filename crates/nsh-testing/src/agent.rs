@@ -170,6 +170,15 @@ impl Model {
         self.changed.notify_all();
     }
 
+    /// The app requested a JavaScript animation frame. A frame alone is
+    /// not activity: the app is quiet once its batches stop, as on hosts
+    /// that report no frames ([`Agent::settled`]). An animation that
+    /// renders each frame keeps sending batches, and a step waits
+    /// [`SETTLE`] at most for it, as there.
+    pub fn frame(&self) {
+        self.changed.notify_all();
+    }
+
     /// The app threw `message` (an exception that escaped a callback, a
     /// bundle that did not load): the step taken meanwhile fails with it.
     pub fn error(&self, message: impl Into<String>) {
