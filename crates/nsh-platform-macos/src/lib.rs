@@ -49,7 +49,7 @@ mod navigation;
 mod net;
 mod picker;
 mod screen_color;
-mod scroll;
+pub mod scroll;
 mod selectable_view;
 mod shader;
 mod share;

@@ -603,7 +603,7 @@ fn settle(surface: &Rc<Surface>, view: &NshView) {
 /// The container bounds origin that shows the scroll offset: the content
 /// point (unzoomed) at the viewport's top left. Mirrored children are
 /// placed from the right: the offset runs the other way.
-pub(crate) fn bounds_origin(view: &NshView) -> (f32, f32) {
+pub fn bounds_origin(view: &NshView) -> (f32, f32) {
     let state = view.state();
     let Some(s) = &state.scroll else {
         return (0.0, 0.0);
@@ -2476,7 +2476,7 @@ fn key_scroll_view(view: &NshView, horizontal: bool, dx: f32, dy: f32) -> Option
 /// as iOS and Android do for the focused field. Called when a field gets
 /// the keyboard focus, and when another stop gets it other than by a click
 /// (Tab, `focus()`).
-pub(crate) fn reveal(surface: &Rc<Surface>, target: &NshView) {
+pub fn reveal(surface: &Rc<Surface>, target: &NshView) {
     // The rectangles are AppKit's, which the bounds place.
     commit_ancestors(target);
     // Content moved by the scroll views inside, which rectangles measured
