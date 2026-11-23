@@ -57,6 +57,8 @@ work is gone.
   in buwiz-forms `.github/workflows/nsh.yml`).
 - longbridge/nsh `main` = `958262185` (moved since `167aa3827`).
 - iOS door pin used for checks: `ca714e1fb`.
+
+- Plug repins (all now `56add34a`): linux `91de1a7` (PR #5 open), windows `d21e3a9`, android `3a35f66`, macos `bd0d241`, web `b7fe119` (PR #4), ios `3474e96` (PR #3), bugfixes `1776bbb` (PR #2).
 - Plug repo `main` = `22e8db6e` (stage-0 move merged via PR #1).
 
 ### Socket size check (Task-13 audit by windows session + rerun here)
@@ -74,7 +76,7 @@ work is gone.
 | linux | yes | `devin/linux-agent` @ 91de1a7 repinned to 56add34a | **#5 OPEN** (mergeable) | a32c TASK-16 passed all ops (3 README gaps); linux parity CLEAN: 217 common tests v0.6.1 vs 56add34a in docker (40-min timeout each, same prefix), 2 timing-flake flips, no systematic new failures |
 | windows | yes | `devin/windows-agent` @ d21e3a9 repinned | none | clean check still needed; resize off-by-menu-bar is a known client-area fix not yet moved |
 | android | yes | `devin/1795407849-android` @ 3a35f66 repinned | none | TASK-14 in flight on 5171 — build chain proven end-to-end (AVD gpui35, WHPX, NshDev.apk 217MB); emulator second boot in progress; 9 README gaps reported |
-| macos | yes | `devin/stage1-macos` @ bd0d241 repinned | none | TASK-15 rebuilding on e073 at the new pin; then Composer-regression fix |
+| macos | yes | `devin/stage1-macos` @ bd0d241 repinned | none | TASK-15 DONE clean: all ops verified; gallery 391/73 vs stock 390/74, zero new failures |
 
 ### Known defects found so far
 - iOS fixture comparison (TASK order to e073): 8 of 93 iOS native fixtures fail
