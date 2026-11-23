@@ -79,10 +79,13 @@ work is gone.
 ### Known defects found so far
 - iOS fixture comparison (TASK order to e073): 8 of 93 iOS native fixtures fail
   at `1822d2e15`/`68a4a99ec`. 7 are pre-existing on `buwiz` (MenuScroll,
-  FocusRow, FocusTransfer, LargeTitle, 2× navigation/Keyboard, Selection);
-  **1 regression: keyboard/Composer — all 3 cases pass on buwiz but fail on the
-  plug pin (tap registers `presses:1` but never focuses the input,
-  `focus:none`, `keyboard:down`).** Needs a plug-side fix, owner unknown.
+  FocusRow, FocusTransfer, LargeTitle, 2× navigation/Keyboard, Selection).
+  ~~1 regression: keyboard/Composer~~ **RESOLVED — environmental**: e073 found
+  the iPhone 17 sim had a hardware keyboard connected; buwiz fails identically
+  there. Fixture fix on `devin/1795423559-composer-hwkeyb-fix` off `56add34a`
+  (compare vs gpui-agent). NOTE: `nsh test --target ios` results are
+  sim-keyboard-state-dependent — re-check other pre-existing failures on a sim
+  with Connect Hardware Keyboard off.
 - 8 agent bugs from Devin Review on PR #1 were fixed on
   `devin/1795413363-agent-bugfixes` = PR #2 (open). Two remaining web findings
   behave the same on buwiz → follow-ups, not blockers.
@@ -116,10 +119,16 @@ work is gone.
 3. Open plug PRs for `devin/linux-agent`, `devin/windows-agent`,
    `devin/1795407849-android`, `devin/stage1-macos` (token cannot open PRs —
    needs a human or a PR-write-capable token). Review and land #2/#3/#4.
-4. Build `buwiz-next` = gpui-agent + the 62 non-agent commits (rebase out the
-   30 context-missing conflicts or replay with the skipped commits resolved;
-   see PLAN.md Stage 4 for the intended approach).
-5. Composer regression above needs a plug-side fix.
+4. ~~Build `buwiz-next`~~ DONE — branch `buwiz-next` pushed on hexuria/nsh:
+   50 of 62 picks clean, 11 resolved (3-way per-file merge; door files merged
+   by re-applying the door diff onto buwiz's file), 1 skipped (f0d2d183e
+   byte-identical dup). Fixups: `afae67f7` merge resolutions + linux
+   Cargo.toml (global-menu feature kept, agent deps out). nsh-core/nsh-testing
+   `cargo check` clean. Files the 62 touch: 53/75 byte-identical to buwiz;
+   22 differ — all verified as door diffs or agent/upstream-backport regions
+   (e.g. placing() from #2347, agent doc sections). NOT yet compiled per
+   platform or run-tested.
+5. ~~Composer regression~~ RESOLVED — see Known defects above.
 6. Final: SOCKET.md audit rerun, update buwiz-forms `NSH_PINNED_REF` to the
    final socket pin, delete `crates/bir-shell` per #269 PR 2.
 
