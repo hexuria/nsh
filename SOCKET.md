@@ -31,13 +31,31 @@ Each door is one commit, `<area>: <What it does>`.
 | Web 5 | `nsh-testing`, `nsh-dev` | `snapshot::ScreenSnapshot` and nested owned serde DTOs; `Screen::snapshot(&self) -> ScreenSnapshot`; `SceneQuery::ScreenSnapshot`; `Scene::screen_snapshot(&self) -> Result<ScreenSnapshot, String>` implemented by `RemoteScene`; `Screen::keymap` on wasm | Mounted view props, hierarchy, stack screens, keymap and an icon-free menu as plain data, answered from the host's model. Semantic interpretation and secure-text masking stay in the plug. | Web (DTOs also usable by other hosts) | +751 / -3 |
 | Android 1 | `nsh-platform-android` | `#[non_exhaustive] pub struct AndroidSurface`; `native(&self) -> Box<dyn Native>`; `density(&self) -> f32`; `view(&self) -> &GlobalRef`; `java_vm(&self) -> *mut jni::sys::JavaVM`; `Native.connectDevServer` calls `surface_opened` and keeps its `SurfaceAttachment` | The existing native input driver, display density, `NshView` global reference and Java VM of the development surface, read-only. The host feeds the attachment's model every batch, error and frame, resets it when the engine is replaced, and drops the attachment in `Native.destroy`. | Android | +107 |
 | shared 7 | `nsh-cli` | `#[non_exhaustive] pub struct DevelopmentHostLaunch<'a>`; `device(&self) -> &str`; `set_environment(&mut self, name: &str, value: &str)`; `write_private_file(&self, path: &str, contents: &[u8]) -> anyhow::Result<()>`; `set_development_host_launch_hook(hook: DevelopmentHostLaunchHook) -> Result<(), DevelopmentHostLaunchHook>`; `type DevelopmentHostLaunchHook = fn(&mut DevelopmentHostLaunch<'_) -> anyhow::Result<Option<Box<dyn Any>>>` | The lifecycle point after a development host is installed and before it starts. Its Android backend reports the adb serial, maps environment-like values to start-intent strings, and writes a private host file over adb standard input (never in arguments). The returned attachment is kept until the run ends. | Android | +198 |
+| macOS 1 | `nsh-platform-macos` (`dev`) | `pub struct SurfaceHandle(u64)` (`Copy`, `key(self) -> u64`); `Surface::new` calls `surface_opened(&OpenedSurface::new(&handle))` and retains the `SurfaceAttachment` | A key-based handle for the surface a development host opened. The attachment's model is fed on batches, errors and frames, reset when the engine is replaced, and dropped with the surface. | macOS | +60 / -2 |
+| macOS 2 | `nsh-platform-macos` | `pub struct MacNative`; `MacNative::new(key: u64) -> Self` | The platform's ordinary native input driver, for the plug to wrap rather than copy. | macOS | +4 / -3 |
+| macOS 3 | `nsh-platform-macos` | `Surface::key(&self) -> u64`; `Surface::with_key(key: u64) -> Option<Rc<Surface>>`; `Surface::root(&self) -> NshView` | Surface identity, key lookup and the mounted root view. | macOS | +8 / -3 |
+| macOS 4 | `nsh-platform-macos` | `text_input::InputState::masked_len(&self) -> Option<usize>`; `text_input::InputState::plain_text(&self) -> String`; `text_input::pad_owns(input: &InputState, hit: &NSView) -> bool` | Read-only input text state and ownership of a lifted input pad. | macOS | +23 / -2 |
+| macOS 5 | `nsh-platform-macos` | `view::superview(view: &NSView) -> Option<Retained<NSView>>`; `pub struct NshView` with `from_ns`, `ns`, `id`, `kind`, `parent_view`, `child_views`, `test_id`, `events`, `accessibility`, `text`, `style_hidden`, `clips_children`, `input` and `native_views` | Read-only access to mounted views and their props through `NshView` methods, without exposing `ViewState`. | macOS | +56 / -12 |
+| macOS 6 | `nsh-platform-macos` | `pub enum access::Ax`; `pub enum access::Value`; `pub struct access::Spec` (public fields); `access::spec_for(...) -> Spec` | The platform's accessibility role/value mapping as data. | macOS | +58 / -16 |
+| macOS 7 | `nsh-platform-macos` | `keymap::bindings(surface: &Surface) -> Vec<KeyBinding>` | The surface's mounted key bindings. | macOS | +11 / -1 |
+| macOS 8 | `nsh-platform-macos` | `input::{enter, root_in, event, focus_control, later}`; `input::view_at(root: &NshView, x: f32, y: f32) -> Option<NshView>` | Existing input routing and scheduling operations plus read-only hit resolution. | macOS | +12 / -6 |
+| macOS 9 | `nsh-platform-macos` | `window::root_in(surface: &Surface, window: &NSWindow) -> Option<NshView>` | The root view mounted in an app-owned window. | macOS | +2 / -2 |
+| macOS 10 | `nsh-platform-macos` | `scroll::bounds_origin(view: &NshView) -> (f32, f32)`; `scroll::reveal(surface: &Rc<Surface>, target: &NshView)` | Existing scrolling geometry and reveal behavior. | macOS | +3 / -3 |
+| macOS 11 | `nsh-platform-macos` | `text_input::{focus(view: &NshView), editing_in(root: &NshView) -> bool}`; `text_input::test_focused(window: &NSWindow) -> Option<NodeId>` under `feature = "dev"` | Existing input focus operations and focus queries. | macOS | +3 / -3 |
+| macOS 12 | `nsh-platform-macos` (`dev`) | `synth::{to_window, mouse, mouse_event, timestamp, wheel_with, type_text, key, shot}` | The existing synthesized input and screenshot primitives, without provenance marking. | macOS | +12 / -9 |
+| macOS 13 | `nsh-platform-macos` (`dev`) | `AppView::surface_handle(&self) -> SurfaceHandle` | The key handle of the surface an `AppView` runs. | macOS | +6 |
+| macOS 14 | `nsh-platform-macos` | `Surface::wants_frames(&self) -> bool`; `Surface::input_pending(&self) -> bool` under `feature = "dev"` | Whether frame/animation work is in flight and whether an engine batch is waiting for the main thread. The plug keeps the batch count and settle policy. | macOS | +7 / -1 |
+| macOS 15 | `nsh-platform-macos` | `pub mod file_drop`; `file_drop::drop_uris(surface: &Surface, x: f32, y: f32, uris: Vec<String>) -> bool`; `input::event_root(surface: &Surface) -> NshView` | The existing file-drop dispatch and the root of the window the current input belongs to, so a caller can preserve pointer routing around it. | macOS | +3 / -3 |
+| macOS 16 | `nsh-platform-macos` | `NshView::surface(&self) -> Option<Rc<Surface>>` | The surface owning a view, read by walking ancestor roots. This replaces the routing-based lookup with a pure read, a behavior-neutral correction within the visibility door. | macOS | +11 / -1 |
+| macOS 17 | `nsh-platform-macos` | `window::root_view(surface: &Surface, id: NodeId) -> Option<NshView>`; `window::key_window(surface: &Surface) -> Option<Retained<NSWindow>>` under `feature = "dev"`; `window::window_of(surface: &Surface, id: NodeId) -> Option<Retained<NSWindow>>`; `window::roots(surface: &Surface) -> Vec<NshView>` | The surface's logical app-window registry: roots, the window showing one, and the key window. | macOS | +4 / -4 |
 
 Foundation: 4 doors, about 260 lines in `nsh-testing`, against the 16,195 lines of agent work on `buwiz`.
 iOS adds 4 doors, 179 net source lines across `nsh-testing` and `nsh-platform-ios`.
 Linux adds 4 doors, +171 / -1 source lines across `nsh-testing` and `nsh-platform-linux`, reusing `Model::reset`.
 Web adds 5 doors, 1,219 net lines including tests and the CLI module move (individual commit counts above).
 Android adds 2 doors, 305 source lines across `nsh-platform-android` and `nsh-cli`; its shared `Model::frame` door adds 9 lines in `nsh-testing`.
-The table lists 19 doors in total. Measure against release commit `2f51d8611` with `git diff --stat 2f51d8611`.
+macOS adds 17 doors, +283 / -71 lines in `nsh-platform-macos` (212 net), reusing the shared surface hook and lifecycle rows.
+The table lists 36 doors in total. Measure against release commit `2f51d8611` with `git diff --stat 2f51d8611`.
 
 On this branch no crate depends on the `gpui-agent` library, no workspace member is named for it, and no file we
 added has "agent" in its path.
@@ -64,6 +82,11 @@ added has "agent" in its path.
 
 ## What stayed out of the branch, and why
 
+- macOS input provenance stays in the plug. Event-number stamping and the `synth_key` thread-local scope are attribution logic, not visibility: the plug constructs the same mouse events with buwiz's stamp and wraps the exposed key/type synthesis entry points. Key-name synthesis (`keystroke_name`), mapping inputs to AppKit's text-field role, and buwiz's `shown_part` clipping arithmetic are copied logic too; `shown_part` is computed externally from the exposed parent, clipping, frame and scroll geometry.
+- `AppView::ui_tree` and `AppView::act` cannot be inherent methods outside their crate. The plug supplies them through its extension trait `AppViewAgentExt`; the fork exposes only the surface, view, input and window state they read.
+- macOS startup wiring stays in the plug: its `nsh-macos-host` shim binary registers door 4 before delegating to `nsh_macos_host::main()`, and `NSH_RUNTIME` supplies that binary to `nsh run --target macos`. Because the visibility/synthesis doors are dev-gated, a consumer selecting only the in-process server still receives `nsh-platform-macos`'s `dev` feature through feature unification; that build-time difference is accepted rather than moving startup policy into the fork.
+- Making `NshView` public requires `ViewObj` and its `Ivars` type to be public as well: Rust otherwise rejects the public `Deref` target as a private type in a public interface. `ViewState` remains private.
+- `NshView::surface()` now reads the owning surface from ancestor roots without calling `input::enter` or otherwise routing input. That is a behavior-neutral correction within what is itself a visibility door, not agent logic.
 - `buwiz`'s change to `Screen::long_pressable` (a long press on a disabled receiver is `Pick::Disabled`, not
   `Pick::None`) is logic, so it is not a door: the plug gets the same answer from door 1
   (`SemanticScene::long_press_disabled`).
@@ -78,7 +101,7 @@ added has "agent" in its path.
 
 | Platform | Expected doors (from `handover/agent-socket/data/internal-names-by-platform.txt`) |
 |---|---|
-| macOS | the surface handle for door 4; `view::superview`, `provenance::*`, `input::{later, view_at, event, enter, focus_control, root_in}`, `AppView::act`, `synth`, `scroll::reveal`, `window::root_in`, `keymap::bindings`, `text_input::*`, `MacNative::activate` |
+| macOS | recorded above as macOS 1–17 |
 | Windows | the surface handle; `input::pick_node`, `text_input::{focus, focused}`, `chrome::fire_menu_keybinding` |
 | Android | the surface handle; `Model::frame`; a way for the plug to supply `TestAgent.java`'s additions |
 | iOS | the surface handle from `DevSession` |
