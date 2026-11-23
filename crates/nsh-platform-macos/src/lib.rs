@@ -33,7 +33,7 @@ mod chrome;
 mod decor;
 #[cfg(feature = "dev")]
 pub mod dev;
-mod file_drop;
+pub mod file_drop;
 mod file_requests;
 mod fps;
 mod global_shortcut;

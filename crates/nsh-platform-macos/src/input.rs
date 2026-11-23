@@ -827,7 +827,7 @@ pub fn root_in(surface: &Surface, window: &objc2_app_kit::NSWindow) -> NshView {
 
 /// The root view of the window the event being handled happened in
 /// ([`enter`]).
-pub(crate) fn event_root(surface: &Surface) -> NshView {
+pub fn event_root(surface: &Surface) -> NshView {
     surface
         .input
         .window_root

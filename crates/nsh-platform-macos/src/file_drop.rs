@@ -187,7 +187,7 @@ pub(crate) fn perform(surface: &Surface, sender: &ProtocolObject<dyn NSDraggingI
 /// Drops `uris` at `x`, `y` (the event root's coordinates) on the view
 /// there that listens: whether one took them. The test agent's `dropFiles`
 /// comes here too.
-pub(crate) fn drop_uris(surface: &Surface, x: f32, y: f32, uris: Vec<String>) -> bool {
+pub fn drop_uris(surface: &Surface, x: f32, y: f32, uris: Vec<String>) -> bool {
     let Some(destination) = input::file_drop_target(surface, x, y) else {
         clear(surface);
         return false;
