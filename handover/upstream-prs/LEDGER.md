@@ -16,7 +16,7 @@ States: `not started`, `already upstream`, `issue open`, `agreed`, `declined`, `
 | B06 | ready, not sent | | | 3bd56a954 | | Branch `up/macos-text-input-arrows`, commit `513870a83` pushed to hexuria; compare link handed to the owner. Native input_focus Up/Down assertions pass; its existing caret-position check fails on this machine on upstream main too |
 | B07 | not for upstream | | | abe8d514c | | ios: the changed line sits under the fork-only `dev-agent` feature (`reset_agent_scene`), which upstream main does not have; nothing to send |
 | B08 | ready, not sent | | | 38bcc1126 5afbb7d19 | | Branch `up/js-app-menu-callbacks` pushed to hexuria; compare link handed to the owner. `cargo test -p nsh-js` green on macOS |
-| B09 | not started | | | 88b940945 | | macos: draw views at the scale they are shown at |
+| B09 | ready, not sent | | | 88b940945 | | Branch `up/macos-view-scale` pushed to hexuria; compare link handed to the owner. Upstream #1847 covered scaled ancestors inside NSH only; native scale check fails before, passes after on macOS |
 | B10 | not started | | | b20ad1c63 | | macos: keep the lines canvases set their texts in |
 | B11 | not started | | | ad469b46d bada9694e | | macos: draw content about to scroll into view ahead of time |
 | B12 | not started | | | aae18fbe2 | | macos: pause an embedded app while it is unseen |
