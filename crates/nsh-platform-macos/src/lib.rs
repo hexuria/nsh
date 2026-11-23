@@ -56,7 +56,7 @@ mod share;
 mod sight;
 // Shared with iOS.
 use nsh_platform_apple::{audio, notifications, speech};
-mod surface;
+pub mod surface;
 #[cfg(feature = "dev")]
 mod synth;
 mod system;
