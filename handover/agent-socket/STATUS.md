@@ -1,9 +1,11 @@
-# STATUS — gpui-agent move + buwiz-forms issue #269 (written 2026-11-23 ~14:40 UTC by session devin-366d75587ebd4b1183f50aca1bcd3353)
+# STATUS — gpui-agent move + buwiz-forms issue #269 (updated 2026-11-24 ~00:45 UTC by session devin-7eb7d5a448484540b772f6556a2877a5)
 
 This file is the cold-start handover after the NSH orchestrator Bot (session
 `c411d19b0ffd4589a5d65b8e7858d28c`) and all six quota-paid platform sessions ran
-out of ACU quota. Everything below is verified state, not plans. Read
-`GOAL.md` and `PLAN.md` in this directory first — the picks there are final.
+out of ACU quota. Orchestration has moved to free session
+`devin-7eb7d5a448484540b772f6556a2877a5` (this box, "NSH"). Everything below is
+verified state, not plans. Read `GOAL.md` and `PLAN.md` in this directory first
+— the picks there are final.
 
 Resume instructions for the next session are in `RESUME.md` next to this file.
 
@@ -47,19 +49,20 @@ work is gone.
 
 ### Key refs
 - Upstream pin: `v0.6.1` = `2f51d8611` (fetched from longbridge/nsh).
-- `gpui-agent` tip = `7b916cdb3` — v0.6.1 + **39 door commits** (grew from 24
-  while sessions were dying; linux, android and windows doors landed).
+- `gpui-agent` tip = `56add34a019022de6433dcf6fa62b345d33a3342` — v0.6.1 +
+  **all door commits for all six platforms (40 doors in SOCKET.md)**. macOS
+  doors landed 2026-11-24 by cherry-picking `devin/stage1-macOS-doors`
+  (`cab9140b9`, 18 commits, conflict in SOCKET.md only).
 - `buwiz` tip = `70d8ff26b9e9dccb17a908de97cd4a3f3e381276` (`NSH_PINNED_REF`
   in buwiz-forms `.github/workflows/nsh.yml`).
-- longbridge/nsh `main` = `167aa3827`.
-- macOS doors NOT yet on `gpui-agent`: they live on
-  `devin/stage1-macos-doors` @ `cab9140b9` on hexuria/nsh (its session died
-  mid-work, was "closing five behavior gaps").
+- longbridge/nsh `main` = `958262185` (moved since `167aa3827`).
 - iOS door pin used for checks: `ca714e1fb`.
 - Plug repo `main` = `22e8db6e` (stage-0 move merged via PR #1).
 
 ### Socket size check (Task-13 audit by windows session + rerun here)
-- `git diff v0.6.1 gpui-agent` = 38 files, +3,786/−1,372 (39 doors).
+- `git diff v0.6.1 gpui-agent` = 38 files, +3,786/−1,372 at 39 doors; the 40th
+  platform (macOS, 17 door rows) adds ~+283/−71 in nsh-platform-macos plus
+  SOCKET.md rows. Rerun the full count at the final pin for the report.
   Per the TASK-13 audit every line maps to a SOCKET.md row; ~1,336 of nsh-cli's
   lines are a byte-identical lib.rs move, so real new code ≈ +1,850.
 
@@ -68,10 +71,10 @@ work is gone.
 |---|---|---|---|---|
 | web | yes (cli/dev doors incl. 089981575) | `web` | #4 open | TASK-10 PASSED on Windows Chrome (both modes; paired-tab screenshot is a documented limit) |
 | ios | yes | `devin/1795407430-ios-stage1` | #3 open | TASK-11 PASSED on iPhone 17 sim (all ops); README gap list reported |
-| linux | yes | `devin/linux-agent` | none | platform session died before its check |
-| windows | yes | `devin/windows-agent` | none | platform session died before its check |
-| android | yes | `devin/1795407849-android` | none | TASK-14 (clean check) running on windows free session |
-| macos | NO — on `devin/stage1-macos-doors` @ `cab9140b9` | `devin/stage1-macos` | none | TASK-15 running on macos free session |
+| linux | yes | `devin/linux-agent` @ 91de1a7 repinned to 56add34a | none | a32c TASK-16 passed all ops (3 README gaps); `nsh test --target linux` parity run in flight on this box (docker nsh-linux-parity:gst) |
+| windows | yes | `devin/windows-agent` @ d21e3a9 repinned | none | clean check still needed; resize off-by-menu-bar is a known client-area fix not yet moved |
+| android | yes | `devin/1795407849-android` @ 3a35f66 repinned | none | TASK-14 in flight on 5171 — build chain proven end-to-end (AVD gpui35, WHPX, NshDev.apk 217MB); emulator second boot in progress; 9 README gaps reported |
+| macos | yes | `devin/stage1-macos` @ bd0d241 repinned | none | TASK-15 rebuilding on e073 at the new pin; then Composer-regression fix |
 
 ### Known defects found so far
 - iOS fixture comparison (TASK order to e073): 8 of 93 iOS native fixtures fail
@@ -86,15 +89,17 @@ work is gone.
 
 ### Rehearsals done on this box (TASK-9, TASK-12; worktree `/home/ubuntu/repos/nsh-stage3`)
 - TASK-9 (62 non-agent buwiz-next commits onto gpui-agent tip): **32 clean /
-  30 conflict** — IDENTICAL at both 24-door and 39-door tips. Only ONE real
+  30 conflict** at 24/39 doors; **29 clean / 33 conflict** re-run at
+  `56add34a` (macOS doors added ~3 context conflicts). Only ONE real
   door conflict: `abe8d514c` (B07 ios view.rs, door rewrote `Inner::load`).
-  The other 29 are missing skipped-commit context (~17 cascade from
+  The rest are missing skipped-commit context (~17 cascade from
   `ad9c1f10e`/B15 head leaving `global_menu.rs` absent; `f0d2d183e` is a
   byte-identical duplicate of `815d991d3`, not a real conflict).
 - TASK-12 (rebase gpui-agent onto longbridge/main): at 24 doors 21 clean /
-  3 conflict; at 39 doors **27 clean / 12 conflict** — all mechanical
-  same-region overlap (nsh-cli churn hits cli+android doors; SOCKET.md docs
-  commits cascade; windows surface.rs). ~2s scripted replay.
+  3 conflict; at 39 doors **27 clean / 12 conflict**; re-run at 57 door
+  commits (incl. docs/meta commits) vs moved main `958262185`: **41 clean /
+  16 conflict** — all mechanical same-region overlap (nsh-cli churn hits
+  cli+android doors; SOCKET.md docs commits cascade; windows surface.rs).
   Comparison `buwiz` → same main: **60 clean / 196 conflict**. This is the
   number the socket exists to beat.
 - Scratch state kept: branches `stage3-gpui-agent2`, `buwiz-next-rehearsal2`
@@ -103,12 +108,11 @@ work is gone.
   `buwiz-next-rehearsal` also exists in `~/repos/nsh`. NONE of this is pushed.
 
 ### Outstanding move work (Stages 2–4 of PLAN.md)
-1. macOS doors must land on `gpui-agent` from `devin/stage1-macos-doors`
-   (`cab9140b9`) — verify the macOS session's last force-push is complete, not
-   mid-rebase. Then re-run TASK-9 + TASK-12 once more.
-2. TASK-15 (macOS desktop check) in flight on session e0730bf…; TASK-14
-   (Android check) in flight on session 5171718… Wait for both before
-   declaring Stage 1 done.
+1. ~~macOS doors must land~~ DONE — `gpui-agent` = `56add34a`, all 40 doors.
+   TASK-9 + TASK-12 re-run: see numbers above.
+2. TASK-15 (macOS desktop check) rebuilding on e073 at new pin; TASK-14
+   (Android check) in flight on 5171 — emulator booting, build chain proven.
+   Wait for both before declaring Stage 1 done.
 3. Open plug PRs for `devin/linux-agent`, `devin/windows-agent`,
    `devin/1795407849-android`, `devin/stage1-macos` (token cannot open PRs —
    needs a human or a PR-write-capable token). Review and land #2/#3/#4.
