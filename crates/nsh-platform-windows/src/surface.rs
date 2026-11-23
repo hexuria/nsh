@@ -164,6 +164,47 @@ impl DevSurfaceRef<'_> {
             EventPayload::Value(nsh_core::PayloadValue::Number(id as f64)),
         );
     }
+
+    /// The dialog root ids of the app's own windows (`Window.open`).
+    pub fn app_windows(&self) -> Vec<NodeId> {
+        crate::app_window::ids(self.surface)
+    }
+
+    /// The native target at `x`/`y` in the app window `id`'s
+    /// coordinates (`None` while it is not shown).
+    pub fn window_node_at(&self, id: NodeId, x: f32, y: f32) -> Option<NodeId> {
+        let root = crate::app_window::root_view(self.surface, id)?;
+        crate::input::pick_node(&root, x, y)
+    }
+
+    /// Whether the app window `id` holds Win32 focus (`None` while it
+    /// is not shown).
+    pub fn window_focused(&self, id: NodeId) -> Option<bool> {
+        let hwnd = crate::app_window::hwnd_of(self.surface, id)?;
+        let focused = unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow() };
+        Some(focused == hwnd)
+    }
+
+    /// Resizes the app window `id`'s client area (`false` while it is
+    /// not shown).
+    pub fn resize_window(&self, id: NodeId, width: i32, height: i32) -> bool {
+        let Some(hwnd) = crate::app_window::hwnd_of(self.surface, id) else {
+            return false;
+        };
+        unsafe {
+            windows::Win32::UI::WindowsAndMessaging::SetWindowPos(
+                hwnd,
+                None,
+                0,
+                0,
+                width,
+                height,
+                windows::Win32::UI::WindowsAndMessaging::SWP_NOMOVE
+                    | windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER,
+            )
+        }
+        .is_ok()
+    }
 }
 
 /// Forwards batches from the engine thread to the main thread.
