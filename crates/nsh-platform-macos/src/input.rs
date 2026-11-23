@@ -810,7 +810,7 @@ fn repick(key: u64) {
 /// An event reaches `surface` through `window`'s root view: a window of
 /// the app's own (`Window.open`), or `None` for the surface's root. What it
 /// picks, converts and focuses is in that window until the next event.
-pub(crate) fn enter(surface: &Surface, window: Option<NshView>) {
+pub fn enter(surface: &Surface, window: Option<NshView>) {
     *surface.input.window_root.borrow_mut() = window;
 }
 
@@ -818,7 +818,7 @@ pub(crate) fn enter(surface: &Surface, window: Option<NshView>) {
 /// app's own. What runs outside an event (a commit's `blur()`, a page
 /// leaving) finds the root by the window, never by [`event_root`], which
 /// is the last event's.
-pub(crate) fn root_in(surface: &Surface, window: &objc2_app_kit::NSWindow) -> NshView {
+pub fn root_in(surface: &Surface, window: &objc2_app_kit::NSWindow) -> NshView {
     crate::window::roots(surface)
         .into_iter()
         .find(|root| root.ns().window().as_deref() == Some(window))
@@ -839,7 +839,7 @@ pub(crate) fn event_root(surface: &Surface) -> NshView {
 // --- AppKit events ------------------------------------------------------------------
 
 /// A mouse, wheel or trackpad event over the root view.
-pub(crate) fn event(surface: &Rc<Surface>, event: &NSEvent) {
+pub fn event(surface: &Rc<Surface>, event: &NSEvent) {
     let ty = event.r#type();
     pen_sample(event, ty);
     let p = event_root(surface)
@@ -1178,7 +1178,7 @@ pub(crate) fn is_key_control(view: &NshView) -> bool {
 /// `focus()` on a view that is not an input: the keyboard focus moves to
 /// it as Tab moves it there (its `becomeFirstResponder` sets `focus:` and
 /// reports `onFocus`), if it is a stop of Tab ([`is_key_stop`]).
-pub(crate) fn focus_control(surface: &Surface, view: &NshView) {
+pub fn focus_control(surface: &Surface, view: &NshView) {
     if !is_key_stop(view) || has_key_focus(view) {
         return;
     }
@@ -1498,6 +1498,12 @@ struct Hit {
 /// The innermost view at `(x, y)` (root coordinates).
 fn pick(root: &NshView, x: f32, y: f32) -> Option<Hit> {
     pick_in(root, (x, y))
+}
+
+/// The innermost view a press at `(x, y)` (root coordinates) lands on,
+/// as [`event`] picks it.
+pub fn view_at(root: &NshView, x: f32, y: f32) -> Option<NshView> {
+    pick(root, x, y).map(|hit| hit.view)
 }
 
 fn pick_in(view: &NshView, p: (f32, f32)) -> Option<Hit> {
@@ -2477,7 +2483,7 @@ fn after(surface: &Rc<Surface>, generation: u64, ms: u64, f: fn(&Rc<Surface>, &m
 }
 
 /// Runs `f` on the main queue after `ms` milliseconds.
-pub(crate) fn later(ms: u64, f: impl FnOnce() + Send + 'static) {
+pub fn later(ms: u64, f: impl FnOnce() + Send + 'static) {
     let when = DispatchTime::NOW.time(Duration::from_millis(ms).as_nanos() as i64);
     if let Err(err) = DispatchQueue::main().after(when, f) {
         log::warn!("input: cannot schedule a timer: {err:?}");
