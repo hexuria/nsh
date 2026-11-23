@@ -3068,7 +3068,7 @@ impl Screen {
     }
 
     /// The application menu the app set, if it set one.
-    pub(crate) fn app_menu(&self) -> Option<&[nsh_core::desktop::MenuItem]> {
+    pub fn app_menu(&self) -> Option<&[nsh_core::desktop::MenuItem]> {
         self.app_menu.as_deref()
     }
 
@@ -3115,7 +3115,7 @@ impl Screen {
 
     /// The app's keyboard shortcuts (`nsh/keymap`).
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn keymap(&self) -> Option<&nsh_core::keymap::Keymap> {
+    pub fn keymap(&self) -> Option<&nsh_core::keymap::Keymap> {
         self.keymap.as_deref()
     }
 
