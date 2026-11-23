@@ -1,0 +1,84 @@
+# crates/nsh-testing/src/agent.rs: buwiz compared with upstream v0.6.1
+# lines: v0.6.1 3256, buwiz 6225
+
+trait Scene: methods we added (2):
+  keybindings
+  semantic_tree
+
+trait Native: methods we added (10):
+  app_focused
+  available
+  fire_menu_keybinding
+  focus_node
+  hit_at
+  keyboard
+  laid_out
+  rotate
+  take_failure
+  validate_keys
+
+pub fn we added, whole file (38):
+  app_focused
+  back
+  drag_at
+  drag_node_by
+  drag_nodes
+  drag_to
+  fire_keybinding
+  frame
+  has_rendered_batch
+  hover_at
+  hover_node
+  key_node
+  keyboard
+  long_press_at
+  long_press_node
+  native_available
+  native_bounds
+  native_input_text
+  native_laid_out
+  native_screenshot
+  native_viewport
+  node_native_bounds
+  paste_node
+  press_at
+  press_node
+  requires_native_hit_test
+  requiring_native_hit_test
+  reset
+  resize_viewport
+  rotate
+  scroll_at
+  scroll_node
+  semantic_keybindings
+  semantic_nodes
+  set_value_node
+  settle
+  take_native_failure
+  type_node
+
+Agent methods the adapter crate (nsh-gpui-agent) calls (24), none of which v0.6.1 has:
+  app_focused
+  back
+  drag_at
+  drag_node_by
+  drag_nodes
+  has_rendered_batch
+  hover_at
+  hover_node
+  keyboard
+  long_press_node
+  native_available
+  native_laid_out
+  native_screenshot
+  native_viewport
+  node_native_bounds
+  press_at
+  press_node
+  requires_native_hit_test
+  resize_viewport
+  scroll_at
+  scroll_node
+  semantic_nodes
+  settle
+  take_native_failure

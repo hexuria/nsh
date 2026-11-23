@@ -1,0 +1,56 @@
+# `crate::` names our agent code uses inside each platform crate.
+# These are what an outside crate cannot reach today: the first list of doors.
+
+macos (new file src/gpui_agent.rs, 2777 lines):
+  crate::view::superview  x3
+  crate::provenance::agent_running  x3
+  crate::provenance::Input::Agent  x2
+  crate::input::later  x2
+  crate::provenance::agent_acts  x2
+  crate::provenance::agent_run  x2
+  crate::AppView::act  x1
+  crate::AppView  x1
+  crate::synth  x1
+  crate::provenance::synth_is_person  x1
+  crate::provenance::agent_step  x1
+  crate::scroll::reveal  x1
+  crate::window::root_in  x1
+  crate::input::view_at  x1
+  crate::agent  x1
+  crate::agent::MacNative::activate  x1
+  crate::input::event  x1
+  crate::keymap::bindings  x1
+
+macos (our added lines in src/agent.rs, 136 lines):
+  crate::view::superview  x3
+  crate::view::NshView::from_ns  x3
+  crate::input::enter  x2
+  crate::input  x1
+  crate::window::root_in  x1
+  crate::input::view_at  x1
+  crate::text_input  x1
+  crate::text_input::pad_owns  x1
+  crate::text_input::focus  x1
+  crate::input::focus_control  x1
+  crate::text_input::test_focused  x1
+  crate::text_input::editing_in  x1
+  crate::input::root_in  x1
+
+linux (our added lines in src/agent.rs, 160 lines):
+  crate::input::pick_node  x1
+  crate::keymap::supports  x1
+  crate::input::focus_native  x1
+  crate::chrome::fire_menu_keybinding  x1
+
+windows (our added lines in src/agent.rs, 287 lines):
+  crate::input::pick_node  x1
+  crate::text_input::focus  x1
+  crate::text_input::focused  x1
+  crate::chrome::fire_menu_keybinding  x1
+
+android (our added lines in src/agent.rs, 284 lines):
+  none: it uses items already in scope in that file
+
+ios (our added lines in src/agent.rs, 57 lines):
+  none: it uses items already in scope in that file
+

@@ -1,0 +1,157 @@
+sha	date	added	deleted	files	most_changed	subject
+68a0b5508	2026-10-24	539	16	8	crates/nsh-platform-macos	macos: Add a gpui-agent control plane behind the gpui-agent feature
+944b2eaee	2026-10-24	47	1	1	crates/nsh-platform-macos	macos: gpui-agent invoke "drag" — synthesized press-drag-release
+dcc0866c9	2026-10-24	96	2	3	crates/nsh-platform-macos	macos: gpui-agent invoke "scroll" — trackpad gestures and momentum
+4157ffbf1	2026-10-24	46	1	1	crates/nsh-platform-macos	macos: gpui-agent invoke "hover" — dispatch MouseMoved directly
+cd3b1de5c	2026-10-24	45	46	2	crates/nsh-platform-macos	macos: text fields in the a11y tree, gpui-agent invoke "press"
+f6bc16d8d	2026-10-26	230	77	2	crates/nsh-platform-macos	macos: gpui-agent — prune hidden subtrees, focus before sending keys
+1cee57648	2026-10-27	690	263	3	crates/nsh-platform-macos	macos: Check a gpui-agent action's target is actionable before acting
+7b4982656	2026-10-27	125	77	1	crates/nsh-platform-macos	macos: Report gpui-agent nodes' visibility as actions see it
+7dc786f98	2026-10-27	206	19	2	crates/nsh-platform-macos	macos: Settle the app before a gpui-agent action replies
+75b5e1b0d	2026-10-27	129	23	1	crates/nsh-platform-macos	macos: Resize the window's content with gpui-agent invoke viewport
+24ba4ed73	2026-10-27	381	40	4	crates/nsh-platform-macos	macos: List the app's real key bindings for gpui-agent and gate them
+07cef4483	2026-10-27	50	16	1	crates/nsh-platform-macos	macos: Describe the gpui-agent host in its module docs
+ca8be7756	2026-10-27	82	5	1	crates/nsh-platform-macos	macos: Give the gpui-agent snapshot a compact format
+41807e789	2026-10-27	123	13	2	crates/nsh-platform-macos	macos: Never show a masked input's text to gpui-agent clients
+fdee13922	2026-10-27	14	14	2	crates/nsh-platform-macos	macos: Hand gpui-agent's keys and text to the app's key bindings
+c917d3853	2026-10-27	1	2	1	Cargo.toml	deps: Pin gpui-agent where the shared adapter declares it
+646255854	2026-10-30	36	2	1	crates/nsh-platform-macos	macos: Activate the app only for gpui-agent actions that type
+998bb1f6a	2026-10-30	7	2	1	crates/nsh-platform-macos	rox: Name the roles upstream added in the macOS GPUI agent's tree
+419953c3a	2026-10-30	484	81	2	crates/nsh-platform-macos	macos: Include embedded surfaces in the gpui-agent snapshot
+b66fd5498	2026-10-27	1	1	1	crates/nsh-core	core: Clone mount state for agent hooks
+2129b519d	2026-10-27	1216	10	2	crates/nsh-testing	testing: Add semantic actionability safeguards
+701c45c58	2026-10-27	972	0	4	crates/nsh-gpui-agent	gpui-agent: Add development host adapter
+905d92d8f	2026-10-27	245	9	8	crates/nsh-platform-linux	linux: Attach GPUI agent to GTK host
+2f67a099e	2026-10-27	510	21	8	crates/nsh-platform-android	android: Attach GPUI agent to development hosts
+cea86b6f0	2026-10-27	59	1	1	crates/nsh-cli	cli: Pass Android GPUI-agent launch options
+102b31470	2026-10-27	108	0	3	examples/gallery	fixtures: Add deterministic agent safety fixture and tooling guide
+b5a943f0d	2026-10-27	282	0	1	GPUI_AGENT_REPORT.md	report: Record Linux and Android GPUI-agent verification
+e90e16208	2026-10-27	16	10	1	crates/nsh-platform-android	android: Serialize agent reload state
+d857a9beb	2026-10-27	552	49	3	crates/nsh-testing	testing: Resolve synthetic semantic targets
+4d4f161e5	2026-10-27	2	0	2	.github	ci: Include GPUI agent in workflow paths
+b2470aaf5	2026-10-27	34	98	2	crates/nsh-testing	testing: Keep ordinary actions on legacy scene queries
+2bbd90cf6	2026-10-27	75	4	1	GPUI_AGENT_REPORT.md	report: Record post-merge agent validation
+f9e9075a6	2026-10-27	10	1	1	GPUI_AGENT_REPORT.md	report: Complete review fix history
+44cc41391	2026-10-27	47	1	1	crates/nsh-testing	testing: Preserve button owner for label presses
+dc8323b79	2026-10-27	31	2	1	GPUI_AGENT_REPORT.md	report: Record button-label press verification
+ae975271b	2026-10-27	33	12	1	crates/nsh-testing	testing: Restrict label hits to its event ancestry
+208ea9ddb	2026-10-27	28	6	1	GPUI_AGENT_REPORT.md	report: Record label hit ancestry verification
+0b9e98598	2026-10-27	1	1	1	GPUI_AGENT_REPORT.md	report: Record approved Default exception
+3fb31b939	2026-10-27	87	25	2	crates/nsh-testing	testing: Reject strict drag points outside the visible target
+dc8558fd9	2026-10-27	74	32	1	crates/nsh-testing	testing: Reject strict point presses on what nothing pressable owns
+396635189	2026-10-27	39	1	1	crates/nsh-testing	testing: Restore the not on screen wording outside strict mode
+6ed71fbd9	2026-10-27	99	42	2	crates/nsh-gpui-agent	testing: Build the semantic tree once per GPUI-agent snapshot
+0a627743a	2026-10-27	111	9	2	crates/nsh-testing	testing: Accept strict hits on accessibility-hidden children
+eea4916cb	2026-10-27	98	5	2	crates/nsh-gpui-agent	testing: Never show a masked input's text in semantic snapshots
+81fe2a41e	2026-10-27	39	2	1	crates/nsh-testing	testing: Let an app that keeps requesting frames settle
+ed1a503e5	2026-10-27	44	29	1	crates/nsh-platform-linux	linux: Keep unsupported test keys a no-op outside strict presses
+8eaf12e0b	2026-10-27	27	7	2	crates/nsh-platform-android	android: Report failed agent hit tests as errors
+de9c9a891	2026-10-27	6	44	2	crates/nsh-platform-android	android: Stop copying each batch for an attached agent
+d1b23de4d	2026-10-27	122	37	4	crates/nsh-cli	cli: Hand the Android agent token over private storage
+93fe786b5	2026-10-27	12	45	2	crates/nsh-platform-android	android: Hit-test agent points with the touch walk
+195681579	2026-10-27	2	0	1	crates/nsh-platform-linux	linux: Build the agent's hit test only with development support
+071affd6a	2026-10-27	40	37	2	crates/nsh-platform-android	android: Keep the test agent's coordinates in the window
+ccb5216c3	2026-10-27	3	1	1	GPUI_AGENT_REPORT.md	report: Withdraw the Default approval claim and point to the review fixes
+ae7c5e984	2026-10-27	2	3	1	crates/nsh-testing	testing: Build the agent's keybinding catalog for the web runtime
+000bb3f8c	2026-10-27	46	3	1	crates/nsh-platform-linux	linux: Size attached viewports independently of window chrome
+5a3640cc6	2026-10-27	18	1	1	GPUI_AGENT_REPORT.md	report: Refresh GPUI-agent verification
+9540c1f06	2026-10-27	95	2	1	crates/nsh-testing	testing: Let strict coordinate presses reach links in plain text
+a4b984c8e	2026-10-27	113	4	2	crates/nsh-testing	testing: Refuse a press a hidden child would take for itself
+3f351bca6	2026-10-27	56	11	2	crates/nsh-cli	cli: Refuse a GPUI-agent token with whitespace around it
+26f7aef59	2026-10-27	23	8	1	crates/nsh-platform-android	android: Delete the GPUI-agent token file once the host reads it
+958760e38	2026-10-27	43	1	1	crates/nsh-platform-android	android: Hit-test the strict agent's points in Z order
+0b21a651c	2026-10-27	15	3	1	GPUI_AGENT_REPORT.md	report: Record the owner's review fixes
+118f57505	2026-10-27	2	0	1	GPUI_AGENT_REPORT.md	report: Record the merge of main
+dcb24c5a5	2026-10-28	4	0	1	crates/nsh-gpui-agent	testing: Give the GPUI agent's test scene a span style
+ea224776b	2026-10-27	369	24	9	crates/nsh-platform-windows	windows: Attach the GPUI agent to native surfaces
+2eacfa7bd	2026-10-27	12	3	1	crates/nsh-platform-windows	windows: Take the keyboard focus back from web views for focused fields
+46ea050e8	2026-10-27	40	4	2	crates/nsh-gpui-agent	testing: Let the platform report a viewport that is not laid out yet
+64f46b2c2	2026-10-27	207	87	5	crates/nsh-platform-windows	windows: Wait for the layout a resize starts; address the attach review
+d201f448c	2026-10-27	48	4	2	crates/nsh-gpui-agent	testing: Report failed native calls; tell whether a worker still serves
+645598be9	2026-10-27	165	57	5	crates/nsh-platform-windows	windows: Fail steps whose main-thread call timed out; end the agent with its window
+aea62c2d7	2026-10-27	32	0	1	examples/gallery	gallery: Add a fixture with a web view beside a native field
+7a10d0923	2026-10-27	2	2	1	examples/gallery	gallery: Count the agent fixture's hovers with onMouseEnter and onMouseLeave
+00bb09058	2026-10-27	135	6	4	crates/nsh-dev	dev: Route a GPUI agent's steps to the page that holds its key
+38c7f6e54	2026-10-27	117	1	2	crates/nsh-testing	testing: Ask a page for hits, focus and text bounds over the dev protocol
+fe4f91e1a	2026-10-27	154	3	4	crates/nsh-platform-web	web: Answer a GPUI agent's questions from the development page
+dae0a1ac9	2026-10-27	725	501	9	crates/nsh-cli	cli: Attach a GPUI agent to nsh run --target web
+e68bd5708	2026-10-27	30	0	2	examples/gallery	gallery: Add a masked input fixture for the GPUI agent's checks
+c920bbc48	2026-10-27	48	1	2	docs/dev	docs: Describe the GPUI agent attached to nsh run --target web
+91e54a231	2026-10-27	57	33	1	crates/nsh-cli	cli: Keep a GPUI agent's token out of the browser nsh starts
+5c24b9c09	2026-10-27	10	0	2	crates/nsh-cli	cli: Refuse a GPUI agent for a Rust app on the web
+5d4912317	2026-10-27	2	79	6	crates/nsh-testing	web: Answer text bounds as upstream does, for agents and tests alike
+98bf75859	2026-10-28	1	1	1	examples/gallery	gallery: Read the masked fixture's input value from its event object
+cbbda42d5	2026-10-28	66	0	1	crates/nsh-cli	web: Paste in the web agent as upstream does
+eb52e6e84	2026-11-05	294	28	6	crates/nsh-platform-macos	macos: Split the gpui-agent server off, and say whose hands input came from
+1336b00e0	2026-11-05	12	2	3	crates/nsh-platform-macos	macos: Give a caller in the process an AppView's semantic tree
+ad2a2c859	2026-11-05	148	13	4	crates/nsh-platform-macos	macos: Let a caller in the process act on a node as an agent
+fa9ae7a43	2026-11-05	83	18	3	crates/nsh-platform-macos	macos: End an in-process action however it stops, and show a field's text in the tree
+ea0d9c626	2026-11-05	1	1	1	crates/nsh-platform-macos	macos: Let what was typed win over a field's accessibility value
+829875f96	2026-11-05	88	8	3	crates/nsh-platform-macos	macos: Ask before the press, and read the agent token from a file
+31d23200d	2026-11-10	8	2	3	crates/nsh-platform-macos	buwiz: Fit the gpui-agent control plane to upstream's newer macOS code
+2b0ca2097	2026-11-18	35	1	3	crates/nsh-platform-macos	buwiz: Fit the gpui-agent roles and the monitor actions to upstream 0.6
+1fe9ef275	2026-11-18	2	0	1	crates/nsh-testing	testing: Name the dialog roles for the shared gpui-agent adapter
+bf48e626b	2026-11-18	10	0	2	crates/nsh-testing	testing: Build the gpui-agent adapter's tests against upstream 0.6's menus and scene
+29d0b1739	2026-11-17	1	1	1	crates/nsh-platform-windows	windows: Pass no menu area when an agent fires a menu shortcut
+62cd76d68	2026-11-18	19	16	4	crates/nsh-core	buwiz: Format the lines the merged topics share
+65db8858c	2026-11-20	140	1	2	crates/nsh-gpui-agent	gpui-agent: Serve press, scroll, hover, drag, viewport and swipe as operations
+ca5d9a424	2026-11-20	81	2	2	crates/nsh-testing	gpui-agent: Serve long_press and system back on mobile
+0c9ab8823	2026-11-19	303	3	13	crates/nsh-platform-ios	ios: Serve gpui-agent from the iOS Simulator development host
+b7bf98a5c	2026-11-20	241	85	2	crates/nsh-testing	gpui-agent: Hold long presses on views that only take long presses
+7fcb7e77b	2026-11-19	15	1	2	crates/nsh-platform-ios	ios: Reset the gpui-agent scene when the development host reloads
+2e60e1a7e	2026-11-20	35	28	2	crates/nsh-gpui-agent	gpui-agent: Refuse long presses on disabled views; tidy test types
+613a645c8	2026-11-20	219	5	5	crates/nsh-platform-android	gpui-agent: Serve rotate, keyboard and paste on Android
+51c92db95	2026-11-20	395	30	1	crates/nsh-testing	gpui-agent: Fix long-press actionability
+c959c6bb4	2026-11-20	31	0	2	crates/nsh-platform-android	gpui-agent: Report the focused input on Android
+ebb6078cc	2026-11-19	225	3	11	crates/nsh-platform-macos	macos: Serve gpui-agent from the macOS development host
+b2e75816f	2026-11-19	17	8	2	crates/nsh-platform-macos	macos: Pick the pressed view through the surface root in the agent hit test
+126d39f6f	2026-11-19	13	0	1	crates/nsh-platform-macos	gpui-agent: Refuse the new operations in the macOS private server
+39ac42bed	2026-11-19	1	1	1	crates/nsh-platform-macos	macos: Hit test the window targeted by the agent
+cac5968b7	2026-11-19	24	0	1	crates/nsh-platform-macos	macos: Focus native nodes for agent key input
+f947318cc	2026-11-19	7	0	1	crates/nsh-platform-macos	macos: Report application focus to the agent
+7481bb113	2026-11-19	9	3	1	crates/nsh-platform-macos	macos: Feed the agent model only when a worker exists
+bc5584729	2026-11-19	12	3	1	crates/nsh-platform-macos	macos: Focus a node only when its own view takes the first responder
+ce2d05027	2026-11-19	23	0	2	.github	ci: Check the macOS development host with the gpui-agent adapter
+858af7269	2026-11-19	302	4	1	crates/nsh-testing	testing: Aim node actions at the node’s own window
+a21f3201f	2026-11-19	4	1	1	crates/nsh-testing	testing: Name the recorded window action in the two-window fixture
+05ff6e407	2026-11-19	1	1	1	crates/nsh-testing	testing: Derive the two-window fixture's default on the struct
+5174ca015	2026-11-19	10	6	3	crates/nsh-platform-macos	macos: Pick agent hits in the targeted window root
+f771cf808	2026-11-19	354	1	4	crates/nsh-platform-macos	macos: Check native agent window picking and keyboard focus
+16e70855e	2026-11-19	17	7	1	crates/nsh-platform-macos	macos: Initialize key windows explicitly in native agent checks
+005113791	2026-11-19	59	23	1	crates/nsh-platform-macos	macos: Dispatch queued mouse events in native agent checks
+4c3c53e45	2026-11-19	7	0	1	crates/nsh-platform-macos	macos: Clear focus before the targeted key in native agent checks
+0bd1e311c	2026-11-19	5	1	2	crates/nsh-platform-macos	macos: Keep native checks from starting the shared agent listener
+4d4b0c62f	2026-11-20	4	1	1	crates/nsh-platform-macos	macos: Report the development agent listener startup error
+6244b37dc	2026-11-20	22	21	2	website/docs	macos: Describe development agent capabilities positively
+e75ddd0a9	2026-11-20	43	1	2	crates/nsh-testing	ios: Report foreign native hits without a node sentinel
+797fdc970	2026-11-20	11	3	1	crates/nsh-platform-ios	ios: Continue the development session after agent startup fails
+16e11669c	2026-11-20	295	1	4	crates/nsh-dev	web: Add synthetic input to the dev protocol
+cacadccad	2026-11-20	514	109	9	crates/nsh-cli	web: Add dial-out tab agent mode
+6c5c32408	2026-11-20	60	16	1	crates/nsh-cli	cli: Remove simulator agent token files on every exit path
+654f9df3c	2026-11-20	103	22	3	crates/nsh-platform-ios	ios: Keep agent and test session models independent
+49a61dfc2	2026-11-20	5	1	1	crates/nsh-testing	testing: Format the canvas hit regression assertion
+621d39594	2026-11-20	17	8	3	docs/dev	ios: Describe simulator agent capabilities and failure recovery
+e15d5333d	2026-11-20	19	11	1	crates/nsh-platform-ios	ios: Report agent startup failures after the dev client connects
+df1497685	2026-11-20	21	1	2	crates/nsh-platform-macos	macos: Report foreign native hits without a node sentinel
+c290f14c7	2026-11-20	29	21	4	crates/nsh-cli	web: Refuse screenshots and swipes in a hand-opened tab
+4356ee179	2026-11-20	11	3	1	crates/nsh-cli	web: Guard agent pairing storage access
+c9f4d8c2d	2026-11-20	5	5	1	crates/nsh-platform-android	android: Use the InputDevice import in TestAgent
+7ed3aef8a	2026-11-20	3	4	1	crates/nsh-platform-android	android: Look up the focused node by identity
+a3175df0a	2026-11-20	44	7	2	crates/nsh-platform-android	android: Wait for the keyboard to show or hide
+7031fb0d1	2026-11-20	201	0	1	crates/nsh-testing	testing: Test paste, rotate and keyboard
+a542c44af	2026-11-20	10	1	1	crates/nsh-testing	testing: Report a missing drag endpoint before comparing windows
+5f09f6d0d	2026-11-20	3	1	1	crates/nsh-platform-android	android: Read keyboard visibility from the focused window
+f17d2e265	2026-11-20	24	16	2	crates/nsh-platform-macos	macos: Make the focused node's window key before targeted keys
+5413d618f	2026-11-20	44	3	1	crates/nsh-testing	testing: Keep focus when typing into a focused input
+b2cff85f3	2026-11-20	11	1	1	crates/nsh-platform-ios	ios: Report app focus to the development agent
+bbca8d587	2026-11-20	6	4	3	Cargo.lock	gpui-agent: Depend on gpui-agent 0.2.0
+0e0faf745	2026-11-20	10	2	1	crates/nsh-platform-macos	macos: Tolerate unobservable key changes in the targeted key test
+81e3566a0	2026-11-20	30	9	2	crates/nsh-platform-macos	macos: Keep the key window when a targeted key is refused
+e2dff9109	2026-11-20	301	54	7	crates/nsh-platform-macos	macos: Check the agent listener's startup, reload and shutdown natively
+9a2093b99	2026-11-20	5	0	1	.github	ci: Run the macOS native agent checks
+5df36e9f1	2026-11-20	3	4	1	crates/nsh-platform-macos	macos: Check the listener's debug-build requirement at run time
+a2cd66b7a	2026-11-20	12	0	1	crates/nsh-platform-macos	macos: Check that a reload leaves no old nodes in the agent snapshot
+4c2e403d5	2026-11-20	4	4	3	Cargo.lock	gpui-agent: Depend on gpui-agent 0.2.1
+bcdf85be7	2026-11-21	4	4	3	Cargo.lock	gpui-agent: Depend on gpui-agent 0.3.0
+991ed2d1b	2026-11-21	20	1	2	crates/nsh-platform-macos	macos: Attribute a lifted input pad's hits to its input
+b05f3f3f4	2026-11-21	57	0	1	crates/nsh-platform-macos	macos: Cover lifted-input hit attribution in native agent checks
