@@ -305,3 +305,16 @@ work is gone.
   location.origin, not host); dismissed synthetic-paste note and the
   ~2-RTT-per-node snapshot flag (accepted CDP cost); DevTools-auth and
   duplicated-tab findings stay escalated from round 2.
+- Stage 3 iOS = PROVEN (e073, iPhone 17 sim iOS 26.5): plug bound
+  :17421 (hello/snapshot 28-node real tree/press setup-solo→New
+  taxpayer/type TIN read back/screenshot_inline), data plane :17422
+  `invoke app.info` → bir-shell. Same 3 fixes; the app's `[patch]` in
+  nsh/Cargo.toml already covered plug git deps, the generated
+  `.nsh/rust` workspace needed it re-applied via the CARGO wrapper.
+  iOS recipe gap: `just nsh-run-agent ios` exports only the data-plane
+  token — the plug needs `SIMCTL_CHILD_GPUI_AGENT`/`_ADDR` exported AND
+  `Library/Caches/gpui-agent-token` (0600) in the host bundle's data
+  container, or invoke the `nsh-gpui-agent-ios` launcher itself.
+  Minor: `app.info` reports `mode:"desktop"` on iOS (data-plane door
+  quirk, not the plug). Android remains the last untested target
+  (5171's emulator, ~90min cap).
