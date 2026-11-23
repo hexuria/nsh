@@ -221,6 +221,11 @@ impl Native for WindowsNative {
         }
     }
 
+    fn focused(&self) -> Option<NodeId> {
+        self.in_focused(|s| crate::text_input::focused(s).map(|view| view.id()))
+            .flatten()
+    }
+
     fn key(&self, key: Key) {
         let (vk, modifiers) = match key {
             Key::Return => (VK_RETURN, Modifiers::default()),

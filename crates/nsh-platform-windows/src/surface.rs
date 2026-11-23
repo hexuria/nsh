@@ -154,6 +154,16 @@ impl DevSurfaceRef<'_> {
     pub fn supports_menu_role(&self, role: Option<nsh_core::desktop::MenuRole>) -> bool {
         !crate::chrome::unsupported(role)
     }
+
+    /// Fires key binding `id` as a `KeyCommand` on the root, as the
+    /// keymap reports one it matched.
+    pub fn key_command(&self, id: u32) {
+        self.surface.event(
+            ROOT_ID,
+            EventKind::KeyCommand,
+            EventPayload::Value(nsh_core::PayloadValue::Number(id as f64)),
+        );
+    }
 }
 
 /// Forwards batches from the engine thread to the main thread.
