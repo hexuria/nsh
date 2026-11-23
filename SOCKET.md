@@ -13,7 +13,7 @@ Each door is one commit, `<area>: <What it does>`.
 | # | Crate | Item and signature | What it exposes | Needed by | Lines |
 |---|---|---|---|---|---|
 | 1 | `nsh-testing` | `Screen::mounted(&self, id: NodeId) -> Option<MountedView<'_>>`; `Screen::children(&self, id: NodeId) -> &[NodeId]`; `Screen::stack_screens(&self, id: NodeId) -> Vec<NodeId>`; `pub struct MountedView<'a>` (read-only getters: `kind`, `parent`, `events`, `test_id`, `label`, `text`, `frame`, `input_text`, `secure`, `scrolls`, `clips`, `hidden`, `disabled`, `selected`, `role`, `accessibility_state`, `accessibility_hint`, `accessibility_value`, `accessible`, `accessibility_hidden`, `canvas_node`, `span`); `pub struct MountedSpan<'a> { view, text, start, end }` | The views the screen mirrored from the applied batches, with the props they were mounted with. The screen also keeps four accessibility props it received and dropped before (`hint`, `value`, `accessible`, `hidden`). | all (the plug's semantic tree) | +178 / -1 |
-| 2 | `nsh-testing` | `Screen::keymap(&self) -> Option<&Keymap>` (non-wasm) and `Screen::app_menu(&self) -> Option<&[MenuItem]>`, from `pub(crate)` to `pub` | The app's keyboard shortcuts and application menu as mounted. | all (keybindings, `fire_keybinding`) | +2 / -2 |
+| 2 | `nsh-testing` | `Screen::keymap(&self) -> Option<&Keymap>` and `Screen::app_menu(&self) -> Option<&[MenuItem]>`, from `pub(crate)` to `pub` | The app's keyboard shortcuts and application menu as mounted. Web 5 also makes `keymap` available on wasm. | all (keybindings, `fire_keybinding`) | +2 / -2 |
 | 3 | `nsh-testing` | `Model::screen<R>(&self, read: impl FnOnce(&Screen) -> R) -> R` | Read access to the `Screen` a host's `Model` keeps. | all | +7 |
 | 4 | `nsh-testing` | `set_surface_hook(hook: SurfaceHook) -> Result<(), SurfaceHook>`; `surface_opened(&OpenedSurface<'_>) -> Option<SurfaceAttachment>`; `type SurfaceHook = fn(&OpenedSurface<'_>) -> Option<SurfaceAttachment>`; `pub struct OpenedSurface<'a> { pub surface: &'a dyn Any }` with `new`; `pub struct SurfaceAttachment { pub model: Option<Arc<Model>>, pub guard: Box<dyn Any> }` with `new` | A hook a tool linked into a development host sets once; the host calls it when it opens a surface, keeps the returned model current (every batch and error, as for `nsh test`'s model) and drops the attachment when the surface closes. | every platform (where `buwiz` starts the agent today) | +74 (with its test) |
 | iOS 1 | `nsh-platform-ios` | `dev::DevelopmentSurface`; `native(&self) -> Box<dyn Native>`; `with_views<R: Send>(&self, read: impl FnOnce(&UIView, &UIWindow, &MountedViews<'_>) -> R + Send) -> Option<R>`; `MountedViews::{is_available(&self) -> bool, get(&self, id: NodeId) -> Option<Retained<UIView>>}` | The existing native input driver and read access to the development surface's container, window and mounted views, on the main queue. Distinguishes an absent mounter from an unmounted node without retaining a mounter borrow across native calls. | iOS | +64 net |
@@ -24,11 +24,17 @@ Each door is one commit, `<area>: <What it does>`.
 | Linux 1 | `nsh-platform-linux` (`dev`) | `dev::DevSurface: Send + Clone`; `native(&self) -> Box<dyn Native>`; `on_main<R: Send + 'static>(&self, read: impl FnOnce(DevSurfaceView<'_>) -> R + Send + 'static) -> Option<R>`; view accessors `root() -> gtk4::Widget`, `window() -> Option<gtk4::Window>`, `widget(NodeId) -> Option<gtk4::Widget>` | The existing native driver and mounted widgets on the GTK main thread. Surface creation calls `surface_opened`; its attachment receives batches, errors and frames, resets on stop, and drops on surface close. Without a hook there is no attachment. | Linux | +114 / -1 |
 | Linux 2 | `nsh-platform-linux` (`dev`) | `DevSurfaceView::node_at(&self, Point<Points>) -> Option<NodeId>`; `supports(&self, Keystroke) -> bool` | Existing native picking and read-only lookup of mounted shortcuts. | Linux | +33 |
 | Linux 3 | `nsh-platform-linux` (`dev`) | `DevSurfaceView::menu(&self) -> Option<Arc<[MenuItem]>>`; `choose(&self, id: u32, role: Option<MenuRole>)` | The mounted application menu and its existing selection dispatch. Path walking stays in the plug. | Linux | +15 |
+| Web 1 | `nsh-cli` | Library target `nsh_cli`; `main() -> ExitCode`; `set_web_session_hook(WebSessionHook) -> Result<(), WebSessionHook>`; `type WebSessionHook = fn(&WebSession<'_>) -> anyhow::Result<Option<Box<dyn Any>>>`; `WebSession<'a> { server: Arc<DevServer>, entry: &'a Path, name: &'a str, rust_root: bool }`; re-exported `note`, `stop_requested`, `Stoppable` | A binary linked to the CLI can attach to a started Web development session. The CLI retains the returned attachment until watch ends and propagates hook errors. No hook leaves ordinary runs unchanged. | Web (library entry also reused by launchers) | +132 net (includes the main-to-library move and tests) |
+| Web 2 | `nsh-dev`, `nsh-cli` | `DevServer::add_page_script(&self, source: String)` | Registers scripts served and loaded, in order, before the development page boots. No registered scripts leaves the page unchanged. | Web | +77 / -1 |
+| Web 3 | `nsh-dev`, `nsh-platform-web`, `nsh-testing`, `nsh-cli` | `TestStep::Page { name: String, args: serde_json::Value }`; `globalThis.nshPageSteps[name](args, player)` | Dispatches named steps to page-supplied handlers through the existing step-answer path, including asynchronous results and failures. Unknown names fail. Works for ordinary tests and observers. | Web | +84 / -6 |
+| Web 4 | `nsh-dev`, `nsh-platform-web`, `nsh-cli` | `DevServer::set_observer_hook(&self, fn(SocketAddr, &serde_json::Value) -> bool)`; `ClientMessage::Hello.extra: Option<Value>` from `globalThis.nshHelloExtra`; `ServerMessage::Hello.observer: bool`; `player.observeStart()` / `nsh_observe_start()` | Lets a tool select step-capable hosts as observers without sending test setup. Their model tracks the running app and resets on engine replacement; storage, network and clock stay unchanged. Selection policy stays in the tool. | Web | +195 / -10 |
+| Web 5 | `nsh-testing`, `nsh-dev` | `snapshot::ScreenSnapshot` and nested owned serde DTOs; `Screen::snapshot(&self) -> ScreenSnapshot`; `SceneQuery::ScreenSnapshot`; `Scene::screen_snapshot(&self) -> Result<ScreenSnapshot, String>` implemented by `RemoteScene`; `Screen::keymap` on wasm | Mounted view props, hierarchy, stack screens, keymap and an icon-free menu as plain data, answered from the host's model. Semantic interpretation and secure-text masking stay in the plug. | Web (DTOs also usable by other hosts) | +751 / -3 |
 
 Foundation: 4 doors, about 260 lines in `nsh-testing`, against the 16,195 lines of agent work on `buwiz`.
 iOS adds 4 doors, 170 net source lines across `nsh-testing` and `nsh-platform-ios`.
 Linux adds 4 doors, +171 / -1 source lines across `nsh-testing` and `nsh-platform-linux`, reusing `Model::reset`.
-The table lists 12 doors in total. Measure against release commit `2f51d8611` with `git diff --stat 2f51d8611`.
+Web adds 5 doors, 1,219 net lines including tests and the CLI module move (individual commit counts above).
+The table lists 17 doors in total. Measure against release commit `2f51d8611` with `git diff --stat 2f51d8611`.
 
 On this branch no crate depends on the `gpui-agent` library, no workspace member is named for it, and no file we
 added has "agent" in its path.
@@ -39,7 +45,7 @@ added has "agent" in its path.
 
 - **The host's scene.** The plug's `nsh_agent_actions::SemanticScene` extends upstream's
   `nsh_testing::agent::Scene` with `semantic_tree`, `keybindings` and `long_press_disabled`, and is implemented for
-  upstream's `Model` through doors 1 to 3. Upstream's `Scene` trait is unchanged.
+  upstream's `Model` through doors 1 to 3. Web 5 supplies the plain snapshot reader for `RemoteScene`.
 - **The host's native driver.** The plug's `nsh_agent_actions::StrictNative` extends upstream's
   `nsh_testing::agent::Native` with the ten methods `buwiz` had added to `Native`: `available`, `hit_at`,
   `validate_keys`, `focus_node`, `fire_menu_keybinding`, `app_focused`, `rotate`, `keyboard`, `laid_out`,
@@ -58,9 +64,9 @@ added has "agent" in its path.
   (`SemanticScene::long_press_disabled`).
 - `buwiz`'s changes to upstream's ordinary agent (`Agent::run`, `long_press`, `settled`, strict checks inside
   `find`, the `TestStep::Synth` arm) are not on this branch: the plug's `Agent` has them; `nsh test` runs upstream's.
-- The `SceneQuery` additions in `nsh-dev` (`SemanticTree`, `Keybindings`,
-  `Focused`, `HitAt`, `Focus`, `AppFocused`) and `RemoteScene`'s semantic queries are not here yet: the platform
-  that needs one adds it as a door in Stage 1 (Android calls `Model::frame`; web's `RemoteScene` needs the queries).
+- The tool-specific `SceneQuery` additions in `nsh-dev` (`SemanticTree`, `Keybindings`,
+  `Focused`, `HitAt`, `Focus`, `AppFocused`) remain out. Web 3 lets page scripts answer DOM questions;
+  Web 5 supplies plain mounted data for the plug to build semantic trees and keybindings.
 - `module.rs`/`run.rs` `tray` and `global_menu` on `buwiz` are not agent work: they ride on `buwiz-next`.
 
 ## Rows the platform sessions add
@@ -71,4 +77,4 @@ added has "agent" in its path.
 | Windows | the surface handle; `input::pick_node`, `text_input::{focus, focused}`, `chrome::fire_menu_keybinding` |
 | Android | the surface handle; `Model::frame`; a way for the plug to supply `TestAgent.java`'s additions |
 | iOS | the surface handle from `DevSession` |
-| Web | the CLI's web listener (`nsh-cli/src/web_agent.rs`); `SceneQuery` additions for `RemoteScene` |
+| Web | recorded above as Web 1–5: CLI attachment, page scripts and steps, observer hosts and owned screen snapshots |
