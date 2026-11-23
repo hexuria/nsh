@@ -23,8 +23,9 @@ The decision, the measurements and the stages are in `PLAN.md` beside this file.
 | What | Where |
 |---|---|
 | The code being moved | `hexuria/nsh`, branch `buwiz`, at `70d8ff26b` (NSH 0.6.1 plus our work) |
-| The fork's new line | `hexuria/nsh`, new branch `buwiz-socket`, started from upstream tag `v0.6.1` |
-| The plug | new repository `hexuria/nsh-gpui-agent` (public) |
+| The NSH the plug is built for | `hexuria/nsh`, new branch `gpui-agent`: upstream tag `v0.6.1` plus the doors, nothing else |
+| The NSH the app pins | `hexuria/nsh`, new branch `buwiz-next`: branch `gpui-agent` plus our non-agent commits |
+| The plug | `hexuria/nsh-gpui-agent` (public, already created, holds a starting `README.md`) |
 | The app that uses it | `hexuria/buwiz-forms`, directory `nsh/` |
 | Upstream | `longbridge/nsh` (read only for this goal) |
 | This handover | `hexuria/nsh`, branch `feat/nsh-agent-socket`, directory `handover/agent-socket/` |
@@ -47,14 +48,14 @@ Rules for every session:
 3. **Prove on the real target.** A platform crate compiles as an empty crate on the wrong system, so a green build
    on the wrong machine proves nothing. Keep the command output for the report.
 4. **The ordinary test agent must be untouched.** `nsh test` on each platform passes exactly as on `buwiz`.
-5. **Small commits on `buwiz-socket`, one door each**, with upstream's commit style: `<area>: <What it does>`, no
+5. **Small commits on branch `gpui-agent`, one door each**, with upstream's commit style: `<area>: <What it does>`, no
    `fix:` or `feat:` prefixes, no mention of gpui-agent.
 6. Commit style, formatting and checks are upstream's: `cargo +nightly fmt --all`, `cargo test --workspace`, and the
    platform clippy run in `AGENTS.md` "Verification".
 
 ## Allowed without asking
 
-- Create the repository `hexuria/nsh-gpui-agent` and push to it.
+- Push to `hexuria/nsh-gpui-agent` (it exists; `main` is its working branch until the first release).
 - Create and push branches on `hexuria/nsh` and `hexuria/buwiz-forms`, and open pull requests there (draft until
   proven).
 - Build, run and test on the session's machine, emulator and simulator.
@@ -62,7 +63,8 @@ Rules for every session:
 ## Not allowed
 
 - Merging any pull request.
-- Pushing to, rebasing or force-pushing `buwiz` or `main` in any repository.
+- Pushing to, rebasing or force-pushing `buwiz` on `hexuria/nsh`, or `main` on `hexuria/nsh` and
+  `hexuria/buwiz-forms`.
 - Opening issues or pull requests on `longbridge/nsh`. Offering doors upstream is the other handover's job; give it
   `SOCKET.md`.
 - Publishing a crate.
@@ -79,10 +81,10 @@ not stop to ask. The one exception: if Stage 0 shows the socket cannot be small 
 
 ## Finish with one report
 
-- The new repository and `buwiz-socket`, with links.
+- `hexuria/nsh-gpui-agent`, and branches `gpui-agent` and `buwiz-next`, with links.
 - The socket: every door, its size, and the total against the 16,195 lines of agent work it replaces.
 - Per platform: what was run, on which machine, and the result, with the output.
 - What stayed in the fork that is not a door, and why.
 - The `hexuria/buwiz-forms` pull request and the app's results.
-- The Stage 3 rehearsal: conflicts and time for `buwiz-socket` against the same rebase of `buwiz`.
+- The Stage 3 rehearsal: conflicts and time for `gpui-agent` against the same rebase of `buwiz`.
 - Anything you found that the owner should decide.
