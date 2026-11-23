@@ -1835,7 +1835,17 @@ impl NshView {
 
     /// The surface the view is in (its root's), while it is in one.
     pub fn surface(&self) -> Option<std::rc::Rc<Surface>> {
-        self.0.keyboard_surface()
+        let mut current = Some(self.clone());
+        while let Some(view) = current {
+            if let Some(surface) = view.ivars().surface.borrow().upgrade() {
+                return Some(surface);
+            }
+            if let Some(surface) = view.ivars().window.borrow().upgrade() {
+                return Some(surface);
+            }
+            current = view.parent_view();
+        }
+        None
     }
 
     /// Kind.
