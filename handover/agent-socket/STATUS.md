@@ -188,3 +188,12 @@ work is gone.
   screenshot --inline ok, `invoke app.info` on :17422 ok. Screenshots saved.
   e073's macOS proof identical (real tree, click nav, data plane).
   Remaining per-platform verification: Windows (5171), Android emulator.
+
+- Plug PR #5 (linux crate) review triage: 2/6 findings fixed @ 26bf494
+  (model no longer attached when GPUI_AGENT is off; `synthesized()` now
+  accepts GTK-native nav/editing chords: Tab/shift+Tab, Right/Up/Down,
+  Home/End, PageUp/Down, Delete, Insert). The other 4 need new doors in
+  the fork — `key_focus::focus` is pub(crate) (unfocused-button keyboard
+  activation), and `DevSurfaceView` exposes only the main root/window
+  (hit tests, app_focused, resize in secondary windows). Token cannot
+  post PR comments on the plug repo; this is the record.
