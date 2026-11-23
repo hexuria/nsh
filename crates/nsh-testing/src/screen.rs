@@ -317,6 +317,14 @@ struct View {
     sheet: Option<SheetState>,
     /// Its `role`.
     role: AccessibilityRole,
+    /// Its `accessibilityHint`.
+    accessibility_hint: Option<Arc<str>>,
+    /// Its `accessibilityValue`.
+    accessibility_value: Option<nsh_core::AccessibilityValue>,
+    /// Its `accessible`: it is one element for assistive technologies.
+    accessible: Option<bool>,
+    /// It and its subtree are hidden from assistive technologies.
+    accessibility_hidden: bool,
     /// It takes no presses (`disabled`, its accessibility state).
     disabled: bool,
     /// `focusable`: `Some(true)` makes it a stop of Tab, `Some(false)` keeps
@@ -402,6 +410,146 @@ pub struct ViewStyle {
     pub opacity: f32,
     /// The opacity it shows with: its own times every view's around it.
     pub effective_opacity: f32,
+}
+
+/// A view as the screen mirrors it from the batches the host applied
+/// ([`Screen::mounted`]): the props it was mounted with, read only.
+#[derive(Debug, Clone, Copy)]
+pub struct MountedView<'a>(&'a View);
+
+impl<'a> MountedView<'a> {
+    /// Its kind, `None` for a view the core never created.
+    pub fn kind(&self) -> Option<ViewKind> {
+        self.0.kind
+    }
+
+    /// The view it was inserted into.
+    pub fn parent(&self) -> Option<NodeId> {
+        self.0.parent
+    }
+
+    /// The events it listens to.
+    pub fn events(&self) -> EventMask {
+        self.0.events
+    }
+
+    /// Its `testID`.
+    pub fn test_id(&self) -> Option<&'a str> {
+        self.0.test_id.as_deref()
+    }
+
+    /// Its `accessibilityLabel`.
+    pub fn label(&self) -> Option<&'a str> {
+        self.0.label.as_deref()
+    }
+
+    /// The text a text view shows.
+    pub fn text(&self) -> Option<&'a str> {
+        self.0.text.as_deref()
+    }
+
+    /// Its frame in its parent's points (a canvas node's in its canvas's).
+    pub fn frame(&self) -> Bounds<Points> {
+        self.0.frame
+    }
+
+    /// The text an input holds.
+    pub fn input_text(&self) -> Option<&'a str> {
+        self.0.input.as_ref().map(|input| input.text.as_str())
+    }
+
+    /// An input whose text is masked (`secureTextEntry`).
+    pub fn secure(&self) -> bool {
+        self.0
+            .input
+            .as_ref()
+            .is_some_and(|input| input.config.secure)
+    }
+
+    /// It scrolls its content.
+    pub fn scrolls(&self) -> bool {
+        self.0.scroll.is_some()
+    }
+
+    /// It clips what it holds (`overflow: hidden`).
+    pub fn clips(&self) -> bool {
+        self.0.clips
+    }
+
+    /// It is hidden (`visibility: hidden`).
+    pub fn hidden(&self) -> bool {
+        self.0.hidden
+    }
+
+    /// It takes no presses (`disabled`).
+    pub fn disabled(&self) -> bool {
+        self.0.disabled
+    }
+
+    /// It is selected.
+    pub fn selected(&self) -> bool {
+        self.0.selected
+    }
+
+    /// Its `role`.
+    pub fn role(&self) -> AccessibilityRole {
+        self.0.role
+    }
+
+    /// Its `accessibilityState`.
+    pub fn accessibility_state(&self) -> AccessibilityState {
+        self.0.accessibility_state
+    }
+
+    /// Its `accessibilityHint`.
+    pub fn accessibility_hint(&self) -> Option<&'a str> {
+        self.0.accessibility_hint.as_deref()
+    }
+
+    /// Its `accessibilityValue`.
+    pub fn accessibility_value(&self) -> Option<&'a nsh_core::AccessibilityValue> {
+        self.0.accessibility_value.as_ref()
+    }
+
+    /// Its `accessible`.
+    pub fn accessible(&self) -> Option<bool> {
+        self.0.accessible
+    }
+
+    /// It and its subtree are hidden from assistive technologies.
+    pub fn accessibility_hidden(&self) -> bool {
+        self.0.accessibility_hidden
+    }
+
+    /// A node of a canvas's drawing, not a view of its own: its parent is
+    /// the canvas.
+    pub fn canvas_node(&self) -> bool {
+        self.0.canvas_node
+    }
+
+    /// The text span it is, for a span of a text that takes presses.
+    pub fn span(&self) -> Option<MountedSpan<'a>> {
+        self.0.span.as_ref().map(|span| MountedSpan {
+            view: span.view,
+            text: &span.text,
+            start: span.start,
+            end: span.end,
+        })
+    }
+}
+
+/// A span of a text that takes presses ([`MountedView::span`]).
+#[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
+pub struct MountedSpan<'a> {
+    /// The text view showing it.
+    pub view: NodeId,
+    /// Its characters.
+    pub text: &'a str,
+    /// Where they start in the view's text (UTF-16 units).
+    pub start: u32,
+    /// Where they end (exclusive).
+    pub end: u32,
 }
 
 /// A link of a text view's text ([`nsh_core::TextLink`]): a span that takes
@@ -710,6 +858,10 @@ impl Screen {
                 view.label = props.accessibility.label.clone();
                 view.role = props.accessibility.role;
                 view.disabled = props.accessibility.state.disabled;
+                view.accessibility_hint = props.accessibility.hint.clone();
+                view.accessibility_value = props.accessibility.value.clone();
+                view.accessible = props.accessibility.accessible;
+                view.accessibility_hidden = props.accessibility.hidden;
                 view.focusable = props.focusable;
                 view.tab_after = props.tab_after;
                 view.key_capture = props.key_capture.clone();
@@ -1534,6 +1686,31 @@ impl Screen {
                 item.frame.origin = Point::new(Points(x), Points(y));
             }
         }
+    }
+
+    /// View `id` as it is mounted; `None` once closed, or for a view never
+    /// mounted (the root is mounted with no props).
+    pub fn mounted(&self, id: NodeId) -> Option<MountedView<'_>> {
+        static ROOT_VIEW: std::sync::LazyLock<View> = std::sync::LazyLock::new(View::default);
+        if self.closed.contains(&id) {
+            return None;
+        }
+        match self.nodes.get(&id) {
+            Some(view) => Some(MountedView(view)),
+            None if id == ROOT => Some(MountedView(&ROOT_VIEW)),
+            None => None,
+        }
+    }
+
+    /// The views mounted in view `id`, in order.
+    pub fn children(&self, id: NodeId) -> &[NodeId] {
+        self.children.get(&id).map_or(&[], Vec::as_slice)
+    }
+
+    /// The screens stack `id` shows, bottom to top: [`Screen::children`]
+    /// without those a back popped.
+    pub fn stack_screens(&self, id: NodeId) -> Vec<NodeId> {
+        self.screens(id)
     }
 
     /// The screens stack `id` shows, bottom to top (without those a back

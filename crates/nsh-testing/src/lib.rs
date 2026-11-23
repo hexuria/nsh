@@ -90,7 +90,7 @@ pub use self::{
 };
 pub use self::{
     failure::{SCREEN_TEXT_LIMIT, screen_texts},
-    screen::{LayoutNode, LayoutScroll, LayoutText, Pick, Screen},
+    screen::{LayoutNode, LayoutScroll, LayoutText, MountedSpan, MountedView, Pick, Screen},
     storage::MemoryStorage,
 };
 
