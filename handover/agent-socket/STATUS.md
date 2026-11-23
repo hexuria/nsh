@@ -280,3 +280,11 @@ work is gone.
   Android pending (emulator), iOS + web unverified.
   Note: `keybinding` ids are `keymap.<n>.<chord>` strings, not action
   names — app.quit/cancel report "unknown binding".
+- Stage 3 web = N/A for this app: `nsh run --target web` on buwiz-forms
+  fails building `nsh-app-ebirforms` — its door deps are native-only
+  (GTK4/webkit6 print, rusqlite, SFTP), no wasm build exists. The
+  recipe's own target list is macos/linux/windows/ios/android only.
+  The plug's `nsh-agent-web` crate stands proven at Stage 1 against
+  examples/gallery; the app-side gate doesn't apply — eBIRForms has no
+  web build. Platform matrix: macOS/Linux/Windows proven in-app; iOS
+  in flight (e073); Android pending emulator (5171).
