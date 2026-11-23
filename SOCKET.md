@@ -16,18 +16,21 @@ Each door is one commit, `<area>: <What it does>`.
 | 2 | `nsh-testing` | `Screen::keymap(&self) -> Option<&Keymap>` (non-wasm) and `Screen::app_menu(&self) -> Option<&[MenuItem]>`, from `pub(crate)` to `pub` | The app's keyboard shortcuts and application menu as mounted. | all (keybindings, `fire_keybinding`) | +2 / -2 |
 | 3 | `nsh-testing` | `Model::screen<R>(&self, read: impl FnOnce(&Screen) -> R) -> R` | Read access to the `Screen` a host's `Model` keeps. | all | +7 |
 | 4 | `nsh-testing` | `set_surface_hook(hook: SurfaceHook) -> Result<(), SurfaceHook>`; `surface_opened(&OpenedSurface<'_>) -> Option<SurfaceAttachment>`; `type SurfaceHook = fn(&OpenedSurface<'_>) -> Option<SurfaceAttachment>`; `pub struct OpenedSurface<'a> { pub surface: &'a dyn Any }` with `new`; `pub struct SurfaceAttachment { pub model: Option<Arc<Model>>, pub guard: Box<dyn Any> }` with `new` | A hook a tool linked into a development host sets once; the host calls it when it opens a surface, keeps the returned model current (every batch and error, as for `nsh test`'s model) and drops the attachment when the surface closes. | every platform (where `buwiz` starts the agent today) | +74 (with its test) |
-| iOS 1 | `nsh-platform-ios` | `dev::DevelopmentSurface`; `native(&self) -> Box<dyn Native>`; `with_views<R: Send>(&self, read: impl FnOnce(&UIView, &UIWindow, &dyn Fn(NodeId) -> Option<Retained<UIView>>) -> R + Send) -> Option<R>` | The existing native input driver and read access to the development surface's container, window and mounted views, on the main queue. | iOS | +43 |
+| iOS 1 | `nsh-platform-ios` | `dev::DevelopmentSurface`; `native(&self) -> Box<dyn Native>`; `with_views<R: Send>(&self, read: impl FnOnce(&UIView, &UIWindow, &MountedViews<'_>) -> R + Send) -> Option<R>`; `MountedViews::{is_available(&self) -> bool, get(&self, id: NodeId) -> Option<Retained<UIView>>}` | The existing native input driver and read access to the development surface's container, window and mounted views, on the main queue. Distinguishes an absent mounter from an unmounted node without retaining a mounter borrow across native calls. | iOS | +64 net |
 | iOS 2 | `nsh-platform-ios` | `DevSession::start` calls `surface_opened(&OpenedSurface::new(&DevelopmentSurface))` and retains its `SurfaceAttachment` | Keeps the hook's model current independently of `nsh test`, resets it when the engine is replaced, and drops the attachment with the development session. | iOS | +61 |
 | shared 5 | `nsh-testing` | `agent::Model::reset(&self)` | Clears the mounted scene and test setup when a host replaces its engine. | iOS (shared lifecycle) | +7 |
+| iOS 3 | `nsh-platform-ios` | `DevelopmentSurface::on_connected(&self, callback: impl Fn(&DevClient, &dyn Fn(&str, &str)) + Send + Sync + 'static)` | The development client's connection event, its log channel, and the host's existing error overlay (`title`, `message`). The tool supplies all messages and chooses whether to show an error. | iOS | +38 net |
 
 Foundation: 4 doors, about 260 lines in `nsh-testing`, against the 16,195 lines of agent work on `buwiz`.
-iOS adds 3 doors, 111 source lines across `nsh-testing` and `nsh-platform-ios`.
+iOS adds 4 doors, 170 net source lines across `nsh-testing` and `nsh-platform-ios`.
 Measure with `git diff --stat v0.6.1 gpui-agent`.
 
 On this branch no crate depends on the `gpui-agent` library, no workspace member is named for it, and no file we
 added has "agent" in its path.
 
 ## How the plug uses them
+
+- **iOS launch.** The plug supplies a prebuilt host through the existing `NSH_RUNTIME` override; its `main` registers door 4 before calling `nsh_ios_host::main`. Its launcher reuses the shared `nsh_cli::main()` library entry added for web sessions, bootstraps the same development app ID to obtain its data container, writes a private one-use token there, and invokes `nsh run` with inherited `SIMCTL_CHILD_*` opt-in/address variables. No iOS-specific linking, token, or launch logic is added to the fork. Apps with their own Rust sets can call `ios::install()` during their existing generated-host registration instead.
 
 - **The host's scene.** The plug's `nsh_agent_actions::SemanticScene` extends upstream's
   `nsh_testing::agent::Scene` with `semantic_tree`, `keybindings` and `long_press_disabled`, and is implemented for
