@@ -295,7 +295,7 @@ struct Lift {
 }
 
 /// The native side of an input view ([`crate::view::ViewState::input`]).
-pub(crate) struct InputState {
+pub struct InputState {
     editor: RefCell<Editor>,
     /// Retains a manager when available for cleanup after editor detachment.
     undo_manager: RefCell<Option<Retained<NSUndoManager>>>,
@@ -1855,6 +1855,20 @@ define_class!(
 );
 
 impl InputState {
+    /// How many characters a secure input holds; `None` when it shows
+    /// its text.
+    pub fn masked_len(&self) -> Option<usize> {
+        self.config
+            .borrow()
+            .secure
+            .then(|| self.editor.borrow().text().chars().count())
+    }
+
+    /// The input's plain text.
+    pub fn plain_text(&self) -> String {
+        self.editor.borrow().text()
+    }
+
     fn clear_undo(&self, editor: &Editor) {
         let fallback = self.undo_manager.borrow().clone();
         if let Some(manager) = editor.clear_undo(fallback.as_ref()) {
@@ -2959,6 +2973,13 @@ pub(crate) fn pad_contains(view: &NSView, point: NSPoint) -> bool {
         mask = layer.mask();
     }
     true
+}
+
+/// Whether `hit` is `input`'s pad or inside it. A lifted pad is hosted
+/// outside the input's own view, so such a hit is not a descendant of
+/// that view even though the input owns it.
+pub fn pad_owns(input: &InputState, hit: &NSView) -> bool {
+    hit.isDescendantOf(&input.pad)
 }
 
 /// The 2D transform from `view`'s content space to `host`'s: frames,

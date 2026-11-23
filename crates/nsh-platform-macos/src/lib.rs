@@ -61,7 +61,7 @@ pub mod surface;
 mod synth;
 mod system;
 mod text;
-mod text_input;
+pub mod text_input;
 mod transition;
 mod tray;
 mod view;
