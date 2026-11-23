@@ -153,3 +153,5 @@ work is gone.
   https://github.com/hexuria/buwiz-forms/issues/269.
 
 - buwiz-forms Stage 3 branch pushed: `devin/stage3-plug-move` on hexuria/buwiz-forms (plug dep @ plug `devin/stage2-integration` 1e85cf6 + [patch] to app checkout + NSH_PINNED_REF = buwiz-next 04955773). gpui-agent dual-versioned (0.3.0 plug / 0.4.0 app) until Stage 4.
+
+- Stage 2 acceptance (e073, macOS, devin/stage3-plug-move): app gates all green (nsh-check/build/test), BUT plug window plane binds an empty 0×0 tree (no UI op lands; suspected missing nsh_gpui_agent_macos::install() in the app wiring) and the app data plane never bound. Investigation dispatched to e073.
