@@ -288,3 +288,20 @@ work is gone.
   examples/gallery; the app-side gate doesn't apply — eBIRForms has no
   web build. Platform matrix: macOS/Linux/Windows proven in-app; iOS
   in flight (e073); Android pending emulator (5171).
+- Review round 4 (tips @0913a3f/@c4b3df7/@8622da6): PR #2 — fixed "a
+  hold's release is still a press" @794d7eb (hold interception now also
+  checks hidden press owners; the span fallback picks hold receiver
+  first); dismissed hidden-link-tap claim (links that take presses carry
+  Press and are already vetoed via the span fallback); dismissed the
+  tap-listener/hold flag (per-listener ownership is intended); escalated
+  wrapped-link coverage — `text_bounds` returns one rect, multi-line
+  spans need a multi-rect API (door candidate). PR #3 — fixed paste
+  advertising @525b940 (cfg!() gates on the driver's own OS; the iOS
+  driver compiles on macOS so paste was never advertised — now
+  unconditional for Mobile); escalated the focused-edit bug (adapter
+  taps before typing because it can't report/set focus — already on the
+  doors list); dismissed iOS-15-verification and ephemeral-port flags.
+  PR #4 — fixed pairing-key cross-scheme injection @b4d3c3c (matches
+  location.origin, not host); dismissed synthetic-paste note and the
+  ~2-RTT-per-node snapshot flag (accepted CDP cost); DevTools-auth and
+  duplicated-tab findings stay escalated from round 2.
