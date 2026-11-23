@@ -318,3 +318,37 @@ work is gone.
   Minor: `app.info` reports `mode:"desktop"` on iOS (data-plane door
   quirk, not the plug). Android remains the last untested target
   (5171's emulator, ~90min cap).
+- Stage 3 Android = PROVEN (this session, emulator-5554 `buwiz_api35`
+  x86_64 api35 on the Linux box). Plug `nsh-gpui-agent-android`
+  @1e85cf6 wired cfg(android) + `agent` feature; ctor self-installs —
+  NO `install_window_plane()` call needed (unlike desktop). Wrapper
+  re-appends the generated-workspace `[patch]`; stale
+  `nsh-platform-android/dev-agent` feature flag removed (old in-fork
+  mechanism, replaced by the plug's ctor).
+  ANDROID CONFIG PATH DIFFERS: the crate reads ACTIVITY INTENT EXTRAS
+  (`GPUI_AGENT`/`GPUI_AGENT_ADDR`, AgentBridge.agentConfig JNI) +
+  `files/gpui-agent-token` (read+deleted, needs FLAG_DEBUGGABLE) —
+  not env vars. Plain `nsh run` never sends them; only the plug's
+  `nsh-gpui-agent-cli` launch-hook door does. Recipe gap (same class as
+  iOS): `just nsh-run-agent android` needs a post-launch relaunch with
+  the extras + token file, or invoke the plug CLI. Replicated manually:
+  wrote both token files, force-stop, `am start -S` with url +
+  GPUI_AGENT extras on the live dev-server session.
+  Ops on the real eBIRForms window :17421: hello (Native Shell,
+  android/mobile, protocol 2, full feature list), snapshot 28-node
+  setup tree, `press setup-solo` → New taxpayer (104 nodes,
+  delivered_verified), `type n3 "987654321"` read back, `set-value
+  new-tp-name "Devin Plug Proof"` verified, scroll delivered_unverified,
+  keybinding keymap.1.ctrl-b delivered, `screenshot --inline` 96KB PNG
+  showing the written values (plug's own capture path).
+  DATA PLANE coexists on :17423: hello → app "bir-shell" (os android,
+  mode "desktop" quirk same as iOS). Note double-shift: recipe bakes
+  `GPUI_AGENT_ADDR=127.0.0.1:17422` into dev_env and choose() adds +1
+  → 17423 (recipe pre-shift predates the choose() fix; harmless but
+  banner lies — says window 17421/data 17422). Data-plane token file
+  (`files/nsh/dev.goldcoders.bir.nsh/agent-token`) is ONE-SHOT: the
+  recipe's handoff writes it once, the app consumes it — any app
+  restart needs it re-written (that's why relaunch #1 lost the data
+  plane).
+  MATRIX COMPLETE: macOS/Linux/Windows/iOS/Android PROVEN in-app;
+  web N/A (native-only app).
