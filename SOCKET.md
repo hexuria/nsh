@@ -75,15 +75,9 @@ added has "agent" in its path.
   (`SemanticScene::long_press_disabled`).
 - `buwiz`'s changes to upstream's ordinary agent (`Agent::run`, `long_press`, `settled`, strict checks inside
   `find`, the `TestStep::Synth` arm) are not on this branch: the plug's `Agent` has them; `nsh test` runs upstream's.
-<<<<<<< HEAD
 - The tool-specific `SceneQuery` additions in `nsh-dev` (`SemanticTree`, `Keybindings`,
   `Focused`, `HitAt`, `Focus`, `AppFocused`) remain out. Web 3 lets page scripts answer DOM questions;
   Web 5 supplies plain mounted data for the plug to build semantic trees and keybindings.
-=======
-- The `SceneQuery` additions in `nsh-dev` (`SemanticTree`, `Keybindings`,
-  `Focused`, `HitAt`, `Focus`, `AppFocused`) and `RemoteScene`'s semantic queries are not here yet: the platform
-  that needs one adds it as a door in Stage 1. Shared `Model::reset` and `Model::frame` are now exposed above.
->>>>>>> 83bcfbdc5 (docs: Record the Windows surface doors)
 - `module.rs`/`run.rs` `tray` and `global_menu` on `buwiz` are not agent work: they ride on `buwiz-next`.
 
 ## Rows the platform sessions add
