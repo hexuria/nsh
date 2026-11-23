@@ -32,7 +32,7 @@ Each door is one commit, `<area>: <What it does>`.
 | Android 1 | `nsh-platform-android` | `#[non_exhaustive] pub struct AndroidSurface`; `native(&self) -> Box<dyn Native>`; `density(&self) -> f32`; `view(&self) -> &GlobalRef`; `java_vm(&self) -> *mut jni::sys::JavaVM`; `Native.connectDevServer` calls `surface_opened` and keeps its `SurfaceAttachment` | The existing native input driver, display density, `NshView` global reference and Java VM of the development surface, read-only. The host feeds the attachment's model every batch, error and frame, resets it when the engine is replaced, and drops the attachment in `Native.destroy`. | Android | +107 |
 | shared 7 | `nsh-cli` | `#[non_exhaustive] pub struct DevelopmentHostLaunch<'a>`; `device(&self) -> &str`; `set_environment(&mut self, name: &str, value: &str)`; `write_private_file(&self, path: &str, contents: &[u8]) -> anyhow::Result<()>`; `set_development_host_launch_hook(hook: DevelopmentHostLaunchHook) -> Result<(), DevelopmentHostLaunchHook>`; `type DevelopmentHostLaunchHook = fn(&mut DevelopmentHostLaunch<'_) -> anyhow::Result<Option<Box<dyn Any>>>` | The lifecycle point after a development host is installed and before it starts. Its Android backend reports the adb serial, maps environment-like values to start-intent strings, and writes a private host file over adb standard input (never in arguments). The returned attachment is kept until the run ends. | Android | +198 |
 
-| Windows 1 | `nsh-platform-windows` | `pub struct DevSurface` (`Clone + Send + Sync`, under `dev`) | A surface's key and UI thread, offered to the surface hook at creation; the returned attachment receives applied batches and errors and is dropped on window destruction or surface drop. | Windows | +38 |
+| Windows 1 | `nsh-platform-windows` | `pub struct DevSurface` (`Clone + Send + Sync`, under `dev`) | A surface's key and UI thread, offered to the surface hook at creation; the returned attachment receives applied batches, errors and frames, resets on clear/reload, and is dropped on window destruction or surface drop. | Windows | +59 / -1 (including lifecycle wiring) |
 | Windows 2 | `nsh-platform-windows` | `DevSurface::native(&self) -> Box<dyn nsh_testing::agent::Native>`; `DevSurface::invoke(&self, f: impl FnOnce(Option<DevSurfaceRef<'_>>) + Send + 'static)`; `pub struct DevSurfaceRef<'a>` | The existing platform-test native driver and a borrowed surface on its UI thread (or `None` after it is gone). | Windows | +24 / -1 |
 | Windows 3 | `nsh-platform-windows` | `DevSurfaceRef::{hwnd(&self) -> HWND, pick_node(&self, x: f32, y: f32) -> Option<NodeId>, focus_text_input(&self, id: NodeId), focused_text_input(&self) -> Option<NodeId>, child_focused(&self) -> bool, pixel_size(&self) -> (u32, u32), app_menu(&self) -> Option<Arc<[MenuItem]>>, choose_menu_action(&self, id: u32, role: Option<MenuRole>), supports_menu_role(&self, role: Option<MenuRole>) -> bool}` | Pass-through access to the native window, picking, text-input focus, web-child focus, physical size and mounted application menu. Menu choice uses no menu area; path and keybinding resolution stay in the plug. All under `dev`. | Windows | +61 / -4 |
 | Windows 4 | `nsh-platform-windows` | `DevSurfaceRef::layout_pending(&self) -> bool` | Whether the engine has yet to report layout at the window's size. Tracks resize requests only with a running engine, clears on a matching `Resized` report and on stop/reload. The tracking lives here because a linked tool cannot observe engine `Resized` messages. `Surface::animating` is unchanged, preserving ordinary test settling. Includes a regression test and formatting of the preceding doors. | Windows | +62 / -5 |
@@ -42,7 +42,7 @@ iOS adds 4 doors, 179 net source lines across `nsh-testing` and `nsh-platform-io
 Linux adds 4 doors, +171 / -1 source lines across `nsh-testing` and `nsh-platform-linux`, reusing `Model::reset`.
 Web adds 5 doors, 1,219 net lines including tests and the CLI module move (individual commit counts above).
 Android adds 2 doors, 305 source lines across `nsh-platform-android` and `nsh-cli`; its shared `Model::frame` door adds 9 lines in `nsh-testing`.
-Windows adds 4 doors, +185 / -10 source lines in `nsh-platform-windows`, reusing shared `Model::frame` and `Model::reset`.
+Windows adds 4 doors, +206 / -11 source lines in `nsh-platform-windows`, reusing shared `Model::frame` and `Model::reset`.
 The table lists 23 doors in total. Measure against release commit `2f51d8611` with `git diff --stat 2f51d8611`.
 
 On this branch no crate depends on the `gpui-agent` library, no workspace member is named for it, and no file we
@@ -80,9 +80,9 @@ added has "agent" in its path.
   `Focused`, `HitAt`, `Focus`, `AppFocused`) remain out. Web 3 lets page scripts answer DOM questions;
   Web 5 supplies plain mounted data for the plug to build semantic trees and keybindings.
 =======
-- `buwiz`'s `Model::reset`, `Model::frame`, the `SceneQuery` additions in `nsh-dev` (`SemanticTree`, `Keybindings`,
+- The `SceneQuery` additions in `nsh-dev` (`SemanticTree`, `Keybindings`,
   `Focused`, `HitAt`, `Focus`, `AppFocused`) and `RemoteScene`'s semantic queries are not here yet: the platform
-  that needs one adds it as a door in Stage 1 (Android calls `Model::frame`; web's `RemoteScene` needs the queries).
+  that needs one adds it as a door in Stage 1. Shared `Model::reset` and `Model::frame` are now exposed above.
 >>>>>>> 83bcfbdc5 (docs: Record the Windows surface doors)
 - `module.rs`/`run.rs` `tray` and `global_menu` on `buwiz` are not agent work: they ride on `buwiz-next`.
 

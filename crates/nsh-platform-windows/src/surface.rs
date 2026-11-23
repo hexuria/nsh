@@ -660,6 +660,15 @@ impl Surface {
         self.engine.borrow_mut().take();
         self.rx.borrow_mut().take();
         self.mounter.borrow_mut().clear();
+        #[cfg(feature = "dev")]
+        if let Some(model) = self
+            .attachment
+            .borrow()
+            .as_ref()
+            .and_then(|a| a.model.as_ref())
+        {
+            model.reset();
+        }
         self.native.clear();
         crate::system::clear(self);
         *self.anim.borrow_mut() = UiAnimation::default();
@@ -1060,7 +1069,18 @@ impl Surface {
                     f(&message);
                 }
             }
-            Message::Frame => self.js_frame.set(true),
+            Message::Frame => {
+                self.js_frame.set(true);
+                #[cfg(feature = "dev")]
+                if let Some(model) = self
+                    .attachment
+                    .borrow()
+                    .as_ref()
+                    .and_then(|a| a.model.as_ref())
+                {
+                    model.frame();
+                }
+            }
             Message::HotUpdateFailed => {
                 if let Some(f) = &*self.on_hot_update_failed.borrow() {
                     f();
