@@ -139,6 +139,7 @@ pub(crate) enum Reached {
     /// `accessible={true}`).
     Controls,
     /// None (`accessibilityElementsHidden`, `visibility: hidden`).
+    /// No value.
     None,
 }
 
@@ -367,43 +368,72 @@ struct AxState {
 
 /// The kinds of element nsh makes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Ax {
+pub enum Ax {
     /// No element.
     Generic,
+    /// A button.
     Button,
     /// A button that stays on or off (`accessibilityState.pressed`).
     Toggle,
+    /// A link.
     Link,
+    /// Static text.
     Text,
+    /// An image.
     Image,
+    /// A group.
     Group,
+    /// A heading.
     Heading,
+    /// A slider.
     Slider,
+    /// A checkbox.
     CheckBox,
+    /// A switch.
     Switch,
+    /// A radio button.
     Radio,
+    /// A radio group.
     RadioGroup,
+    /// A combo box.
     ComboBox,
+    /// A menu.
     Menu,
+    /// A menu bar.
     MenuBar,
+    /// A menu item.
     MenuItem,
+    /// A progress indicator.
     Progress,
+    /// A scroll bar.
     ScrollBar,
     /// A scroll view.
     ScrollArea,
+    /// A spin button.
     SpinButton,
+    /// A tab.
     Tab,
+    /// A tab list.
     TabList,
+    /// A toolbar.
     Toolbar,
+    /// A list.
     List,
     /// An option of a listbox.
     Option,
+    /// A grid.
     Grid,
+    /// A row.
     Row,
+    /// A cell.
     Cell,
+    /// A search field.
     Search,
+    /// An alert.
     Alert,
+    /// A status.
     Status,
+    /// A timer.
     Timer,
     /// A landmark of a section (ARIA's `region`).
     Region,
@@ -464,7 +494,8 @@ impl Ax {
 
 /// A view's value.
 #[derive(Debug, Clone, PartialEq)]
-enum Value {
+pub enum Value {
+    /// No value.
     None,
     /// Read as text.
     Text(String),
@@ -472,31 +503,42 @@ enum Value {
     Checked(i32),
     /// A range.
     Range {
+        /// The lower bound.
         min: Option<f32>,
+        /// The upper bound.
         max: Option<f32>,
+        /// The current value.
         now: Option<f32>,
+        /// The value as text.
         text: Option<Arc<str>>,
     },
 }
 
 /// Everything set on a view's accessibility attributes.
 #[derive(Debug, Clone, PartialEq)]
-struct Spec {
-    role: Ax,
-    label: Option<String>,
-    help: Option<String>,
-    value: Value,
-    disabled: bool,
-    selected: bool,
-    expanded: Option<bool>,
+pub struct Spec {
+    /// The element kind.
+    pub role: Ax,
+    /// Its label.
+    pub label: Option<String>,
+    /// Its help text.
+    pub help: Option<String>,
+    /// Its value.
+    pub value: Value,
+    /// Whether it is disabled.
+    pub disabled: bool,
+    /// Whether it is selected.
+    pub selected: bool,
+    /// Whether it is expanded, when expandable.
+    pub expanded: Option<bool>,
     /// The content does not pass the app's checks (ARIA's `aria-invalid`).
-    invalid: bool,
+    pub invalid: bool,
     /// A tree item's level (1 at the top).
-    level: Option<u32>,
+    pub level: Option<u32>,
     /// Hidden with its subtree.
-    hidden: bool,
+    pub hidden: bool,
     /// One element: its children are not exposed.
-    grouped: bool,
+    pub grouped: bool,
 }
 
 /// The alerts to read once the batch being applied is in, and what was
@@ -1173,7 +1215,7 @@ fn ax_role(role: Ax) -> (Option<Retained<NSString>>, Option<Retained<NSString>>)
 /// What to give AppKit for a view of `kind` with accessibility `a`;
 /// `invisible` for `visibility: hidden`, which hides the subtree as
 /// `accessibilityElementsHidden` does: what is not drawn is not read either.
-fn spec_for(
+pub fn spec_for(
     a: &Accessibility,
     kind: ViewKind,
     pressable: bool,
