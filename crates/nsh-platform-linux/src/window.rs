@@ -404,6 +404,21 @@ fn main_window(surface: &Surface) -> Option<gtk::Window> {
     surface.root.root().and_downcast::<gtk::Window>()
 }
 
+/// The GTK window and its root view of the app's window `id`, for
+/// development surfaces (secondary-window hit tests, focus and resize).
+#[cfg(feature = "dev")]
+pub(crate) fn window_and_view(surface: &Surface, id: NodeId) -> Option<(gtk::Window, NshView)> {
+    let windows = surface.windows.borrow();
+    let w = windows.get(&id)?;
+    Some((w.window.clone(), w.view.upgrade()?))
+}
+
+/// The ids of the app's own windows currently mounted.
+#[cfg(feature = "dev")]
+pub(crate) fn app_window_ids(surface: &Surface) -> Vec<NodeId> {
+    surface.windows.borrow().keys().copied().collect()
+}
+
 /// The `gtk::Window` of window `id` (its root node).
 fn gtk_window(surface: &Surface, id: NodeId) -> Option<gtk::Window> {
     if id == ROOT_ID {
