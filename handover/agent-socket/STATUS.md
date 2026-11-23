@@ -251,3 +251,14 @@ work is gone.
 - Doors list additions: `Native::focused()` implementations for windows
   and iOS in nsh-testing (typing on an already-focused field currently
   clicks first, clearing the selection).
+- PR #2 round 3 fixed @0913a3f: gesture-scoped hidden ownership, three
+  findings in one change. `SemanticNode` gains `hidden_text_spans`
+  (link, text view, start, end) — a native hit reports the hidden text
+  view while the gesture belongs to a hidden link at the point, so
+  hidden link taps inside hidden text are now vetoed like other
+  hidden-owner hits. The shared hidden-owner veto picks the press or
+  hold owner map by gesture: a tap-only hidden view no longer rejects
+  holds and a hold-only hidden view no longer rejects taps. And
+  `hold_long_press` resolves a span target's delay through the owning
+  view (`SemanticTarget::Text/Canvas::owner`), matching GPUI, instead
+  of falling back to the 600ms default. 57 tests green.
