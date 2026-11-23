@@ -269,3 +269,14 @@ work is gone.
   (`keymap.<id>.<chord>`); each platform's Native impl can fire it as
   `KeyCommand`/`Number(id)`, the same dispatch `keymap::press` uses.
   PR #2's remaining flag otherwise addressed @0913a3f.
+- Stage 3 Windows PROVEN (5171): same three app-side fixes (install()
+  in native(), choose() port+1, generated-workspace [patch] via a
+  CARGO wrapper surviving nsh's manifest regeneration). Gates green
+  (137 Rust + full TSX). Window plane :17421 = plug "Native Shell"
+  (597-node real eBIRForms tree), data plane :17422 = "bir-shell" —
+  both coexist. Per-op on the live window: click navigates to New
+  taxpayer, typed TIN read back, set-value writes, keybinding +
+  screenshot deliver. Platform count: macOS, Linux, Windows proven;
+  Android pending (emulator), iOS + web unverified.
+  Note: `keybinding` ids are `keymap.<n>.<chord>` strings, not action
+  names — app.quit/cancel report "unknown binding".
