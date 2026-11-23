@@ -1,0 +1,138 @@
+# STATUS — gpui-agent move + buwiz-forms issue #269 (written 2026-11-23 ~14:40 UTC by session devin-366d75587ebd4b1183f50aca1bcd3353)
+
+This file is the cold-start handover after the NSH orchestrator Bot (session
+`c411d19b0ffd4589a5d65b8e7858d28c`) and all six quota-paid platform sessions ran
+out of ACU quota. Everything below is verified state, not plans. Read
+`GOAL.md` and `PLAN.md` in this directory first — the picks there are final.
+
+Resume instructions for the next session are in `RESUME.md` next to this file.
+
+## Rules that still bind everyone
+
+From GOAL.md (verbatim where quoted):
+- Never set `BIR_SFTP_LIVE`. Safety env for every run: `BUWIZ_NO_KEYCHAIN=1
+  EBIR_TEST_ENV=1 BIR_AUTH_BYPASS=1 BIR_SFTP_DRY_RUN=1`.
+- "Not allowed: merging; a real release tag; anything that becomes the latest
+  release; adding or reading repository secrets; uploading to TestFlight or
+  App Store Connect; editing NSH; deleting `rox-mini-app-round2` or any branch
+  that is not yours; force-pushing anyone else's branch; renaming
+  `agent::APP = "bir-shell"`."
+- hexuria/nsh is read-only except through the door commits on `gpui-agent` —
+  never open a PR against it, never push to main. Owner-only gates in GOAL.md
+  stay owner-only (no merges, no real tags, no NSH_UPDATE_KEY; draft
+  pre-releases deleted after use).
+- Push/PR auth: bind `GITHUB_TOKEN=secret:personal:GITHUB_TOKEN` and push to
+  `https://x-access-token:$GITHUB_TOKEN@github.com/...` — the git proxy 403s
+  without it. The token CANNOT open PRs (no pull-request write): someone else
+  must open PRs from the branch-compare links, or grant the token that scope.
+- "When orchestrating sub-agents, require each to report with video or
+  screenshot proof plus text" (uriah's standing rule).
+- Use the four free platform sessions first, never new agent sessions:
+  windows `5171718ab21d47b785af639bda550158` (has Android),
+  linux `a32c98e9a2ff4f3197f3cb8b66227b07`, linux
+  `366d75587ebd4b1183f50aca1bcd3353` (this box), macos
+  `e0730bfce0f54d80a275b98a77bc54b6` (has iOS). Messaging a session on another
+  org quota may return HTTP 403 out_of_quota — that means the Bot is dead, not
+  busy.
+
+## Dead sessions (out_of_quota, do not wait for them)
+
+Orchestrator `c411d19b0ffd4589a5d65b8e7858d28c` (NSH Bot) and its six Stage-1
+platform children: android `89e6cf31…`, ios `6f5674fa…` (PR #3), web
+`80660509…` (PR #4), windows `d920f5e3…`, macos `927ad5e2…`, linux
+`e230d1ec…`. Their pushed work survives on the remotes below; uncommitted
+work is gone.
+
+## Program A — the gpui-agent move (hexuria/nsh + hexuria/nsh-gpui-agent)
+
+### Key refs
+- Upstream pin: `v0.6.1` = `2f51d8611` (fetched from longbridge/nsh).
+- `gpui-agent` tip = `7b916cdb3` — v0.6.1 + **39 door commits** (grew from 24
+  while sessions were dying; linux, android and windows doors landed).
+- `buwiz` tip = `70d8ff26b9e9dccb17a908de97cd4a3f3e381276` (`NSH_PINNED_REF`
+  in buwiz-forms `.github/workflows/nsh.yml`).
+- longbridge/nsh `main` = `167aa3827`.
+- macOS doors NOT yet on `gpui-agent`: they live on
+  `devin/stage1-macos-doors` @ `cab9140b9` on hexuria/nsh (its session died
+  mid-work, was "closing five behavior gaps").
+- iOS door pin used for checks: `ca714e1fb`.
+- Plug repo `main` = `22e8db6e` (stage-0 move merged via PR #1).
+
+### Socket size check (Task-13 audit by windows session + rerun here)
+- `git diff v0.6.1 gpui-agent` = 38 files, +3,786/−1,372 (39 doors).
+  Per the TASK-13 audit every line maps to a SOCKET.md row; ~1,336 of nsh-cli's
+  lines are a byte-identical lib.rs move, so real new code ≈ +1,850.
+
+### Stage-1 platform state
+| Platform | Doors on gpui-agent | Plug branch | Plug PR | Check status |
+|---|---|---|---|---|
+| web | yes (cli/dev doors incl. 089981575) | `web` | #4 open | TASK-10 PASSED on Windows Chrome (both modes; paired-tab screenshot is a documented limit) |
+| ios | yes | `devin/1795407430-ios-stage1` | #3 open | TASK-11 PASSED on iPhone 17 sim (all ops); README gap list reported |
+| linux | yes | `devin/linux-agent` | none | platform session died before its check |
+| windows | yes | `devin/windows-agent` | none | platform session died before its check |
+| android | yes | `devin/1795407849-android` | none | TASK-14 (clean check) running on windows free session |
+| macos | NO — on `devin/stage1-macos-doors` @ `cab9140b9` | `devin/stage1-macos` | none | TASK-15 running on macos free session |
+
+### Known defects found so far
+- iOS fixture comparison (TASK order to e073): 8 of 93 iOS native fixtures fail
+  at `1822d2e15`/`68a4a99ec`. 7 are pre-existing on `buwiz` (MenuScroll,
+  FocusRow, FocusTransfer, LargeTitle, 2× navigation/Keyboard, Selection);
+  **1 regression: keyboard/Composer — all 3 cases pass on buwiz but fail on the
+  plug pin (tap registers `presses:1` but never focuses the input,
+  `focus:none`, `keyboard:down`).** Needs a plug-side fix, owner unknown.
+- 8 agent bugs from Devin Review on PR #1 were fixed on
+  `devin/1795413363-agent-bugfixes` = PR #2 (open). Two remaining web findings
+  behave the same on buwiz → follow-ups, not blockers.
+
+### Rehearsals done on this box (TASK-9, TASK-12; worktree `/home/ubuntu/repos/nsh-stage3`)
+- TASK-9 (62 non-agent buwiz-next commits onto gpui-agent tip): **32 clean /
+  30 conflict** — IDENTICAL at both 24-door and 39-door tips. Only ONE real
+  door conflict: `abe8d514c` (B07 ios view.rs, door rewrote `Inner::load`).
+  The other 29 are missing skipped-commit context (~17 cascade from
+  `ad9c1f10e`/B15 head leaving `global_menu.rs` absent; `f0d2d183e` is a
+  byte-identical duplicate of `815d991d3`, not a real conflict).
+- TASK-12 (rebase gpui-agent onto longbridge/main): at 24 doors 21 clean /
+  3 conflict; at 39 doors **27 clean / 12 conflict** — all mechanical
+  same-region overlap (nsh-cli churn hits cli+android doors; SOCKET.md docs
+  commits cascade; windows surface.rs). ~2s scripted replay.
+  Comparison `buwiz` → same main: **60 clean / 196 conflict**. This is the
+  number the socket exists to beat.
+- Scratch state kept: branches `stage3-gpui-agent2`, `buwiz-next-rehearsal2`
+  in worktree `~/repos/nsh-stage3`; lists in `/tmp/replay_list.txt` (62 SHAs),
+  `/tmp/door_list2.txt` (39 SHAs), `/tmp/stage3_gpui2.txt`, `/tmp/replay2.txt`.
+  `buwiz-next-rehearsal` also exists in `~/repos/nsh`. NONE of this is pushed.
+
+### Outstanding move work (Stages 2–4 of PLAN.md)
+1. macOS doors must land on `gpui-agent` from `devin/stage1-macos-doors`
+   (`cab9140b9`) — verify the macOS session's last force-push is complete, not
+   mid-rebase. Then re-run TASK-9 + TASK-12 once more.
+2. TASK-15 (macOS desktop check) in flight on session e0730bf…; TASK-14
+   (Android check) in flight on session 5171718… Wait for both before
+   declaring Stage 1 done.
+3. Open plug PRs for `devin/linux-agent`, `devin/windows-agent`,
+   `devin/1795407849-android`, `devin/stage1-macos` (token cannot open PRs —
+   needs a human or a PR-write-capable token). Review and land #2/#3/#4.
+4. Build `buwiz-next` = gpui-agent + the 62 non-agent commits (rebase out the
+   30 context-missing conflicts or replay with the skipped commits resolved;
+   see PLAN.md Stage 4 for the intended approach).
+5. Composer regression above needs a plug-side fix.
+6. Final: SOCKET.md audit rerun, update buwiz-forms `NSH_PINNED_REF` to the
+   final socket pin, delete `crates/bir-shell` per #269 PR 2.
+
+## Program B — hexuria/buwiz-forms issue #269 (PR 1 `feat/nsh-release`)
+
+- PR 1 assembly is owned by track-A session `devin-5a27540f503c4840876d5dc8346efcf5`
+  (buwiz-forms Bot `bot-641ea1b0c2a0430da76505356de38a7b` coordinates — that
+  Bot is also out_of_quota; could not receive my report).
+- **ALL Linux gates on `feat/nsh-release` @ `7f2db8cb` PASSED** (reported to
+  the dead Bot; repeat to whoever picks up): `nsh-check -v`, `nsh-build`,
+  `nsh-test` (136 cargo + 187/187 TSX files, ~1,700 tests), `core-plain-test`
+  (751), `cargo test -p bir-cli` (3), touched Python script tests (86 ran,
+  18 skipped). Run inside Docker sidecar `buwiz-nsh-2404` via
+  `~/BuwizNsh/nsh2404.sh` — host is Ubuntu 22.04, lacks GTK 4.14/WebKitGTK 6.
+- Windows free session is doing track-E install proof (Setup.exe/MSI install,
+  launch with safety flags, sign-in mock, form open, MSIX, uninstall) plus
+  TASK-14. macOS free session awaits PR 1 for the notarized-DMG e2e check.
+- Other tracks' results are in the buwiz-forms Bot's dead session; the open
+  state is whatever `feat/nsh-release` and its CI show on
+  https://github.com/hexuria/buwiz-forms/issues/269.
