@@ -234,7 +234,7 @@ impl SurfaceHandle {
 }
 
 /// One engine and its views.
-pub(crate) struct Surface {
+pub struct Surface {
     key: u64,
     pub(crate) mtm: MainThreadMarker,
     /// The root view (node [`ROOT_ID`]): the surface's view.
@@ -506,13 +506,18 @@ impl Surface {
     }
 
     /// The surface's key ([`Surface::with_key`]).
-    pub(crate) fn key(&self) -> u64 {
+    pub fn key(&self) -> u64 {
         self.key
     }
 
     /// The surface with `key`, for callbacks that must be `Send`.
-    pub(crate) fn with_key(key: u64) -> Option<Rc<Surface>> {
+    pub fn with_key(key: u64) -> Option<Rc<Surface>> {
         find(key)
+    }
+
+    /// The root view (node [`ROOT_ID`]).
+    pub fn root(&self) -> NshView {
+        self.root.clone()
     }
 
     /// Calls `f` with the model a development tool attached, when it did.
