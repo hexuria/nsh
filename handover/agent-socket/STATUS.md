@@ -262,3 +262,10 @@ work is gone.
   `hold_long_press` resolves a span target's delay through the owning
   view (`SemanticTarget::Text/Canvas::owner`), matching GPUI, instead
   of falling back to the 600ms default. 57 tests green.
+- Doors list addition: `Native::fire_keybinding` per platform — the
+  default returns NATIVE_KEYBINDING_UNSUPPORTED, so a chord shared by
+  two bindings refuses rather than guessing (unique chords already
+  work via press_keys). The semantic id carries the numeric keymap id
+  (`keymap.<id>.<chord>`); each platform's Native impl can fire it as
+  `KeyCommand`/`Number(id)`, the same dispatch `keymap::press` uses.
+  PR #2's remaining flag otherwise addressed @0913a3f.
