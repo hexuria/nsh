@@ -41,7 +41,7 @@ mod gpu;
 mod image;
 mod input;
 mod keyboard;
-mod keymap;
+pub mod keymap;
 mod login_item;
 mod mount;
 mod native;
