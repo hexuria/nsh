@@ -2033,65 +2033,6 @@ fn menu_bar_rect(hwnd: HWND) -> Option<RECT> {
     Some(r)
 }
 
-<<<<<<< /tmp/ours_f
-||||||| /tmp/base_f
-#[cfg(all(test, feature = "dev"))]
-mod agent_menu_tests {
-    use super::*;
-    use nsh_core::keymap::When;
-
-    fn action(id: u32, label: &str, enabled: bool, role: Option<MenuRole>) -> MenuItem {
-        MenuItem::Action(MenuAction {
-            id,
-            label: label.into(),
-            shortcut: None,
-            enabled,
-            checked: None,
-            role,
-            when: When::Always,
-        })
-    }
-
-    fn menu(role: Option<MenuRole>, enabled: bool) -> Vec<MenuItem> {
-        vec![MenuItem::Submenu {
-            label: "File".into(),
-            enabled: true,
-            items: vec![action(7, "Open", enabled, role)],
-        }]
-    }
-
-    fn path() -> Vec<String> {
-        vec!["File".into(), "Open".into()]
-    }
-
-    #[test]
-    fn resolves_enabled_menu_keybinding_by_path_and_id() {
-        assert_eq!(
-            resolve_menu_keybinding(&menu(None, true), 7, &path()),
-            Ok((7, None))
-        );
-        assert!(resolve_menu_keybinding(&menu(None, true), 8, &path()).is_err());
-    }
-
-    #[test]
-    fn rejects_missing_and_disabled_menu_keybindings() {
-        assert!(resolve_menu_keybinding(&menu(None, true), 7, &["Missing".into()]).is_err());
-        assert!(resolve_menu_keybinding(&menu(None, false), 7, &path()).is_err());
-        let disabled_submenu = vec![MenuItem::Submenu {
-            label: "File".into(),
-            enabled: false,
-            items: vec![action(7, "Open", true, None)],
-        }];
-        assert!(resolve_menu_keybinding(&disabled_submenu, 7, &path()).is_err());
-    }
-
-    #[test]
-    fn rejects_windows_unsupported_menu_roles() {
-        assert!(resolve_menu_keybinding(&menu(Some(MenuRole::About), true), 7, &path()).is_err());
-    }
-}
-
-=======
 #[cfg(all(test, feature = "dev"))]
 mod agent_menu_tests {
     use nsh_core::keymap::When;
@@ -2149,7 +2090,6 @@ mod agent_menu_tests {
     }
 }
 
->>>>>>> /tmp/theirs_f
 /// The menu bar's messages in the dark theme (`WM_UAHDRAWMENU`,
 /// `WM_UAHDRAWMENUITEM`); `None` in the light theme, whose bar is the
 /// system's.

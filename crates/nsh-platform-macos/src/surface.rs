@@ -528,7 +528,6 @@ impl Surface {
         find(key)
     }
 
-<<<<<<< /tmp/ours_f
     /// The root view (node [`ROOT_ID`]).
     pub fn root(&self) -> NshView {
         self.root.clone()
@@ -547,14 +546,11 @@ impl Surface {
         }
     }
 
-||||||| /tmp/base_f
-=======
     /// Every surface of this (the main) thread.
     pub(crate) fn all() -> Vec<Rc<Surface>> {
         SURFACES.with(|s| s.borrow().values().filter_map(Weak::upgrade).collect())
     }
 
->>>>>>> /tmp/theirs_f
     /// Starts `config`'s app, replacing what ran.
     pub(crate) fn start(self: &Rc<Self>, mut config: EngineConfig) {
         self.stop();
@@ -1168,16 +1164,8 @@ impl Surface {
     /// Whether the display link should run (animations, frame callbacks,
     /// a JS frame request): while it does, a bounds commit mid-scroll
     /// lands on a live frame.
-<<<<<<< /tmp/ours_f
     pub fn wants_frames(&self) -> bool {
-        self.js_frame.get()
-||||||| /tmp/base_f
-    pub(crate) fn wants_frames(&self) -> bool {
-        self.js_frame.get()
-=======
-    pub(crate) fn wants_frames(&self) -> bool {
         (self.js_frame.get() && !self.paused.get())
->>>>>>> /tmp/theirs_f
             || !self.queued.borrow().is_empty()
             || self.anim.borrow().animating()
             || !self.frame_callbacks.borrow().is_empty()

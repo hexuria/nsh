@@ -889,37 +889,6 @@ define_class!(
 
     unsafe impl NSObjectProtocol for Delegate {}
 
-<<<<<<< /tmp/ours_f
-||||||| /tmp/base_f
-    impl Delegate {
-        /// Shows or hides the running view's performance monitor
-        /// ([`AppView::set_fps_monitor`]): an action an app's menu or key
-        /// binding sends (`toggleFpsMonitor:`), so it runs on the main
-        /// thread the view lives on.
-        #[unsafe(method(toggleFpsMonitor:))]
-        fn toggle_fps_monitor(&self, _sender: Option<&objc2::runtime::AnyObject>) {
-            let view = RUNNING.with(|r| r.borrow().as_ref().map(|r| r.view.clone()));
-            if let Some(view) = view {
-                let shown = view.fps.borrow().is_some();
-                view.set_fps_monitor(!shown);
-            }
-        }
-
-        /// Forgets the performance monitor's readings so far (the trace's
-        /// red spikes, the p95s) and marks the jank log
-        /// (`clearFpsMonitor:`).
-        #[unsafe(method(clearFpsMonitor:))]
-        fn clear_fps_monitor(&self, _sender: Option<&objc2::runtime::AnyObject>) {
-            let view = RUNNING.with(|r| r.borrow().as_ref().map(|r| r.view.clone()));
-            if let Some(view) = view {
-                if let Some(hud) = view.fps.borrow().as_ref() {
-                    hud.clear();
-                }
-            }
-        }
-    }
-
-=======
     impl Delegate {
         /// Shows or hides the running view's performance monitor
         /// ([`AppView::set_fps_monitor`]): an action an app's menu or key
@@ -948,7 +917,6 @@ define_class!(
         }
     }
 
->>>>>>> /tmp/theirs_f
     unsafe impl NSApplicationDelegate for Delegate {
         // Before launching finishes, or a press that starts the app is lost.
         #[unsafe(method(applicationWillFinishLaunching:))]

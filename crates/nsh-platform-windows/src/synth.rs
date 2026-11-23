@@ -149,7 +149,7 @@ pub(crate) fn press(surface: &Rc<Surface>, vk: u16, modifiers: Modifiers) {
 }
 
 /// Resizes the window so that its client area is `w` x `h` points.
-pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) {
+pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) -> Result<(), String> {
     use windows::Win32::{
         Foundation::RECT,
         UI::{
@@ -161,20 +161,6 @@ pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) {
         },
     };
     let hwnd = surface.hwnd();
-<<<<<<< /tmp/ours_f
-||||||| /tmp/base_f
-    // Refused before the window changes: what it cannot become.
-    // SAFETY: a query of a window of this thread.
-    if unsafe { windows::Win32::UI::WindowsAndMessaging::IsZoomed(hwnd) }.as_bool() {
-        return Err("the window is maximized: restore it before resizing".into());
-    }
-    let (min_w, min_h) = (crate::window::MIN_WIDTH, crate::window::MIN_HEIGHT);
-    if w < min_w || h < min_h {
-        return Err(format!(
-            "{w}x{h} is below the window's {min_w}x{min_h} minimum"
-        ));
-    }
-=======
     // Refused before the window changes: what it cannot become.
     // SAFETY: a query of a window of this thread.
     if unsafe { windows::Win32::UI::WindowsAndMessaging::IsZoomed(hwnd) }.as_bool() {
@@ -186,7 +172,6 @@ pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) {
             "{w}x{h} is below the window's minimum of about {min_w}x{min_h}"
         ));
     }
->>>>>>> /tmp/theirs_f
     let dpi = crate::window::dpi(hwnd);
     let s = dpi as f32 / 96.0;
     let (want_w, want_h) = ((w * s).round() as i32, (h * s).round() as i32);
@@ -200,45 +185,15 @@ pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) {
     unsafe {
         let style = WINDOW_STYLE(GetWindowLongW(hwnd, GWL_STYLE) as u32);
         let ex = WINDOW_EX_STYLE(GetWindowLongW(hwnd, GWL_EXSTYLE) as u32);
-<<<<<<< /tmp/ours_f
-        let _ = AdjustWindowRectExForDpi(&mut rect, style, false, ex, dpi);
-        let _ = SetWindowPos(
-||||||| /tmp/base_f
-        AdjustWindowRectExForDpi(&mut rect, style, false, ex, dpi)
-            .map_err(|error| format!("AdjustWindowRectExForDpi failed: {error}"))?;
-        SetWindowPos(
-=======
         // The menu bar is part of the frame, not the client area.
         let menu = !GetMenu(hwnd).is_invalid();
         AdjustWindowRectExForDpi(&mut rect, style, menu, ex, dpi)
             .map_err(|error| format!("AdjustWindowRectExForDpi failed: {error}"))?;
-<<<<<<< /tmp/ours_f
-        SetWindowPos(
->>>>>>> /tmp/theirs_f
-            hwnd,
-            None,
-            0,
-            0,
-            rect.right - rect.left,
-            rect.bottom - rect.top,
-            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
-        );
-||||||| /tmp/base_f
-        SetWindowPos(
-            hwnd,
-            None,
-            0,
-            0,
-            rect.right - rect.left,
-            rect.bottom - rect.top,
-            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
-        )
-        .map_err(|error| format!("SetWindowPos failed: {error}"))?;
-=======
         let (mut outer_w, mut outer_h) = (rect.right - rect.left, rect.bottom - rect.top);
         // A hidden title bar or a wrapped menu bar gives a client area other
         // than the style's, so the frame is corrected by what it measures.
-        for _ in 0..2 {
+        let mut last = (0, 0);
+        for _ in 0..3 {
             SetWindowPos(
                 hwnd,
                 None,
@@ -258,8 +213,12 @@ pub(crate) fn resize(surface: &Rc<Surface>, w: f32, h: f32) {
             }
             outer_w += dw;
             outer_h += dh;
+            last = (client.right, client.bottom);
         }
->>>>>>> /tmp/theirs_f
+        Err(format!(
+            "the client area is {}x{} px after resizing, not {want_w}x{want_h} px",
+            last.0, last.1
+        ))
     }
 }
 
