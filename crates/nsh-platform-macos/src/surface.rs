@@ -1058,11 +1058,17 @@ impl Surface {
     /// Whether the display link should run (animations, frame callbacks,
     /// a JS frame request): while it does, a bounds commit mid-scroll
     /// lands on a live frame.
-    pub(crate) fn wants_frames(&self) -> bool {
+    pub fn wants_frames(&self) -> bool {
         self.js_frame.get()
             || !self.queued.borrow().is_empty()
             || self.anim.borrow().animating()
             || !self.frame_callbacks.borrow().is_empty()
+    }
+
+    /// Whether a batch from the engine is waiting to reach the main thread.
+    #[cfg(feature = "dev")]
+    pub fn input_pending(&self) -> bool {
+        self.pending.borrow().load(Ordering::Acquire)
     }
 
     /// Runs the display link while animations run or JS wants a frame (or
