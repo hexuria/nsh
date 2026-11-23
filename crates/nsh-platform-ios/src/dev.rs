@@ -85,6 +85,30 @@ static NEXT_KEY: AtomicU64 = AtomicU64::new(1);
 type ConnectedCallback = Arc<dyn Fn(&DevClient, &dyn Fn(&str, &str)) + Send + Sync>;
 type ConnectedCallbacks = Arc<Mutex<Vec<ConnectedCallback>>>;
 
+/// Read-only access to a development surface's mounted native views.
+#[non_exhaustive]
+pub struct MountedViews<'a> {
+    inner: &'a Inner,
+}
+
+impl<'a> MountedViews<'a> {
+    pub(crate) fn new(inner: &'a Inner) -> Self {
+        Self { inner }
+    }
+
+    /// Whether the surface currently has a running mounter.
+    pub fn is_available(&self) -> bool {
+        self.inner.with_mounter(|_| ()).is_some()
+    }
+
+    /// The native view owned by the running mounter for `id`.
+    pub fn get(&self, id: nsh_core::NodeId) -> Option<Retained<UIView>> {
+        self.inner
+            .with_mounter(|mounter| mounter.ui_view(id))
+            .flatten()
+    }
+}
+
 /// A development session's native surface, usable from a worker thread.
 ///
 /// Supplied to [`nsh_testing::agent::surface_opened`]. Native access returns
@@ -104,16 +128,10 @@ impl DevelopmentSurface {
     /// Reads the container, window and mounted native views on the main queue.
     ///
     /// Call from a worker thread, never from the main queue. The lookup returns
-    /// only native views owned by the running surface's mounter. The lookup
-    /// itself is `None` while no mounter is running.
+    /// only native views owned by the running surface's mounter.
     pub fn with_views<R: Send>(
         &self,
-        read: impl FnOnce(
-            &UIView,
-            &objc2_ui_kit::UIWindow,
-            Option<&dyn Fn(nsh_core::NodeId) -> Option<Retained<UIView>>>,
-        ) -> R
-        + Send,
+        read: impl FnOnce(&UIView, &objc2_ui_kit::UIWindow, &MountedViews<'_>) -> R + Send,
     ) -> Option<R> {
         crate::agent::IosNative::new(self.key).with_views(read)
     }
