@@ -82,6 +82,38 @@ pub fn init_logging() {
 /// Names the sessions' views to their test agents.
 static NEXT_KEY: AtomicU64 = AtomicU64::new(1);
 
+/// A development session's native surface, usable from a worker thread.
+///
+/// Supplied to [`nsh_testing::agent::surface_opened`]. Native access returns
+/// `None` after the view or its window closes.
+#[derive(Clone)]
+pub struct DevelopmentSurface {
+    key: u64,
+}
+
+impl DevelopmentSurface {
+    /// Creates the existing native input driver for this surface.
+    pub fn native(&self) -> Box<dyn nsh_testing::agent::Native> {
+        Box::new(crate::agent::IosNative::new(self.key))
+    }
+
+    /// Reads the container, window and mounted native views on the main queue.
+    ///
+    /// Call from a worker thread, never from the main queue. The lookup returns
+    /// only native views owned by the running surface's mounter.
+    pub fn with_views<R: Send>(
+        &self,
+        read: impl FnOnce(
+            &UIView,
+            &objc2_ui_kit::UIWindow,
+            &dyn Fn(nsh_core::NodeId) -> Option<Retained<UIView>>,
+        ) -> R
+        + Send,
+    ) -> Option<R> {
+        crate::agent::IosNative::new(self.key).with_views(read)
+    }
+}
+
 /// A connection to a dev server, loading its bundles into one view.
 pub(crate) struct DevSession {
     /// Keeps the client (and its thread) alive.

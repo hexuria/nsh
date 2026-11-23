@@ -69,6 +69,18 @@ impl IosNative {
         IosNative { key }
     }
 
+    pub(crate) fn with_views<R: Send>(
+        &self,
+        read: impl FnOnce(&UIView, &UIWindow, &dyn Fn(NodeId) -> Option<Retained<UIView>>) -> R
+        + Send,
+    ) -> Option<R> {
+        self.on_main(move |view, window| {
+            read(&view.container, window, &|id| {
+                view.with_mounter(|mounter| mounter.ui_view(id)).flatten()
+            })
+        })
+    }
+
     /// `f` with the view and its window on the main queue, waited for;
     /// `None` once either is gone.
     fn on_main<R: Send>(&self, f: impl FnOnce(&Inner, &UIWindow) -> R + Send) -> Option<R> {
