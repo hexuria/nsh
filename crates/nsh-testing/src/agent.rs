@@ -1790,6 +1790,7 @@ impl Agent {
                 ))
             }
             TestStep::Scene { query } => self.scene_query(query),
+            TestStep::Page { .. } => Err("page steps require a page host".into()),
         }
     }
 

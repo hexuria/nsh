@@ -1501,9 +1501,11 @@ class Player {
   /**
    * Answers a test step (`nsh_dev::protocol::TestStep`) as an
    * `nsh_dev::protocol::StepOutcome`: the module's model answers what it
-   * knows of the app, the page's views where they are.
+   * knows of the app, the page's views where they are. Page handlers may
+   * return promises; the caller awaits the outcome.
    */
   testStep(step) {
+    if (step.step === "page") return this.pageStep(step.name, step.args);
     if (!this.takesTests) return { outcome: "failed", message: "this runtime takes no test steps" };
     const len = this.withStrings([JSON.stringify(step)], (p, l) => this.wasm.nsh_test_answer(p, l));
     const answer = JSON.parse(this.str(this.wasm.nsh_test_answer_ptr(), len));
@@ -1516,6 +1518,20 @@ class Player {
     if ("failed" in answer) return { outcome: "failed", message: answer.failed };
     try {
       return { outcome: "done", value: this.testPage(step.query ?? {}) };
+    } catch (e) {
+      return { outcome: "failed", message: String(e?.message ?? e) };
+    }
+  }
+
+  /** Calls an own handler in `globalThis.nshPageSteps` with `(args, player)`.
+   * Returns its JSON result, or a failed outcome for a missing handler or error. */
+  async pageStep(name, args) {
+    try {
+      const handlers = globalThis.nshPageSteps;
+      const handler = handlers && Object.hasOwn(handlers, name) && handlers[name];
+      if (typeof handler !== "function") throw new Error(`unknown page step: ${name}`);
+      const value = await handler(args, this);
+      return { outcome: "done", value: JSON.parse(JSON.stringify(value)) };
     } catch (e) {
       return { outcome: "failed", message: String(e?.message ?? e) };
     }

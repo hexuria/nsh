@@ -702,9 +702,14 @@ pub enum TestStep {
         /// The app's id for the window (`"main"`: the main window).
         id: String,
     },
-    /// A question about the host's model of the app or about its views,
-    /// from a test agent that runs elsewhere (the web: `nsh` acts through
-    /// the browser, the page knows the app).
+    /// Calls a development page's registered handler and returns its JSON result.
+    Page {
+        /// The registered page handler's name.
+        name: String,
+        /// JSON passed to the handler.
+        args: serde_json::Value,
+    },
+    /// A question answered by the host's mounted model or views.
     Scene {
         /// The question.
         query: SceneQuery,
@@ -1089,6 +1094,25 @@ impl From<log::Level> for LogLevel {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn page_steps_round_trip() {
+        for args in [
+            serde_json::Value::Null,
+            serde_json::json!({"items": [1, true, "text"]}),
+        ] {
+            let step = super::TestStep::Page {
+                name: "example".into(),
+                args,
+            };
+            let json = serde_json::to_value(&step).unwrap();
+            assert_eq!(json["step"], "page");
+            assert_eq!(
+                serde_json::from_value::<super::TestStep>(json).unwrap(),
+                step
+            );
+        }
+        assert!(serde_json::from_str::<super::TestStep>(r#"{"step":"page","args":null}"#).is_err());
+    }
     use super::*;
 
     #[test]

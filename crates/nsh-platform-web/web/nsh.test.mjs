@@ -3,10 +3,18 @@
 // records what reaches it through the real `call` / `withStrings` path.
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const source = await readFile(new URL("nsh.js", import.meta.url), "utf8");
+
+test("the development page module parses", async () => {
+  const html = await readFile(new URL("../../nsh-cli/src/web/dev.html", import.meta.url), "utf8");
+  const script = html.match(/<script type="module">([\s\S]*?)<\/script>/)[1].replace(/\{\{\w+\}\}/g, "null");
+  const result = spawnSync(process.execPath, ["--input-type=module", "--check"], { input: script, encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+});
 // `Player` is not exported; the page only gets it from `createPlayer`.
 const { Player, keyCode, elementTag, runtimeSheet, charLength, clipChars } = await import(
   `data:text/javascript,${encodeURIComponent(`${source}\nexport { Player, keyCode, runtimeSheet, charLength, clipChars };`)}`
@@ -52,6 +60,35 @@ function fakePlayer(options = {}) {
 }
 
 const started = () => -1;
+
+test("page steps dispatch JSON to registered handlers and report failures", async (t) => {
+  const { player } = fakePlayer();
+  const previous = globalThis.nshPageSteps;
+  t.after(() => { globalThis.nshPageSteps = previous; });
+  const take = (name, args = null) => player.testStep({ step: "page", name, args });
+  assert.deepEqual(await take("missing"), { outcome: "failed", message: "unknown page step: missing" });
+  const cycle = {}; cycle.self = cycle;
+  globalThis.nshPageSteps = {
+    echo: (args, received) => { assert.equal(received, player); return args; },
+    later: async () => [true, 4, "text"],
+    throws: () => { throw new Error("handler failed"); },
+    rejects: async () => { throw new Error("handler rejected"); },
+    empty: () => undefined,
+    cycle: () => cycle,
+  };
+  for (const args of [null, { nested: [1, false, ""] }]) {
+    assert.deepEqual(await take("echo", args), { outcome: "done", value: args });
+  }
+  assert.deepEqual(await take("later"), { outcome: "done", value: [true, 4, "text"] });
+  for (const name of ["missing", "toString", "throws", "rejects", "empty", "cycle"]) {
+    const result = await take(name);
+    assert.equal(result.outcome, "failed");
+    assert.equal(typeof result.message, "string");
+  }
+  assert.equal((await take("throws")).message, "handler failed");
+  assert.equal((await take("rejects")).message, "handler rejected");
+});
+
 const failing = () => {
   throw new Error("unreachable");
 };
