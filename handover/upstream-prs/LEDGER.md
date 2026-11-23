@@ -8,12 +8,12 @@ States: `not started`, `already upstream`, `issue open`, `agreed`, `declined`, `
 
 | Theme | State | Issue | PR | Our commits it replaces | Upstream commit | Notes |
 |---|---|---|---|---|---|---|
-| B01 | ready, not sent | | | 4a1a00a3a 90176289a | | Branch `up/core-folded-text-quota`, local commit `45c5619a0`; tested green. push to hexuria/nsh blocked (403); PR not opened |
-| B02 | ready, not sent | | | da41e0df2 | | Branch `up/animation-leaf-completions`, local commit `21f7814eb`; tested green. push to hexuria/nsh blocked (403); PR not opened |
+| B01 | ready, not sent | | | 4a1a00a3a 90176289a | | Branch `up/core-folded-text-quota`, commit `45c5619a0` pushed to hexuria; compare link handed to the owner to open (Devin's PR tool can't open cross-fork PRs) |
+| B02 | ready, not sent | | | da41e0df2 | | Branch `up/animation-leaf-completions`, commit `21f7814eb` pushed to hexuria; compare link handed to the owner to open (Devin's PR tool can't open cross-fork PRs) |
 | B03 | not started | | | 86d7bd945 cc9398e08 30eb63d84 | | windows: resize by the client area, counting the menu bar; requires Windows machine |
 | B04 | not started | | | a09f40be6 | | windows: a web view opens the file page its app loaded (macOS has it upstream, PR #1496); requires Windows machine |
 | B05 | not started | | | 1b09f2403 | | windows: take the keyboard back from web views when a press lands outside them; requires Windows machine |
-| B06 | not started | | | 3bd56a954 | | macos: report Up and Down from a text input |
+| B06 | ready, not sent | | | 3bd56a954 | | Branch `up/macos-text-input-arrows`, commit `513870a83` pushed to hexuria; compare link handed to the owner. Native input_focus Up/Down assertions pass; its existing caret-position check fails on this machine on upstream main too |
 | B07 | not started | | | abe8d514c | | ios: read the dev session from the held view state on reload |
 | B08 | not started | | | 38bcc1126 5afbb7d19 | | js: retire replaced app-menu callbacks |
 | B09 | not started | | | 88b940945 | | macos: draw views at the scale they are shown at |
