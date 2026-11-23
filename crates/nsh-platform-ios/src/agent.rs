@@ -420,9 +420,7 @@ impl Native for IosNative {
         // The mounter tags every mounted view with its node id: the first
         // responder's nearest tagged ancestor is the focused node.
         self.on_main(|_, window| {
-            let mut view = synth::first_responder(window)?
-                .downcast::<UIView>()
-                .ok();
+            let mut view = synth::first_responder(window)?.downcast::<UIView>().ok();
             while let Some(v) = view {
                 let id = v.tag() as NodeId;
                 if id > nsh_core::ROOT_ID {
