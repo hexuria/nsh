@@ -110,6 +110,26 @@ impl DevSurfaceView<'_> {
     pub fn choose(&self, id: u32, role: Option<nsh_core::desktop::MenuRole>) {
         crate::chrome::choose(self.surface, id, role);
     }
+
+    /// Fires key binding `id` as a `KeyCommand` on the root, as the
+    /// keymap reports one it matched.
+    pub fn key_command(&self, id: u32) {
+        self.surface.event(
+            nsh_core::ROOT_ID,
+            nsh_core::EventKind::KeyCommand,
+            nsh_core::EventPayload::Value(nsh_core::PayloadValue::Number(f64::from(id))),
+        );
+    }
+
+    /// Moves the keyboard focus to `id`'s view, as Tab's traversal does
+    /// (`false` while no view is mounted for it).
+    pub fn focus_node(&self, id: nsh_core::NodeId) -> bool {
+        let Some(view) = self.surface.mounter.borrow().views.get(&id).cloned() else {
+            return false;
+        };
+        crate::key_focus::focus(&view);
+        true
+    }
 }
 
 /// The client of the most recent session: logs go there.
