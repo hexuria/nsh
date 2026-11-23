@@ -106,9 +106,22 @@ pub(crate) struct Host {
     /// every batch and error goes to it.
     #[cfg(feature = "dev")]
     pub(crate) test_model: Mutex<Option<Arc<nsh_testing::agent::Model>>>,
+    /// What attached to this surface when it opened, and the model it keeps.
+    #[cfg(feature = "dev")]
+    surface: Mutex<Option<nsh_testing::agent::SurfaceAttachment>>,
 }
 
 impl Host {
+    /// The model of the tool attached to this surface, if it asked for one.
+    #[cfg(feature = "dev")]
+    fn surface_model(&self) -> Option<Arc<nsh_testing::agent::Model>> {
+        self.surface
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .and_then(|attachment| attachment.model.clone())
+    }
+
     /// The display's density: pixels per point.
     #[cfg(feature = "dev")]
     pub(crate) fn density(&self) -> f32 {
@@ -203,6 +216,10 @@ impl Host {
             // No `Delete` follows for its views: its native components
             // are told here (`NshComponent.destroy`).
             self.app_stopped();
+        }
+        #[cfg(feature = "dev")]
+        if let Some(model) = self.surface_model() {
+            model.reset();
         }
         *self.animation_queue.lock().expect("queue") = VecDeque::new();
         self.keymap
@@ -458,6 +475,10 @@ impl MountSink for Sink {
         if let Some(model) = &*host.test_model.lock().unwrap_or_else(|e| e.into_inner()) {
             model.apply(&batch);
         }
+        #[cfg(feature = "dev")]
+        if let Some(model) = host.surface_model() {
+            model.apply(&batch);
+        }
         answer_clipboard_reads(host, &batch);
         register_inline_images(host, &batch);
         let mut encoded = encode::encode(batch, self.1);
@@ -560,6 +581,10 @@ impl MountSink for Sink {
     fn report_error(&self, message: &str) {
         #[cfg(feature = "dev")]
         if let Some(model) = &*self.0.test_model.lock().unwrap_or_else(|e| e.into_inner()) {
+            model.error(message);
+        }
+        #[cfg(feature = "dev")]
+        if let Some(model) = self.0.surface_model() {
             model.error(message);
         }
         #[cfg(feature = "dev")]
@@ -728,6 +753,8 @@ extern "system" fn Java_com_longbridge_nsh_Native_create(
         dev: Mutex::new(None),
         #[cfg(feature = "dev")]
         test_model: Mutex::new(None),
+        #[cfg(feature = "dev")]
+        surface: Mutex::new(None),
     });
     Box::into_raw(Box::new(host)) as jlong
 }
@@ -1154,6 +1181,8 @@ extern "system" fn Java_com_longbridge_nsh_Native_destroy(
     // SAFETY: the handle came from `create` and Java drops it exactly once.
     let host = unsafe { Box::from_raw(handle as *mut Arc<Host>) };
     #[cfg(feature = "dev")]
+    drop(host.surface.lock().expect("surface").take());
+    #[cfg(feature = "dev")]
     drop(host.dev.lock().expect("dev").take());
     *host.answers.lock().expect("answers") = None;
     drop(host.engine.lock().expect("engine").take());
@@ -1262,6 +1291,12 @@ extern "system" fn Java_com_longbridge_nsh_Native_connectDevServer(
     };
     #[cfg(feature = "dev")]
     {
+        let Ok(vm) = env.get_java_vm() else {
+            return 0;
+        };
+        let surface = crate::surface::AndroidSurface::new(host, vm.get_java_vm_pointer());
+        *host.surface.lock().expect("surface") =
+            nsh_testing::agent::surface_opened(&nsh_testing::agent::OpenedSurface::new(&surface));
         let session = crate::dev::DevSession::start(host.clone(), String::from(url));
         *host.dev.lock().expect("dev") = session;
         1
@@ -2538,6 +2573,10 @@ extern "system" fn Java_com_longbridge_nsh_Native_frame(
 ) {
     // SAFETY: Java passes its live handle.
     let host = unsafe { host(handle) };
+    #[cfg(feature = "dev")]
+    if let Some(model) = host.surface_model() {
+        model.frame();
+    }
     if let Some(control) = host.control() {
         control.frame();
     }
