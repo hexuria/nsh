@@ -1436,7 +1436,7 @@ pub(crate) fn taken_out(window: &objc2_app_kit::NSWindow) {
 
 /// The input that has the keyboard focus, if one of the app's has it.
 #[cfg(feature = "dev")]
-pub(crate) fn test_focused(window: &objc2_app_kit::NSWindow) -> Option<nsh_core::NodeId> {
+pub fn test_focused(window: &objc2_app_kit::NSWindow) -> Option<nsh_core::NodeId> {
     with_focused(window, |_, cx| cx.get().map(|(_, view, _)| view.id()))
         .ok()
         .flatten()
@@ -3219,7 +3219,7 @@ pub(crate) fn accessibility_element(view: &NshView) -> Retained<NSView> {
 }
 
 /// `focus()`.
-pub(crate) fn focus(view: &NshView) {
+pub fn focus(view: &NshView) {
     let input = view.state().input.clone();
     if let Some(input) = input {
         let editor = input.editor.borrow().clone();
@@ -3284,7 +3284,7 @@ pub(crate) fn editing(surface: &Surface) -> bool {
 }
 
 /// Whether an input under `root` has its window's keyboard focus.
-pub(crate) fn editing_in(root: &NshView) -> bool {
+pub fn editing_in(root: &NshView) -> bool {
     let root = root.ns();
     let Some(responder) = root.window().and_then(|w| w.firstResponder()) else {
         return false;
