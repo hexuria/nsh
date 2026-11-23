@@ -16,10 +16,12 @@ Each door is one commit, `<area>: <What it does>`.
 | 2 | `nsh-testing` | `Screen::keymap(&self) -> Option<&Keymap>` (non-wasm) and `Screen::app_menu(&self) -> Option<&[MenuItem]>`, from `pub(crate)` to `pub` | The app's keyboard shortcuts and application menu as mounted. | all (keybindings, `fire_keybinding`) | +2 / -2 |
 | 3 | `nsh-testing` | `Model::screen<R>(&self, read: impl FnOnce(&Screen) -> R) -> R` | Read access to the `Screen` a host's `Model` keeps. | all | +7 |
 | 4 | `nsh-testing` | `set_surface_hook(hook: SurfaceHook) -> Result<(), SurfaceHook>`; `surface_opened(&OpenedSurface<'_>) -> Option<SurfaceAttachment>`; `type SurfaceHook = fn(&OpenedSurface<'_>) -> Option<SurfaceAttachment>`; `pub struct OpenedSurface<'a> { pub surface: &'a dyn Any }` with `new`; `pub struct SurfaceAttachment { pub model: Option<Arc<Model>>, pub guard: Box<dyn Any> }` with `new` | A hook a tool linked into a development host sets once; the host calls it when it opens a surface, keeps the returned model current (every batch and error, as for `nsh test`'s model) and drops the attachment when the surface closes. | every platform (where `buwiz` starts the agent today) | +74 (with its test) |
-| iOS 1 | `nsh-platform-ios` | `dev::DevelopmentSurface`; `native(&self) -> Box<dyn Native>`; `with_views<R: Send>(&self, read: impl FnOnce(&UIView, &UIWindow, &dyn Fn(NodeId) -> Option<Retained<UIView>>) -> R + Send) -> Option<R>` | The existing native input driver and read access to the development surface's container, window and mounted views, on the main queue. | iOS | +44 |
-| iOS 2 | `nsh-platform-ios` | `DevSession::start` calls `surface_opened(&OpenedSurface::new(&DevelopmentSurface))` and retains its `SurfaceAttachment` | Keeps the hook's model current independently of `nsh test`, resets it when the engine is replaced, and drops the attachment with the development session. | iOS | +53 |
+| iOS 1 | `nsh-platform-ios` | `dev::DevelopmentSurface`; `native(&self) -> Box<dyn Native>`; `with_views<R: Send>(&self, read: impl FnOnce(&UIView, &UIWindow, &dyn Fn(NodeId) -> Option<Retained<UIView>>) -> R + Send) -> Option<R>` | The existing native input driver and read access to the development surface's container, window and mounted views, on the main queue. | iOS | +43 |
+| iOS 2 | `nsh-platform-ios` | `DevSession::start` calls `surface_opened(&OpenedSurface::new(&DevelopmentSurface))` and retains its `SurfaceAttachment` | Keeps the hook's model current independently of `nsh test`, resets it when the engine is replaced, and drops the attachment with the development session. | iOS | +61 |
+| shared 5 | `nsh-testing` | `agent::Model::reset(&self)` | Clears the mounted scene and test setup when a host replaces its engine. | iOS (shared lifecycle) | +7 |
 
-Total: 4 doors, about 260 lines in one crate (`nsh-testing`), against the 16,195 lines of agent work on `buwiz`.
+Foundation: 4 doors, about 260 lines in `nsh-testing`, against the 16,195 lines of agent work on `buwiz`.
+iOS adds 3 doors, 111 source lines across `nsh-testing` and `nsh-platform-ios`.
 Measure with `git diff --stat v0.6.1 gpui-agent`.
 
 On this branch no crate depends on the `gpui-agent` library, no workspace member is named for it, and no file we
@@ -54,9 +56,6 @@ added has "agent" in its path.
 - `module.rs`/`run.rs` `tray` and `global_menu` on `buwiz` are not agent work: they ride on `buwiz-next`.
 
 ## Rows the platform sessions add
-
-Shared lifecycle door: `nsh-testing::agent::Model::reset(&self)` clears the
-model when a development host replaces its engine (+7 lines; needed by iOS).
 
 | Platform | Expected doors (from `handover/agent-socket/data/internal-names-by-platform.txt`) |
 |---|---|

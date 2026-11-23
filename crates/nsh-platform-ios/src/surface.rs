@@ -70,7 +70,11 @@ impl MountSink for MainThreadSink {
             model.apply(&batch);
         }
         #[cfg(feature = "dev")]
-        if let Some(model) = &*self.observer_model.lock().unwrap_or_else(|e| e.into_inner()) {
+        if let Some(model) = &*self
+            .observer_model
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+        {
             model.apply(&batch);
         }
         let mounter = self.mounter.clone();
@@ -113,7 +117,11 @@ impl MountSink for MainThreadSink {
             model.error(message);
         }
         #[cfg(feature = "dev")]
-        if let Some(model) = &*self.observer_model.lock().unwrap_or_else(|e| e.into_inner()) {
+        if let Some(model) = &*self
+            .observer_model
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+        {
             model.error(message);
         }
         let on_error = self.on_error.clone();

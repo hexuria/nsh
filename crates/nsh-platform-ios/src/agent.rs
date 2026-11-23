@@ -71,8 +71,7 @@ impl IosNative {
 
     pub(crate) fn with_views<R: Send>(
         &self,
-        read: impl FnOnce(&UIView, &UIWindow, &dyn Fn(NodeId) -> Option<Retained<UIView>>) -> R
-        + Send,
+        read: impl FnOnce(&UIView, &UIWindow, &dyn Fn(NodeId) -> Option<Retained<UIView>>) -> R + Send,
     ) -> Option<R> {
         self.on_main(move |view, window| {
             read(&view.container, window, &|id| {
