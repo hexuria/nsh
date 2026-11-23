@@ -80,6 +80,8 @@ thread_local! {
     #[cfg(feature = "dev")]
     static TEST_MODEL: RefCell<Option<std::sync::Arc<nsh_testing::agent::Model>>> =
         const { RefCell::new(None) };
+    #[cfg(feature = "dev")]
+    static OBSERVING: Cell<bool> = const { Cell::new(false) };
     /// The last answer of [`nsh_test_answer`] (JSON).
     #[cfg(feature = "dev")]
     static TEST_ANSWER: RefCell<String> = const { RefCell::new(String::new()) };
@@ -741,7 +743,11 @@ fn run(app: App, width: f32, height: f32, environment: Environment, limits: Limi
     #[cfg(feature = "dev")]
     TEST_MODEL.with(|m| {
         if let Some(model) = &*m.borrow() {
-            model.set_up_engine(&mut config);
+            if OBSERVING.with(Cell::get) {
+                model.reset();
+            } else {
+                model.set_up_engine(&mut config);
+            }
         }
     });
     let text = Rc::new(WebTextEngine::default());
@@ -914,10 +920,20 @@ pub extern "C" fn nsh_compiled_len() -> usize {
 #[cfg(feature = "dev")]
 #[unsafe(no_mangle)]
 pub extern "C" fn nsh_test_start() {
+    OBSERVING.with(|o| o.set(false));
     TEST_MODEL.with(|m| {
         m.borrow_mut()
             .get_or_insert_with(|| std::sync::Arc::new(nsh_testing::agent::Model::default()));
     });
+}
+
+/// Keeps the mounted model from the next app's first batch, resetting it
+/// for each replacement app without installing test storage, network or clock.
+#[cfg(feature = "dev")]
+#[unsafe(no_mangle)]
+pub extern "C" fn nsh_observe_start() {
+    nsh_test_start();
+    OBSERVING.with(|o| o.set(true));
 }
 
 /// Answers a test step (JSON `nsh_dev::protocol::TestStep`, `len` bytes at

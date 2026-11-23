@@ -61,6 +61,20 @@ function fakePlayer(options = {}) {
 
 const started = () => -1;
 
+test("observers start a model without enabling the test environment", () => {
+  const { player } = fakePlayer();
+  let observed = 0, tested = 0;
+  player.wasm.nsh_observe_start = () => observed++;
+  player.wasm.nsh_test_start = () => tested++;
+  player.observeStart();
+  assert.equal(observed, 1);
+  assert.equal(tested, 0);
+  assert.notEqual(player.testing, true);
+  player.testStart();
+  assert.equal(tested, 1);
+  assert.equal(player.testing, true);
+});
+
 test("page steps dispatch JSON to registered handlers and report failures", async (t) => {
   const { player } = fakePlayer();
   const previous = globalThis.nshPageSteps;

@@ -153,6 +153,7 @@ impl DevClient {
             ui_sets: Some(host.ui_sets),
             tests: host.tests,
             running: None,
+            extra: None,
         };
         // The build the app reached, across reconnects. Hosts check each
         // patch's base themselves, so a patch the app could not apply only

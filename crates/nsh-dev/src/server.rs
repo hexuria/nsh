@@ -11,7 +11,7 @@ use std::{
 use axum::{
     Router,
     extract::{
-        State,
+        ConnectInfo, State,
         ws::{Message, WebSocket, WebSocketUpgrade},
     },
     http::{HeaderMap, Method, StatusCode, Uri, header},
@@ -134,6 +134,7 @@ struct Shared {
     /// the page).
     web: Mutex<std::collections::HashMap<String, axum::body::Bytes>>,
     page_scripts: Mutex<Vec<String>>,
+    observer_hook: Mutex<Option<fn(SocketAddr, &serde_json::Value) -> bool>>,
     /// The commands that install the app's host, by platform.
     install: Mutex<std::collections::HashMap<HostPlatform, String>>,
     /// The limits hosts run apps with ([`DevServer::set_limits`]).
@@ -223,6 +224,7 @@ impl DevServer {
             files: Mutex::default(),
             web: Mutex::default(),
             page_scripts: Mutex::default(),
+            observer_hook: Mutex::default(),
             install: Mutex::default(),
             limits: Mutex::default(),
             latest: Mutex::new(None),
@@ -254,7 +256,12 @@ impl DevServer {
             .route(WS_PATH, get(upgrade))
             .with_state(shared.clone());
         runtime.spawn(async move {
-            if let Err(err) = axum::serve(listener, app).await {
+            if let Err(err) = axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            {
                 log::error!("dev server stopped: {err}");
             }
         });
@@ -308,6 +315,17 @@ impl DevServer {
             .lock()
             .expect("page scripts lock")
             .push(source);
+    }
+
+    /// Selects hosts that observe their app without test setup. The hook
+    /// receives the connection's peer address and its hello's extra value.
+    /// Hosts must take steps and supply extra metadata to be considered.
+    pub fn set_observer_hook(&self, hook: fn(SocketAddr, &serde_json::Value) -> bool) {
+        *self
+            .shared
+            .observer_hook
+            .lock()
+            .expect("observer hook lock") = Some(hook);
     }
 
     /// Sets the command that installs the app's host, for each platform
@@ -724,6 +742,7 @@ pub(crate) fn wants_page(method: &Method, uri: &Uri, headers: &HeaderMap) -> boo
 
 async fn upgrade(
     ws: WebSocketUpgrade,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     State(shared): State<Arc<Shared>>,
 ) -> Response {
@@ -738,7 +757,7 @@ async fn upgrade(
     // Bundles are ~100 KB of bytecode; allow generous frames.
     ws.max_message_size(64 << 20)
         .on_upgrade(move |socket| async move {
-            if let Err(err) = serve_client(socket, shared).await {
+            if let Err(err) = serve_client(socket, shared, peer).await {
                 log::debug!("dev client disconnected: {err}");
             }
         })
@@ -822,7 +841,11 @@ fn host_name(host: &str) -> Option<&str> {
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-async fn serve_client(mut socket: WebSocket, shared: Arc<Shared>) -> Result<(), BoxError> {
+async fn serve_client(
+    mut socket: WebSocket,
+    shared: Arc<Shared>,
+    peer: SocketAddr,
+) -> Result<(), BoxError> {
     let hello = tokio::time::timeout(Duration::from_secs(5), socket.recv())
         .await
         .map_err(|_| "no hello")?
@@ -838,6 +861,7 @@ async fn serve_client(mut socket: WebSocket, shared: Arc<Shared>) -> Result<(), 
         ui_sets,
         tests,
         running,
+        extra,
     } = serde_json::from_str(&text)?
     else {
         return Err("expected hello".into());
@@ -858,12 +882,19 @@ async fn serve_client(mut socket: WebSocket, shared: Arc<Shared>) -> Result<(), 
         );
         BundleFormat::Source
     };
+    let observer_hook = *shared.observer_hook.lock().expect("observer hook lock");
+    let observer = tests
+        && extra
+            .as_ref()
+            .is_some_and(|extra| observer_hook.is_some_and(|hook| hook(peer, extra)));
+    let test = shared.test.load(Ordering::Relaxed) && !observer;
     send(
         &mut socket,
         &ServerMessage::Hello {
             protocol: PROTOCOL_VERSION,
             session: shared.session,
-            test: shared.test.load(Ordering::Relaxed),
+            test,
+            observer,
         },
     )
     .await?;
@@ -889,8 +920,8 @@ async fn serve_client(mut socket: WebSocket, shared: Arc<Shared>) -> Result<(), 
     let _connection = Connection::new(&shared, &device, build);
     // A host taking a test session's steps: steps reach it through `steps`.
     let (step_tx, mut steps) = tokio::sync::mpsc::unbounded_channel();
-    let testing = tests && shared.test.load(Ordering::Relaxed);
-    let _tester = testing.then(|| Tester::new(&shared, step_tx.clone()));
+    let testing = tests && test;
+    let _tester = (testing || observer).then(|| Tester::new(&shared, step_tx.clone()));
     if testing {
         // Before the first bundle: what the app starts with.
         let storage = shared.test_storage.lock().expect("storage lock").clone();

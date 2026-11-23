@@ -1470,6 +1470,11 @@ class Player {
     this.wasm.nsh_test_start?.();
   }
 
+  /** Observes each app from its first batch without changing its environment. */
+  observeStart() {
+    this.wasm.nsh_observe_start?.();
+  }
+
   /**
    * What the test sets the app up with (`ServerMessage::TestSetup`): the
    * storage it starts with, whether it traces the app, and what it fixes of

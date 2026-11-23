@@ -201,7 +201,7 @@
         return;
       }
       // No bytecode version: this host runs JS source.
-      send({ type: "hello", protocol: PROTOCOL, bytecode_version: "", device: device(), platform: "web", ui_sets: UI_SETS, tests: player.takesTests });
+      send({ type: "hello", protocol: PROTOCOL, bytecode_version: "", device: device(), platform: "web", ui_sets: UI_SETS, tests: player.takesTests, extra: globalThis.nshHelloExtra });
     };
     socket.onmessage = (event) => {
       if (typeof event.data !== "string") {
@@ -234,7 +234,8 @@
         session = message.session ?? 0;
         // A test session (`nsh test --target web`): the model of the app
         // starts before its first bundle.
-        if (message.test) player.testStart();
+        if (message.observer) player.observeStart();
+        else if (message.test) player.testStart();
         showStatus("");
         // A test session's Rust app starts when the server says so,
         // after what the test sets it up with.

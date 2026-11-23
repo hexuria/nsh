@@ -9,6 +9,80 @@ use nsh_dev::{
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
+#[test]
+fn observer_hosts_take_steps_without_test_setup() {
+    use nsh_dev::protocol::{ServerMessage, TestStep};
+    use tungstenite::Message;
+    for (test, extra, takes_steps, hook, observer) in [
+        (false, None, true, true, false),
+        (false, Some("reject"), true, true, false),
+        (false, Some("observe"), false, true, false),
+        (false, Some("observe"), true, false, false),
+        (false, Some("observe"), true, true, true),
+        (true, Some("observe"), true, true, true),
+        (true, None, true, true, false),
+        (true, Some("reject"), true, true, false),
+    ] {
+        let server =
+            DevServer::start("127.0.0.1:0".parse().unwrap(), "bc-1", None, |_| {}).unwrap();
+        if hook {
+            server.set_observer_hook(|peer, value| {
+                assert_ne!(peer.port(), 0);
+                value == "observe"
+            });
+        }
+        if test {
+            server.test_session();
+        }
+        server.publish_root();
+        let (mut socket, _) =
+            tungstenite::connect(format!("ws://{}{WS_PATH}", server.local_addr())).unwrap();
+        if let tungstenite::stream::MaybeTlsStream::Plain(stream) = socket.get_mut() {
+            stream.set_read_timeout(Some(TIMEOUT)).unwrap();
+        }
+        let mut hello = serde_json::json!({"type":"hello", "protocol":nsh_dev::protocol::PROTOCOL_VERSION, "bytecode_version":"", "device":"page", "tests": takes_steps});
+        if let Some(extra) = extra {
+            hello["extra"] = extra.into();
+        }
+        socket
+            .send(Message::Text(hello.to_string().into()))
+            .unwrap();
+        let read = |socket: &mut tungstenite::WebSocket<_>| -> ServerMessage {
+            serde_json::from_str(socket.read().unwrap().to_text().unwrap()).unwrap()
+        };
+        assert!(
+            matches!(read(&mut socket), ServerMessage::Hello { observer: got, test: testing, .. } if got == observer && testing == (test && !observer))
+        );
+        let testing = test && !observer && takes_steps;
+        if testing {
+            assert!(matches!(read(&mut socket), ServerMessage::TestSetup { .. }));
+        }
+        assert!(matches!(read(&mut socket), ServerMessage::Root));
+        assert_eq!(server.has_tester(), testing || observer);
+        if testing || observer {
+            let step = TestStep::Page {
+                name: "example".into(),
+                args: serde_json::json!({"x":1}),
+            };
+            std::thread::scope(|scope| {
+                let waiting = scope.spawn(|| server.step(step.clone(), TIMEOUT));
+                let ServerMessage::Step { id, step: got } = read(&mut socket) else {
+                    panic!("expected step")
+                };
+                assert_eq!(got, step);
+                socket.send(Message::Text(serde_json::json!({"type":"step_done", "id":id, "outcome": {"outcome":"done", "value":["answer"]}}).to_string().into())).unwrap();
+                assert_eq!(waiting.join().unwrap(), Ok(serde_json::json!(["answer"])));
+            });
+        } else {
+            assert_eq!(
+                server.step(TestStep::Texts, TIMEOUT),
+                Err("no host that takes test steps is connected".into())
+            );
+        }
+        socket.close(None).unwrap();
+    }
+}
+
 /// A host named `device` with bytecode `bytecode` serving `nsh/base`.
 fn host(device: &str, bytecode: &str) -> HostInfo {
     HostInfo {

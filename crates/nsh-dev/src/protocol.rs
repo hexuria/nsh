@@ -72,6 +72,9 @@ pub enum ClientMessage {
         /// not say.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         running: Option<RunningBuild>,
+        /// Optional page-provided metadata for the server's observer hook.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        extra: Option<serde_json::Value>,
     },
     /// The outcome of the [`ServerMessage::Step`] with this id.
     StepDone {
@@ -261,6 +264,9 @@ pub enum ServerMessage {
         /// need from the first bundle on ([`ServerMessage::Step`]).
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         test: bool,
+        /// The host observes its app and takes steps without test setup.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        observer: bool,
     },
     /// What a test session's app starts with (after [`ServerMessage::Hello`],
     /// before the first bundle): the storage it finds, in place of its
@@ -1094,6 +1100,43 @@ impl From<log::Level> for LogLevel {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn hello_metadata_and_observer_round_trip() {
+        let old = r#"{"type":"hello","protocol":2,"bytecode_version":"","device":"page"}"#;
+        let hello: super::ClientMessage = serde_json::from_str(old).unwrap();
+        assert!(matches!(
+            hello,
+            super::ClientMessage::Hello { extra: None, .. }
+        ));
+        assert!(serde_json::to_value(&hello).unwrap().get("extra").is_none());
+        let mut json = serde_json::to_value(hello).unwrap();
+        json["extra"] = serde_json::json!({"example": [1, "two"]});
+        let hello: super::ClientMessage = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(serde_json::to_value(hello).unwrap(), json);
+        for observer in [false, true] {
+            let hello = super::ServerMessage::Hello {
+                protocol: 2,
+                session: 3,
+                test: false,
+                observer,
+            };
+            let json = serde_json::to_value(&hello).unwrap();
+            assert_eq!(json.get("observer").is_some(), observer);
+            assert_eq!(
+                serde_json::from_value::<super::ServerMessage>(json).unwrap(),
+                hello
+            );
+        }
+        let hello: super::ServerMessage =
+            serde_json::from_str(r#"{"type":"hello","protocol":2}"#).unwrap();
+        assert!(matches!(
+            hello,
+            super::ServerMessage::Hello {
+                observer: false,
+                ..
+            }
+        ));
+    }
     #[test]
     fn page_steps_round_trip() {
         for args in [
