@@ -35,6 +35,16 @@ use crate::{
     text::{AndroidTextEngine, Density},
 };
 
+#[cfg(feature = "dev")]
+struct SurfaceAttachmentSlot(Option<nsh_testing::agent::SurfaceAttachment>);
+
+// SAFETY: `connectDevServer` and `destroy` run on Android's UI thread (an
+// activity lifecycle call and the view call it makes), so the attachment's
+// guard is installed and dropped only there. Other threads lock the slot
+// only to clone its `model` Arc; they never inspect, move or drop the guard.
+#[cfg(feature = "dev")]
+unsafe impl Send for SurfaceAttachmentSlot {}
+
 pub(crate) struct Host {
     /// The `NshView`.
     pub(crate) view: GlobalRef,
@@ -108,7 +118,7 @@ pub(crate) struct Host {
     pub(crate) test_model: Mutex<Option<Arc<nsh_testing::agent::Model>>>,
     /// What attached to this surface when it opened, and the model it keeps.
     #[cfg(feature = "dev")]
-    surface: Mutex<Option<nsh_testing::agent::SurfaceAttachment>>,
+    surface: Mutex<SurfaceAttachmentSlot>,
 }
 
 impl Host {
@@ -118,6 +128,7 @@ impl Host {
         self.surface
             .lock()
             .unwrap_or_else(|e| e.into_inner())
+            .0
             .as_ref()
             .and_then(|attachment| attachment.model.clone())
     }
@@ -754,7 +765,7 @@ extern "system" fn Java_com_longbridge_nsh_Native_create(
         #[cfg(feature = "dev")]
         test_model: Mutex::new(None),
         #[cfg(feature = "dev")]
-        surface: Mutex::new(None),
+        surface: Mutex::new(SurfaceAttachmentSlot(None)),
     });
     Box::into_raw(Box::new(host)) as jlong
 }
@@ -1181,7 +1192,7 @@ extern "system" fn Java_com_longbridge_nsh_Native_destroy(
     // SAFETY: the handle came from `create` and Java drops it exactly once.
     let host = unsafe { Box::from_raw(handle as *mut Arc<Host>) };
     #[cfg(feature = "dev")]
-    drop(host.surface.lock().expect("surface").take());
+    drop(host.surface.lock().expect("surface").0.take());
     #[cfg(feature = "dev")]
     drop(host.dev.lock().expect("dev").take());
     *host.answers.lock().expect("answers") = None;
@@ -1295,7 +1306,7 @@ extern "system" fn Java_com_longbridge_nsh_Native_connectDevServer(
             return 0;
         };
         let surface = crate::surface::AndroidSurface::new(host, vm.get_java_vm_pointer());
-        *host.surface.lock().expect("surface") =
+        host.surface.lock().expect("surface").0 =
             nsh_testing::agent::surface_opened(&nsh_testing::agent::OpenedSurface::new(&surface));
         let session = crate::dev::DevSession::start(host.clone(), String::from(url));
         *host.dev.lock().expect("dev") = session;
