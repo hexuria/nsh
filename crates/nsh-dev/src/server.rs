@@ -133,6 +133,7 @@ struct Shared {
     /// The web host's files ([`DevServer::serve_web`]), by path (`""`:
     /// the page).
     web: Mutex<std::collections::HashMap<String, axum::body::Bytes>>,
+    page_scripts: Mutex<Vec<String>>,
     /// The commands that install the app's host, by platform.
     install: Mutex<std::collections::HashMap<HostPlatform, String>>,
     /// The limits hosts run apps with ([`DevServer::set_limits`]).
@@ -221,6 +222,7 @@ impl DevServer {
             assets_root: Mutex::new(assets_root.and_then(|p| dunce::canonicalize(p).ok())),
             files: Mutex::default(),
             web: Mutex::default(),
+            page_scripts: Mutex::default(),
             install: Mutex::default(),
             limits: Mutex::default(),
             latest: Mutex::new(None),
@@ -295,6 +297,17 @@ impl DevServer {
     /// app at `http://<address>/`.
     pub fn serves_web(&self) -> bool {
         !self.shared.web.lock().expect("web lock").is_empty()
+    }
+
+    /// Registers a script loaded before the development page boots, in
+    /// registration order. Pages include `<!-- nsh-page-scripts -->` where
+    /// the scripts are to load. Existing pages must reload to load new scripts.
+    pub fn add_page_script(&self, source: String) {
+        self.shared
+            .page_scripts
+            .lock()
+            .expect("page scripts lock")
+            .push(source);
     }
 
     /// Sets the command that installs the app's host, for each platform
@@ -624,6 +637,29 @@ async fn web_file(
     uri: Uri,
 ) -> Response {
     let path = uri.path().trim_start_matches('/');
+    if let Some(index) = path
+        .strip_prefix("nsh-page-scripts/")
+        .and_then(|p| p.strip_suffix(".js"))
+    {
+        return match index.parse::<usize>().ok().and_then(|i| {
+            shared
+                .page_scripts
+                .lock()
+                .expect("page scripts lock")
+                .get(i)
+                .cloned()
+        }) {
+            Some(source) => (
+                [
+                    (header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
+                    (header::CACHE_CONTROL, "no-cache"),
+                ],
+                source,
+            )
+                .into_response(),
+            None => StatusCode::NOT_FOUND.into_response(),
+        };
+    }
     let path = if path == "index.html" { "" } else { path };
     let bytes = {
         let web = shared.web.lock().expect("web lock");
@@ -634,7 +670,18 @@ async fn web_file(
         }
     };
     match bytes {
-        Some((path, bytes)) => {
+        Some((path, mut bytes)) => {
+            if path.is_empty() {
+                let scripts = shared.page_scripts.lock().expect("page scripts lock");
+                if !scripts.is_empty() {
+                    let tags: String = (0..scripts.len())
+                        .map(|i| format!("<script src=\"/nsh-page-scripts/{i}.js\"></script>\n"))
+                        .collect();
+                    bytes = String::from_utf8_lossy(&bytes)
+                        .replace("<!-- nsh-page-scripts -->", &tags)
+                        .into();
+                }
+            }
             let content_type = match path {
                 "" => "text/html; charset=utf-8",
                 path => nsh_core::platform::content_type(path),

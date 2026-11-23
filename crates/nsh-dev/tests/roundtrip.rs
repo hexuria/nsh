@@ -691,6 +691,34 @@ fn get(addr: std::net::SocketAddr, path: &str, accept: &str) -> (String, String)
 const BROWSER: &str = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
 
 #[test]
+fn development_pages_load_registered_scripts_in_order() {
+    let server = DevServer::start("127.0.0.1:0".parse().unwrap(), "bc-1", None, |_| {}).unwrap();
+    let page = "<!-- nsh-page-scripts --><script type=\"module\">boot()</script>";
+    server.serve_web(page.into(), []);
+    let addr = server.local_addr();
+    assert_eq!(get(addr, "/", BROWSER).1, page);
+    server.add_page_script("globalThis.first = true;".into());
+    server.add_page_script("globalThis.second = first;".into());
+    let expected = "<script src=\"/nsh-page-scripts/0.js\"></script>\n<script src=\"/nsh-page-scripts/1.js\"></script>\n<script type=\"module\">boot()</script>";
+    for path in ["/", "/index.html", "/sports/football"] {
+        assert_eq!(get(addr, path, BROWSER).1, expected);
+    }
+    assert_eq!(
+        get(addr, "/nsh-page-scripts/0.js", "*/*").1,
+        "globalThis.first = true;"
+    );
+    assert_eq!(
+        get(addr, "/nsh-page-scripts/1.js", "*/*").1,
+        "globalThis.second = first;"
+    );
+    for path in ["/nsh-page-scripts/2.js", "/nsh-page-scripts/no.js"] {
+        assert!(get(addr, path, "*/*").0.contains("404"));
+    }
+    server.serve_web(page.into(), []);
+    assert_eq!(get(addr, "/", BROWSER).1, expected);
+}
+
+#[test]
 fn the_web_host_serves_its_page_at_the_apps_paths() {
     let server = DevServer::start("127.0.0.1:0".parse().unwrap(), "bc-1", None, |_| {}).unwrap();
     server.serve_web("<p>page</p>".into(), [("nsh.js".into(), b"js".to_vec())]);
