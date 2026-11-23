@@ -1,0 +1,20 @@
+61	MERGED	2026-10-18	2026-10-18	desktop: Add Window.setFrame and Window.setLevel
+112	CLOSED	2026-10-19	2026-10-21	core: Support context menu requests on every platform
+113	MERGED	2026-10-19	2026-10-21	core: Report mouse movement on desktops and web
+114	MERGED	2026-10-19	2026-10-19	desktop: Window.orderFront and setFrame's anchorTop
+115	MERGED	2026-10-19	2026-10-19	cli: Configure development host windows from nsh run
+116	MERGED	2026-10-19	2026-10-19	macOS: Web views are transparent by default
+117	MERGED	2026-10-19	2026-10-19	macos: Keep traffic lights stable during window resizing
+211	MERGED	2026-10-20	2026-10-21	macos: Serve import() chunks from a directory
+327	MERGED	2026-10-22	2026-10-22	macos: Scroll by layer transform, commit bounds at rest
+328	MERGED	2026-10-22	2026-10-23	core: Bind a list's visible rows first and pace its overscan
+329	MERGED	2026-10-22	2026-10-23	macos: Report the requested title-bar height for our own toolbar
+449	CLOSED	2026-10-24	2026-10-27	macos: gpui-agent control plane + synthesized input invokes
+1496	MERGED	2026-11-10	2026-11-10	macos: Let a web view show the local file page its app loads
+1499	MERGED	2026-11-10	2026-11-13	core: Gate the application and os.homedir() behind capabilities
+1500	CLOSED	2026-11-10	2026-11-13	macos: Spread a batch that makes hundreds of views out of sight over frames
+1511	MERGED	2026-11-10	2026-11-10	macos: Stop a trackpad flick's momentum when the mouse is pressed
+1512	MERGED	2026-11-10	2026-11-10	macos: Set the cursor only when it changes as the mouse moves
+1513	MERGED	2026-11-10	2026-11-10	macos: Detach a deleted subtree once, from its root
+1515	MERGED	2026-11-10	2026-11-10	macos: Pass scrolls an embedded app cannot use on to its host
+2283	MERGED	2026-11-17	2026-11-17	windows: Apply an input's text alpha to what RichEdit draws

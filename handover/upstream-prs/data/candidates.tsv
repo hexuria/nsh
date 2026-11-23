@@ -1,0 +1,87 @@
+theme	class	sha	date	added	files	most_changed	in_upstream_main_pct	still_on_buwiz_pct	subject
+N06	new-api	bd7e99a96	2026-10-25	188	4	crates/nsh-engine	3	97	engine: Log the frames that miss their budget and what they did
+N06	new-api	f1dc9b196	2026-10-25	111	2	crates/nsh-platform-macos	2	93	macos: Toggle, clear and drag the performance monitor
+N06	new-api	da670ec52	2026-10-27	1	1	crates/nsh-engine	0	100	engine: Sort a jank line's mount kinds with sort_by_key
+N02	new-api	93377c571	2026-10-25	45	5	crates/nsh-core	18	76	core: Tell where a list's row starts with ElementRef::item_offset
+N02	new-api	0da4044aa	2026-10-27	4	4	crates/nsh-core	0	100	core: Type ElementRef::item_offset in Points
+B09	refine	88b940945	2026-10-25	43	6	crates/nsh-platform-macos	0	100	macos: Draw views at the scale they are shown at
+B06	fix	3bd56a954	2026-10-26	9	2	crates/nsh-platform-macos	0	100	macos: Report Up and Down from a text input
+N04	new-api	f7afafd8c	2026-10-26	27	4	crates/nsh-core	11	78	Keymaps: bind a menu's reserved keystroke; read a key event as the monitor does
+N03	new-api	a6a26ec54	2026-10-26	6	1	crates/nsh-core	0	100	core: accept onChangeText, onSubmitEditing, onPressIn and onPressOut as handler names
+N03	new-api	2e47e8c83	2026-10-28	79	2	crates/nsh-engine	24	100	core: Hand onChangeText's handler the text, as React Native does
+B12	refine	aae18fbe2	2026-10-27	58	3	crates/nsh-platform-macos	6	100	macos: Pause an embedded app's frames and timers while it is unseen
+B14	every-platform	0f9457cc9	2026-10-28	9	1	crates/nsh-platform-macos	0	100	macos: Let an embedding app hear its apps' errors
+B14	every-platform	d0d8748ce	2026-10-28	4	1	crates/nsh-platform-macos			macos: Keep the surface's error handler outside development builds
+S02	agent-support	e6c1594d0	2026-10-27	28	1	crates/nsh-dev	0	100	dev: Wire semantic tree scene queries
+S02	agent-support	6e4000bb3	2026-10-27	56	1	crates/nsh-testing	3	100	testing: Catalog application menu shortcuts
+S02	agent-support	3ae8bbc57	2026-10-27	1	1	crates/nsh-dev			dev: Describe installed menu shortcuts
+S02	agent-support	809d598fc	2026-10-27	0	1	crates/nsh-platform-linux			linux: Keep JS frames out of the ordinary test model's activity
+S02	agent-support	9d1c64c15	2026-10-27	0	1	crates/nsh-platform-android			android: Keep ordinary test hovers failing without a mouse
+S02	agent-support	5805be459	2026-10-31	7	1	crates/nsh-testing	0	100	testing: Keep core's accessibility state and name its new roles
+S02	agent-support	72380e4b8	2026-11-10	5	1	crates/nsh-testing			testing: Name the fields upstream's menu items and text links gained
+B03	fix	86d7bd945	2026-10-27	6	1	crates/nsh-platform-windows	0	60	windows: Count the menu bar when resizing to a client size
+B03	fix	cc9398e08	2026-10-27	29	1	crates/nsh-platform-windows	10	100	windows: Correct a resize by the client area the window gets
+B03	fix	30eb63d84	2026-10-27	7	4	crates/nsh-platform-windows	0	100	windows: Group the menu test imports; call the minimum window size approximate
+B05	fix	1b09f2403	2026-10-27	13	2	crates/nsh-platform-windows	0	100	windows: Take the keyboard back from web views when a step presses outside them
+S01	agent-support	5127e87c4	2026-10-28	50	1	crates/nsh-cli	0	95	web: Press shifted keys and characters as upstream does
+N05	new-api	386091c6d	2026-10-30	85	1	crates/nsh-platform-macos	14	100	macos: Let run_app open its window without taking focus
+B10	refine	b20ad1c63	2026-10-31	128	2	crates/nsh-platform-macos	29	93	macos: Keep the lines canvases set their texts in
+B11	refine	ad469b46d	2026-10-31	195	5	crates/nsh-platform-macos	4	100	macos: Draw content about to scroll into view ahead of time
+N06	new-api	8e82b93ff	2026-10-31	117	4	crates/nsh-engine	10	98	macos: Name the drawing of view contents on the jank line
+N06	new-api	df22f7a79	2026-10-31	79	3	crates/nsh-engine	7	100	macos: Name the Core Animation commit's time on the jank line
+B13	refine	407a4aedb	2026-10-31	137	5	crates/nsh-platform-macos	2	69	macos: Let a hosted app view take the keys it binds ahead of its host, or after it
+B13	refine	52721e04a	2026-10-31	156	3	crates/nsh-platform-macos	0	100	macos: Give a first hosted app every key while its text input is focused, but its host keys
+S03	agent-support	6f20ea967	2026-11-05	48	1	crates/nsh-platform-macos	0	100	macos: Don't count an event another process posted as the person's
+X01	drop	804ed65c6	2026-11-10	763	6	crates/nsh-platform-macos	2	100	macos: Spread a batch that makes hundreds of views out of sight over frames
+B11	refine	bada9694e	2026-11-18	7	1	crates/nsh-platform-macos	33	100	macos: Keep a batch's text pictures when waiting views go in ahead of it
+N06	new-api	e4835556d	2026-11-18	12	1	crates/nsh-platform-macos	0	100	macos: Keep the performance monitor where a drag past an edge left it
+B04	every-platform	a09f40be6	2026-11-18	195	2	crates/nsh-platform-windows	0	100	windows: Let a web view open the file page its app loaded there
+B15	every-platform	ad9c1f10e	2026-11-18	667	7	crates/nsh-platform-linux	9	91	linux: Export the application menu to KDE Plasma's Global Menu
+N01	new-api	95b5600c6	2026-11-18	305	22	crates/nsh-platform-linux	4	86	desktop: Say whether the menu is in a global menu bar and whether a tray shows
+B15	every-platform	9b41761b2	2026-11-18	21	3	crates/nsh-platform-linux	0	89	linux: Carry out every item an EventGroup clicked in the Global Menu
+B15	every-platform	812c8fb71	2026-11-18	102	7	crates/nsh-platform-linux	0	74	linux: Keep the Global Menu export with the surface that has a menu; watch bus names in one place
+B07	fix	abe8d514c	2026-11-19	1	1	crates/nsh-platform-ios	0	100	ios: Read the dev session from the held view state on reload
+B14	every-platform	d9c34068d	2026-11-20	19	2	crates/nsh-platform-linux	17	100	linux: Expose AppView::set_error_handler
+H01	housekeeping	dad16b3e2	2026-11-19	14	3	docs/dev	0	55	macos: Document the source-built debug host requirement
+N04	new-api	815d991d3	2026-11-20	4	1	crates/nsh-core	33	100	core: Collapse a nested if in on_key reservation
+H01	housekeeping	21b2c1281	2026-11-20	10	2	crates/nsh-platform-macos	0	100	macos: Clear the remaining clippy warnings in the platform crate
+B14	every-platform	bc0146178	2026-11-20	19	2	crates/nsh-platform-windows	33	100	windows: Expose AppView::set_error_handler
+S01	agent-support	27b5327f5	2026-11-20	44	1	crates/nsh-platform-web	0	100	web: Focus the target of synthetic clicks
+S01	agent-support	eb9586500	2026-11-20	73	1	crates/nsh-platform-web	2	46	web: Emulate editing keys in synthetic input
+S01	agent-support	19afe9626	2026-11-20	6	3	docs/dev	0	100	web: Stop advertising synthetic paste in tab mode
+S01	agent-support	574e89af0	2026-11-20	32	1	crates/nsh-platform-web	0	95	web: Dispatch synthetic pointer boundary events
+S01	agent-support	76da5edca	2026-11-20	3	1	crates/nsh-platform-web	0	100	web: Mark synthetic pointer moves as button-free
+S01	agent-support	f7f01dfbb	2026-11-20	29	1	crates/nsh-platform-web	0	26	web: Skip unsupported synthetic caret selections
+S01	agent-support	def385970	2026-11-20	146	1	crates/nsh-platform-web	0	92	web: Emulate word and macOS line shortcuts
+S01	agent-support	b6f3c3b04	2026-11-20	34	1	crates/nsh-platform-web	10	100	web: Move synthetic carets by grapheme
+S01	agent-support	4ae9673ac	2026-11-20	2	1	crates/nsh-platform-web	0	100	web: Handle Home at a leading newline
+S01	agent-support	f13759c27	2026-11-20	3	1	crates/nsh-platform-web	0	100	web: Rename the synthetic key event so nsh.js parses
+S01	agent-support	ac7e16d12	2026-11-20	29	2	crates/nsh-platform-web	13	100	web: Refuse keys for a view that cannot take focus
+S01	agent-support	e4fc782b3	2026-11-20	59	2	crates/nsh-platform-web	8	100	web: Refuse typing into read-only inputs
+S01	agent-support	b12344b10	2026-11-20	93	2	crates/nsh-platform-web	5	83	web: Refuse keys a hand-opened tab cannot apply
+S01	agent-support	47feb966f	2026-11-20	46	2	crates/nsh-platform-web	0	92	web: Let the page handle keys before refusing them
+S01	agent-support	7a86ce0f9	2026-11-20	134	2	crates/nsh-platform-web	8	100	web: Refuse unhandled editing shortcuts in a hand-opened tab
+B15	every-platform	d5ec46d06	2026-11-21	199	2	crates/nsh-platform-linux	0	91	linux: Keep the Global Menu on the last-set menu, not the last surface
+B15	every-platform	ca1c2e31f	2026-11-21	78	1	crates/nsh-platform-linux	0	100	linux: Resolve every EventGroup click against the menu the click saw
+B15	every-platform	8bd3cade7	2026-11-21	151	1	crates/nsh-platform-linux	0	90	linux: Untie the previous window when the Global Menu export moves
+N01	new-api	5ff6b7607	2026-11-21	8	2	crates/nsh-core	0	0	desktop: Say Tray.available() is false where an app embeds NSH
+N01	new-api	9134d90e8	2026-11-21	5	2	crates/nsh-core	0	100	desktop: Say Tray.available() reads false at launch on Linux
+N04	new-api	f0d2d183e	2026-11-21	4	1	crates/nsh-core	33	100	core: Collapse the reserved-keystroke check for clippy
+B01	fix	4a1a00a3a	2026-11-21	40	2	crates/nsh-core	56	100	core: Count folded runs toward the node quota
+B01	fix	90176289a	2026-11-21	48	2	crates/nsh-core	39	100	core: Keep folded text when materialization hits the node quota
+B02	fix	da41e0df2	2026-11-21	90	1	crates/nsh-core	56	100	animation: Keep leaf completions while programs are advancing
+N01	new-api	5937660b8	2026-11-21	10	3	crates/nsh-platform-web	0	100	web: Give the browser's Menu and Tray stubs the availability methods
+N01	new-api	dcb5753d8	2026-11-21	189	2	crates/nsh-platform-linux	17	100	linux: Host tray availability on the watcher's registered host
+N01	new-api	c4d7f1ef3	2026-11-21	15	1	crates/nsh-platform-windows	0	100	windows: Report no tray in embedded views
+B15	every-platform	e0f7673ed	2026-11-21	45	1	crates/nsh-platform-linux	0	100	linux: End the global-menu export when the last menu is cleared
+B08	fix	38bcc1126	2026-11-21	89	1	crates/nsh-js	3	100	js: Retire replaced app-menu callbacks one menu long
+B15	every-platform	1261defae	2026-11-21	133	1	crates/nsh-platform-linux	0	76	linux: Untie the X11 window when the registrar refuses
+N01	new-api	3fd60ea7c	2026-11-21	1	1	tests/compat	0	100	test: Claim the Tray coverage the mod-desktop case exercises
+B15	every-platform	8700bbbe6	2026-11-21	6	1	crates/nsh-platform-linux	0	100	linux: Gate global-menu tests' exported asserts on the feature
+B08	fix	5afbb7d19	2026-11-21	4	1	crates/nsh-js			js: Comment the safety of the menu-click test's QuickJS calls
+B15	every-platform	304d031f8	2026-11-21	88	1	crates/nsh-platform-linux	0	66	linux: Match a refused X11 registration to the tie it answered
+B15	every-platform	1477b8e6b	2026-11-21	13	1	crates/nsh-platform-linux	0	0	linux: keep the registrar's name unclaimed on non-X11 tests
+B15	every-platform	1acb7e75a	2026-11-21	23	1	crates/nsh-platform-linux	0	88	linux: await the refused registration's reply in the late-refusal test
+B15	every-platform	faac5563f	2026-11-21	32	1	crates/nsh-platform-linux	0	100	linux: skip the registrar tests by display backend, not a missing window
+B15	every-platform	df336ec87	2026-11-21	37	1	crates/nsh-platform-linux	0	94	linux: release the registrar's name on every test exit
+B15	every-platform	e5127c6ed	2026-11-21	52	1	crates/nsh-platform-linux	0	100	linux: hold the registrar's name under the guard while it registers

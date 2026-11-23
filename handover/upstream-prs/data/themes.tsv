@@ -1,0 +1,27 @@
+theme	class	commits	added_lines	avg_in_upstream_pct	title
+B01	fix	2	88	48	core: folded text and the node quota
+B02	fix	1	90	56	animation: leaf completions while programs advance
+B03	fix	3	42	3	windows: resize by the client area, counting the menu bar
+B04	every-platform	1	195	0	windows: a web view opens the file page its app loaded (macOS has it upstream, PR #1496)
+B05	fix	1	13	0	windows: take the keyboard back from web views when a press lands outside them
+B06	fix	1	9	0	macos: report Up and Down from a text input
+B07	fix	1	1	0	ios: read the dev session from the held view state on reload
+B08	fix	2	93	3	js: retire replaced app-menu callbacks
+B09	refine	1	43	0	macos: draw views at the scale they are shown at
+B10	refine	1	128	29	macos: keep the lines canvases set their texts in
+B11	refine	2	202	18	macos: draw content about to scroll into view ahead of time
+B12	refine	1	58	6	macos: pause an embedded app while it is unseen
+B13	refine	2	293	1	macos: key order between a hosted app view and its host
+B14	every-platform	4	51	17	embedding: AppView::set_error_handler on macOS, Linux and Windows
+B15	every-platform	15	1647	1	linux: export the application menu to KDE Plasma's Global Menu
+N01	new-api	7	533	3	desktop: say whether the menu is in a global menu bar and whether a tray shows (Tray.available and friends)
+N02	new-api	2	49	9	core: ElementRef::item_offset
+N03	new-api	2	85	12	core: React Native handler names (onChangeText and others)
+N04	new-api	3	35	26	keymaps: bind a menu's reserved keystroke
+N05	new-api	1	85	14	macos: run_app opens its window without taking focus
+N06	new-api	6	508	4	engine and macos: the jank line and the performance monitor controls
+X01	drop	1	763	2	macos: spread a batch over frames. Upstream closed our PR #1500 and solved it in the core for every platform (#1600)
+S01	agent-support	16	783	3	web: synthetic input for a driven tab (goes with the agent extraction, not upstream as it is)
+S02	agent-support	7	97	1	testing and dev: semantic tree queries, menu shortcut catalog, test model details
+S03	agent-support	1	48	0	macos: do not count an event another process posted as the person's
+H01	housekeeping	2	24	0	clippy and docs for our own debug host
