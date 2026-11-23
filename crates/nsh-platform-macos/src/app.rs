@@ -422,6 +422,12 @@ impl AppView {
         view
     }
 
+    /// The development surface this view runs.
+    #[cfg(feature = "dev")]
+    pub fn surface_handle(&self) -> crate::surface::SurfaceHandle {
+        crate::surface::SurfaceHandle::new(self.surface.key())
+    }
+
     /// The view to put in a window.
     pub fn view(&self) -> Retained<NSView> {
         self.container.clone()
