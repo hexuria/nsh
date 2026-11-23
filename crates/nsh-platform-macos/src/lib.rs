@@ -39,7 +39,7 @@ mod fps;
 mod global_shortcut;
 mod gpu;
 mod image;
-mod input;
+pub mod input;
 mod keyboard;
 pub mod keymap;
 mod login_item;
