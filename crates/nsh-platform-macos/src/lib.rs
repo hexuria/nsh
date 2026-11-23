@@ -58,7 +58,7 @@ mod sight;
 use nsh_platform_apple::{audio, notifications, speech};
 pub mod surface;
 #[cfg(feature = "dev")]
-mod synth;
+pub mod synth;
 mod system;
 mod text;
 pub mod text_input;
