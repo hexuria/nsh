@@ -650,7 +650,7 @@ fn panel_placement(sight: Option<Sight>, active: bool, background: bool) -> Pane
 
 /// The root view window `id` shows (the surface's root for the main
 /// window).
-pub(crate) fn root_view(surface: &Surface, id: NodeId) -> Option<NshView> {
+pub fn root_view(surface: &Surface, id: NodeId) -> Option<NshView> {
     if id == ROOT_ID {
         return Some(surface.root.clone());
     }
@@ -662,7 +662,7 @@ pub(crate) fn root_view(surface: &Surface, id: NodeId) -> Option<NshView> {
 /// app in the background has none) the frontmost of its windows on the
 /// screen, else the main window.
 #[cfg(feature = "dev")]
-pub(crate) fn key_window(surface: &Surface) -> Option<Retained<NSWindow>> {
+pub fn key_window(surface: &Surface) -> Option<Retained<NSWindow>> {
     let main = surface.root.ns().window();
     let own: Vec<Retained<NSWindow>> = surface
         .windows
@@ -712,7 +712,7 @@ pub(crate) fn is_window(surface: &Surface, id: NodeId) -> bool {
 }
 
 /// The window showing root `id` (the main window's for the root).
-pub(crate) fn window_of(surface: &Surface, id: NodeId) -> Option<Retained<NSWindow>> {
+pub fn window_of(surface: &Surface, id: NodeId) -> Option<Retained<NSWindow>> {
     if id == ROOT_ID {
         return surface.root.ns().window();
     }
@@ -2234,7 +2234,7 @@ fn bring_modal(surface: &Surface, id: NodeId) {
 // --- The app's look -----------------------------------------------------------------------
 
 /// The root views of the surface's windows of the app's own.
-pub(crate) fn roots(surface: &Surface) -> Vec<NshView> {
+pub fn roots(surface: &Surface) -> Vec<NshView> {
     surface
         .windows
         .try_borrow()
