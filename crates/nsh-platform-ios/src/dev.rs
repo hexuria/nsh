@@ -82,6 +82,9 @@ pub fn init_logging() {
 /// Names the sessions' views to their test agents.
 static NEXT_KEY: AtomicU64 = AtomicU64::new(1);
 
+type ConnectedCallback = Arc<dyn Fn(&DevClient, &dyn Fn(&str, &str)) + Send + Sync>;
+type ConnectedCallbacks = Arc<Mutex<Vec<ConnectedCallback>>>;
+
 /// A development session's native surface, usable from a worker thread.
 ///
 /// Supplied to [`nsh_testing::agent::surface_opened`]. Native access returns
@@ -89,6 +92,7 @@ static NEXT_KEY: AtomicU64 = AtomicU64::new(1);
 #[derive(Clone)]
 pub struct DevelopmentSurface {
     key: u64,
+    connected: ConnectedCallbacks,
 }
 
 impl DevelopmentSurface {
@@ -113,6 +117,20 @@ impl DevelopmentSurface {
     ) -> Option<R> {
         crate::agent::IosNative::new(self.key).with_views(read)
     }
+
+    /// Calls `callback` on the main queue whenever the development client connects.
+    ///
+    /// The callback receives the client and the host's error-overlay function
+    /// (`title`, `message`). Register before returning from the surface hook.
+    pub fn on_connected(
+        &self,
+        callback: impl Fn(&DevClient, &dyn Fn(&str, &str)) + Send + Sync + 'static,
+    ) {
+        self.connected
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(Arc::new(callback));
+    }
 }
 
 /// A connection to a dev server, loading its bundles into one view.
@@ -136,7 +154,10 @@ impl DevSession {
         let key = NEXT_KEY.fetch_add(1, Ordering::Relaxed);
         crate::agent::register(key, view.clone());
         let attachment = nsh_testing::agent::surface_opened(
-            &nsh_testing::agent::OpenedSurface::new(&DevelopmentSurface { key }),
+            &nsh_testing::agent::OpenedSurface::new(&DevelopmentSurface {
+                key,
+                connected: ui.borrow().connected.clone(),
+            }),
         );
         if let Some(model) = attachment.as_ref().and_then(|a| a.model.clone()) {
             view.upgrade()?.set_observer_model(model);
@@ -228,6 +249,7 @@ impl DevSession {
 
 #[derive(Default)]
 struct DevUi {
+    connected: ConnectedCallbacks,
     /// Build the app runs (loaded, or reached by hot updates): the server
     /// run it came from and its number.
     running: Option<(u64, u64)>,
@@ -288,7 +310,23 @@ fn device_name(mtm: MainThreadMarker) -> String {
 fn handle(view: &Rc<Inner>, ui: &Rc<RefCell<DevUi>>, event: DevEvent) {
     let container = &view.container;
     match event {
-        DevEvent::Connected => hide_status(ui),
+        DevEvent::Connected => {
+            hide_status(ui);
+            let client = view.dev().as_ref().map(|session| session._client.clone());
+            let callbacks = ui
+                .borrow()
+                .connected
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
+            if let Some(client) = client {
+                for callback in callbacks {
+                    callback(&client, &|title, message| {
+                        show_error(ui, container, title, message, false);
+                    });
+                }
+            }
+        }
         DevEvent::Disconnected => {
             show_status(ui, container, "Dev server disconnected — reconnecting…")
         }
