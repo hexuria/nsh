@@ -953,6 +953,15 @@ impl RootView {
         {
             model.engine_started(engine.control());
         }
+        #[cfg(feature = "dev")]
+        if let Some(model) = &*self
+            .ivars()
+            .observer_model
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+        {
+            model.engine_started(engine.control());
+        }
         // Batches are queued on the main queue, so none can run before the
         // mounter is installed here.
         let root = Retained::into_super(self.retain());
