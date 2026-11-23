@@ -213,6 +213,26 @@ pub(crate) type ErrorHandler = Box<dyn Fn(&str)>;
 type PerfToggle = Box<dyn Fn(bool)>;
 type PerfMode = Box<dyn Fn(nsh_core::FpsMode)>;
 
+/// A surface opened by a development host, as its key.
+///
+/// The handle is `Copy` and may cross threads; resolving it is possible
+/// only on the host's main thread.
+#[cfg(feature = "dev")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SurfaceHandle(u64);
+
+#[cfg(feature = "dev")]
+impl SurfaceHandle {
+    pub(crate) fn new(key: u64) -> Self {
+        SurfaceHandle(key)
+    }
+
+    /// The surface's key.
+    pub fn key(self) -> u64 {
+        self.0
+    }
+}
+
 /// One engine and its views.
 pub(crate) struct Surface {
     key: u64,
@@ -285,6 +305,10 @@ pub(crate) struct Surface {
     /// The model of a test session's app (`nsh test --target`).
     #[cfg(feature = "dev")]
     test_model: RefCell<Option<std::sync::Arc<nsh_testing::agent::Model>>>,
+    /// What a development tool attached when the surface opened; dropping
+    /// the surface drops it.
+    #[cfg(feature = "dev")]
+    attachment: RefCell<Option<nsh_testing::agent::SurfaceAttachment>>,
     /// The display link, once something wanted frames, and the root it
     /// was made from (it is made again from another window's:
     /// [`Surface::follow_windows`]).
@@ -426,6 +450,8 @@ impl Surface {
             cosmetic_frames: Cell::new(0),
             #[cfg(feature = "dev")]
             test_model: RefCell::default(),
+            #[cfg(feature = "dev")]
+            attachment: RefCell::default(),
             link: RefCell::new(None),
             link_rate: Cell::new(None),
             link_screen_max: Cell::new(0.0),
@@ -467,6 +493,15 @@ impl Surface {
         });
         root.set_surface(Rc::downgrade(&surface));
         crate::keyboard::install(&surface);
+        #[cfg(feature = "dev")]
+        {
+            let handle = SurfaceHandle::new(surface.key());
+            if let Some(attachment) =
+                nsh_testing::agent::surface_opened(&nsh_testing::agent::OpenedSurface::new(&handle))
+            {
+                *surface.attachment.borrow_mut() = Some(attachment);
+            }
+        }
         surface
     }
 
@@ -478,6 +513,19 @@ impl Surface {
     /// The surface with `key`, for callbacks that must be `Send`.
     pub(crate) fn with_key(key: u64) -> Option<Rc<Surface>> {
         find(key)
+    }
+
+    /// Calls `f` with the model a development tool attached, when it did.
+    #[cfg(feature = "dev")]
+    fn with_attached_model(&self, f: impl FnOnce(&nsh_testing::agent::Model)) {
+        if let Some(model) = self
+            .attachment
+            .borrow()
+            .as_ref()
+            .and_then(|attachment| attachment.model.as_ref())
+        {
+            f(model);
+        }
     }
 
     /// Starts `config`'s app, replacing what ran.
@@ -548,6 +596,8 @@ impl Surface {
 
     /// Stops the app and removes its views.
     pub(crate) fn stop(&self) {
+        #[cfg(feature = "dev")]
+        self.with_attached_model(nsh_testing::agent::Model::reset);
         // The confirmation and policy belong to the engine being replaced,
         // not its successor. Approval takes the request before stopping.
         crate::app::set_quit_request_options(self.key, Default::default());
@@ -783,6 +833,8 @@ impl Surface {
             Message::Error(message) => {
                 log::error!("{message}");
                 #[cfg(feature = "dev")]
+                self.with_attached_model(|model| model.error(message.to_string()));
+                #[cfg(feature = "dev")]
                 if let Some(model) = &*self.test_model.borrow() {
                     model.error(message.to_string());
                 }
@@ -790,7 +842,11 @@ impl Surface {
                     f(&message);
                 }
             }
-            Message::Frame => self.js_frame.set(true),
+            Message::Frame => {
+                #[cfg(feature = "dev")]
+                self.with_attached_model(nsh_testing::agent::Model::frame);
+                self.js_frame.set(true);
+            }
             Message::HotUpdateFailed => {
                 if let Some(f) = &*self.on_hot_update_failed.borrow() {
                     f();
@@ -862,6 +918,8 @@ impl Surface {
         }
         crate::access::batch_applied();
         crate::window::batch_applied(self);
+        #[cfg(feature = "dev")]
+        self.with_attached_model(|model| model.apply(batch));
         #[cfg(feature = "dev")]
         if let Some(model) = &*self.test_model.borrow() {
             model.apply(batch);
