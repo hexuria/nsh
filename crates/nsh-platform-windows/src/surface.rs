@@ -102,6 +102,11 @@ impl DevSurface {
 
 #[cfg(feature = "dev")]
 impl DevSurfaceRef<'_> {
+    /// Whether the engine has yet to lay out at the window's size.
+    pub fn layout_pending(&self) -> bool {
+        self.surface.layout_pending.get().is_some()
+    }
+
     /// The surface's native window.
     pub fn hwnd(&self) -> HWND {
         self.surface.hwnd()
@@ -319,6 +324,8 @@ pub(crate) struct Surface {
     /// The model of a test session's app (`nsh test --target windows`).
     #[cfg(feature = "dev")]
     test_model: RefCell<Option<std::sync::Arc<nsh_testing::agent::Model>>>,
+    /// A size the engine has yet to lay the app out at.
+    layout_pending: Cell<Option<(f32, f32)>>,
     #[cfg(feature = "dev")]
     attachment: RefCell<Option<nsh_testing::agent::SurfaceAttachment>>,
     /// The time of the current (last) frame (seconds since the surface was
@@ -427,6 +434,7 @@ impl Surface {
             keeper: Cell::new(None),
             #[cfg(feature = "dev")]
             test_model: RefCell::default(),
+            layout_pending: Cell::new(None),
             #[cfg(feature = "dev")]
             attachment: RefCell::default(),
             now: Cell::new(0.0),
@@ -456,7 +464,10 @@ impl Surface {
         SURFACES.with(|s| s.borrow_mut().insert(key, Rc::downgrade(&surface)));
         #[cfg(feature = "dev")]
         {
-            let dev_surface = DevSurface { key, ui: surface.ui_thread() };
+            let dev_surface = DevSurface {
+                key,
+                ui: surface.ui_thread(),
+            };
             *surface.attachment.borrow_mut() = nsh_testing::agent::surface_opened(
                 &nsh_testing::agent::OpenedSurface::new(&dev_surface),
             );
@@ -658,6 +669,7 @@ impl Surface {
         crate::keymap::clear(self);
         self.js_frame.set(false);
         self.resize_late.set(false);
+        self.layout_pending.set(None);
         self.frame_clients.borrow_mut().clear();
         crate::app_window::close_all(self);
         self.invalidate();
@@ -743,6 +755,9 @@ impl Surface {
         env.window = Size::new(Points(width), Points(height));
         env.pixel_ratio = scale;
         self.environment.set(env);
+        if self.control.borrow().is_some() {
+            self.layout_pending.set(Some((width, height)));
+        }
         self.control(|c| {
             c.resize(Size::new(Points(width), Points(height)));
             c.set_environment(env);
@@ -1033,7 +1048,12 @@ impl Surface {
                     model.error(message.to_string());
                 }
                 #[cfg(feature = "dev")]
-                if let Some(model) = self.attachment.borrow().as_ref().and_then(|a| a.model.as_ref()) {
+                if let Some(model) = self
+                    .attachment
+                    .borrow()
+                    .as_ref()
+                    .and_then(|a| a.model.as_ref())
+                {
                     model.error(message.to_string());
                 }
                 if let Some(f) = &*self.on_error.borrow() {
@@ -1046,7 +1066,14 @@ impl Surface {
                     f();
                 }
             }
-            Message::Resized(_) => self.resize_late.set(false),
+            Message::Resized(size) => {
+                self.resize_late.set(false);
+                // A late report of an earlier, equal size (A, B, A) clears this
+                // too early; telling them apart needs a resize generation.
+                if self.layout_pending.get() == Some((size.width.0, size.height.0)) {
+                    self.layout_pending.set(None);
+                }
+            }
             Message::Run(task) => task.run(),
         }
         false
@@ -1083,7 +1110,12 @@ impl Surface {
             model.apply(batch);
         }
         #[cfg(feature = "dev")]
-        if let Some(model) = self.attachment.borrow().as_ref().and_then(|a| a.model.as_ref()) {
+        if let Some(model) = self
+            .attachment
+            .borrow()
+            .as_ref()
+            .and_then(|a| a.model.as_ref())
+        {
             model.apply(batch);
         }
         crate::access::batch_applied(self);
@@ -1402,6 +1434,26 @@ mod tests {
     };
 
     use super::*;
+
+    #[cfg(feature = "dev")]
+    #[test]
+    fn layout_status_waits_for_the_matching_size_and_clears_on_stop() {
+        let surface = Surface::new(Environment::default());
+        let view = DevSurfaceRef { surface: &surface };
+        assert!(!view.layout_pending());
+        surface.resized((320, 240), 1.0);
+        assert!(!view.layout_pending(), "no running engine");
+        surface.layout_pending.set(Some((320.0, 240.0)));
+        assert!(view.layout_pending());
+        assert!(!surface.animating(), "layout must not change test settling");
+        surface.handle(Message::Resized(Size::new(Points(640.0), Points(480.0))));
+        assert!(view.layout_pending());
+        surface.handle(Message::Resized(Size::new(Points(320.0), Points(240.0))));
+        assert!(!view.layout_pending());
+        surface.layout_pending.set(Some((640.0, 480.0)));
+        surface.stop();
+        assert!(!view.layout_pending());
+    }
 
     /// A minimized window's client area is empty: the app keeps the size it
     /// had, and nothing is drawn meanwhile.

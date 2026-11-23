@@ -1762,7 +1762,12 @@ pub(crate) fn menu_command(surface: &Rc<Surface>, command: u16) {
 
 /// An item was chosen: the platform carries out its role, the app hears
 /// about the rest.
-pub(crate) fn choose(surface: &Rc<Surface>, id: u32, role: Option<MenuRole>, area: Option<&NshView>) {
+pub(crate) fn choose(
+    surface: &Rc<Surface>,
+    id: u32,
+    role: Option<MenuRole>,
+    area: Option<&NshView>,
+) {
     let hwnd = surface.hwnd();
     match role {
         // An embedding app's window is its own to close or keep.
