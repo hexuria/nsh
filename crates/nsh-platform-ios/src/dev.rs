@@ -100,13 +100,14 @@ impl DevelopmentSurface {
     /// Reads the container, window and mounted native views on the main queue.
     ///
     /// Call from a worker thread, never from the main queue. The lookup returns
-    /// only native views owned by the running surface's mounter.
+    /// only native views owned by the running surface's mounter. The lookup
+    /// itself is `None` while no mounter is running.
     pub fn with_views<R: Send>(
         &self,
         read: impl FnOnce(
             &UIView,
             &objc2_ui_kit::UIWindow,
-            &dyn Fn(nsh_core::NodeId) -> Option<Retained<UIView>>,
+            Option<&dyn Fn(nsh_core::NodeId) -> Option<Retained<UIView>>>,
         ) -> R
         + Send,
     ) -> Option<R> {
