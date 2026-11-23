@@ -402,7 +402,7 @@ pub(crate) fn ns_rect(x: f32, y: f32, width: f32, height: f32) -> NSRect {
 }
 
 /// Ivars of [`ViewObj`].
-pub(crate) struct Ivars {
+pub struct Ivars {
     state: RefCell<ViewState>,
     /// Holds the children (scroll views; views that clip their children
     /// and cast a shadow).
@@ -548,7 +548,7 @@ define_class!(
     #[thread_kind = MainThreadOnly]
     #[ivars = Ivars]
     #[name = "NshView"]
-    pub(crate) struct ViewObj;
+    pub struct ViewObj;
 
     unsafe impl NSObjectProtocol for ViewObj {}
 
@@ -1706,7 +1706,7 @@ pub(crate) fn scripted<R>(event: &NSEvent, f: impl FnOnce() -> R) -> R {
 }
 
 /// `view`'s superview.
-pub(crate) fn superview(view: &NSView) -> Option<Retained<NSView>> {
+pub fn superview(view: &NSView) -> Option<Retained<NSView>> {
     // SAFETY: a plain getter, on the main thread (views are main-thread
     // only); AppKit keeps the superview alive while `view` is in it.
     unsafe { view.superview() }
@@ -1723,7 +1723,7 @@ fn setup(view: &NSView) {
 
 /// The view of one node: a cheap handle (cloning retains).
 #[derive(Clone)]
-pub(crate) struct NshView(Retained<ViewObj>);
+pub struct NshView(Retained<ViewObj>);
 
 impl std::fmt::Debug for NshView {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -1798,12 +1798,12 @@ impl NshView {
     }
 
     /// From an AppKit view of ours, if it is one.
-    pub(crate) fn from_ns(view: &NSView) -> Option<NshView> {
+    pub fn from_ns(view: &NSView) -> Option<NshView> {
         view.downcast_ref::<ViewObj>().map(|v| NshView(v.retain()))
     }
 
     /// The AppKit view.
-    pub(crate) fn ns(&self) -> &NSView {
+    pub fn ns(&self) -> &NSView {
         &self.0
     }
 
@@ -1829,18 +1829,62 @@ impl NshView {
     }
 
     /// Node id.
-    pub(crate) fn id(&self) -> NodeId {
+    pub fn id(&self) -> NodeId {
         self.state().id
     }
 
     /// The surface the view is in (its root's), while it is in one.
-    pub(crate) fn surface(&self) -> Option<std::rc::Rc<Surface>> {
+    pub fn surface(&self) -> Option<std::rc::Rc<Surface>> {
         self.0.keyboard_surface()
     }
 
     /// Kind.
-    pub(crate) fn kind(&self) -> ViewKind {
+    pub fn kind(&self) -> ViewKind {
         self.state().kind
+    }
+
+    /// Its test identifier (`testID`).
+    pub fn test_id(&self) -> Option<std::sync::Arc<str>> {
+        self.state().props.test_id.clone()
+    }
+
+    /// The events JS listens to on it.
+    pub fn events(&self) -> EventMask {
+        self.state().events
+    }
+
+    /// Its accessibility properties.
+    pub fn accessibility(&self) -> nsh_core::Accessibility {
+        self.state().props.accessibility.clone()
+    }
+
+    /// Its text content, when it is a text view.
+    pub fn text(&self) -> Option<std::sync::Arc<nsh_core::AttributedText>> {
+        self.state().text.as_ref().map(|text| text.text.clone())
+    }
+
+    /// Whether its style hides it.
+    pub fn style_hidden(&self) -> bool {
+        self.state().style.hidden
+    }
+
+    /// Whether it clips its children to its bounds.
+    pub fn clips_children(&self) -> bool {
+        self.state().clips()
+    }
+
+    /// Its native input state, when it is an input.
+    pub fn input(&self) -> Option<std::rc::Rc<crate::text_input::InputState>> {
+        self.state().input.clone()
+    }
+
+    /// The AppKit views it hosts.
+    pub fn native_views(&self) -> Vec<Retained<NSView>> {
+        self.state()
+            .natives
+            .iter()
+            .map(|native| native.view.clone())
+            .collect()
     }
 
     /// The view that holds its children: its container, or itself.
@@ -2576,7 +2620,7 @@ impl NshView {
     }
 
     /// The view's parent view, if it is attached to one.
-    pub(crate) fn parent_view(&self) -> Option<NshView> {
+    pub fn parent_view(&self) -> Option<NshView> {
         let mut sup = superview(self.ns())?;
         if sup.downcast_ref::<Container>().is_some() {
             sup = superview(&sup)?;
@@ -2590,7 +2634,7 @@ impl NshView {
     }
 
     /// Its child views, bottom to top.
-    pub(crate) fn child_views(&self) -> Vec<NshView> {
+    pub fn child_views(&self) -> Vec<NshView> {
         self.container()
             .subviews()
             .iter()

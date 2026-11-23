@@ -64,7 +64,7 @@ mod text;
 pub mod text_input;
 mod transition;
 mod tray;
-mod view;
+pub mod view;
 mod visual;
 mod window;
 mod window_state;
