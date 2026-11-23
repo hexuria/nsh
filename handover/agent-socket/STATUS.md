@@ -219,3 +219,14 @@ work is gone.
     APIs on the gpui-agent fork branch — `key_focus::focus` is pub(crate)
     and DevSurfaceView only exposes the main root/window. Decision for
     uriah: add doors this pass or defer.
+
+- Plug PR #2 fresh-review round (on tip e8f632d): 5 bugs + 2 flags.
+  Fixed and pushed: panic-path connection-slot leak @6c9f167; covering
+  siblings sharing the press receiver rejected @e30b0ec; hidden
+  PressDown/PressUp/LongPress listeners own their gesture @e30b0ec;
+  nested links resolve to the innermost span and hold-only links are
+  hold receivers @c664570; input-targeted holds reach native text
+  selection @5c3489f. Flag disposition: `fire_keybinding` shared-chord
+  rejection on hosts without identity dispatch is the intended
+  fail-closed contract (menu chords already dispatch by action id via
+  `fire_menu_keybinding`). 56 tests green.
