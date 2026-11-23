@@ -46,7 +46,7 @@ pub(crate) fn pointer(
 
 /// The window of another module that has the keyboard focus (a web view's
 /// page), if any.
-fn focused_child(surface: &Surface) -> Option<windows::Win32::Foundation::HWND> {
+pub(crate) fn focused_child(surface: &Surface) -> Option<windows::Win32::Foundation::HWND> {
     use windows::Win32::UI::Input::KeyboardAndMouse::GetFocus;
     // SAFETY: a plain query.
     let focus = unsafe { GetFocus() };

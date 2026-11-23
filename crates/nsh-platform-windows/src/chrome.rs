@@ -158,7 +158,7 @@ pub(crate) struct Chrome {
     /// show them.
     pub(crate) labels: RefCell<MenuLabels>,
     /// The application menu.
-    menu: RefCell<Option<Arc<[MenuItem]>>>,
+    pub(crate) menu: RefCell<Option<Arc<[MenuItem]>>>,
     /// The menu bar shown (`HMENU`, 0 for none).
     bar: Cell<isize>,
     /// What the menu bar's items do, by command id - 1.
@@ -1456,7 +1456,7 @@ fn item_text(action: &MenuAction, labels: &MenuLabels) -> Vec<u16> {
 }
 
 /// The roles Windows has no use for.
-fn unsupported(role: Option<MenuRole>) -> bool {
+pub(crate) fn unsupported(role: Option<MenuRole>) -> bool {
     matches!(
         role,
         Some(MenuRole::About | MenuRole::Hide | MenuRole::HideOthers | MenuRole::ShowAll)
@@ -1762,7 +1762,7 @@ pub(crate) fn menu_command(surface: &Rc<Surface>, command: u16) {
 
 /// An item was chosen: the platform carries out its role, the app hears
 /// about the rest.
-fn choose(surface: &Rc<Surface>, id: u32, role: Option<MenuRole>, area: Option<&NshView>) {
+pub(crate) fn choose(surface: &Rc<Surface>, id: u32, role: Option<MenuRole>, area: Option<&NshView>) {
     let hwnd = surface.hwnd();
     match role {
         // An embedding app's window is its own to close or keep.

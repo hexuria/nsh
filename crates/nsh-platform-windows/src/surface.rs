@@ -100,6 +100,57 @@ impl DevSurface {
     }
 }
 
+#[cfg(feature = "dev")]
+impl DevSurfaceRef<'_> {
+    /// The surface's native window.
+    pub fn hwnd(&self) -> HWND {
+        self.surface.hwnd()
+    }
+
+    /// The native target at root coordinates, including hosted items.
+    pub fn pick_node(&self, x: f32, y: f32) -> Option<NodeId> {
+        crate::input::pick_node(&self.surface.input_root(), x, y)
+    }
+
+    /// Passes a mounted node to the text input focus handler.
+    pub fn focus_text_input(&self, id: NodeId) {
+        let view = self.surface.mounter.borrow().views.get(id);
+        if let Some(view) = view {
+            crate::text_input::focus(&view);
+        }
+    }
+
+    /// The focused text input's node, if any.
+    pub fn focused_text_input(&self) -> Option<NodeId> {
+        crate::text_input::focused(self.surface).map(|view| view.id())
+    }
+
+    /// Whether a web view child holds Win32 focus.
+    pub fn child_focused(&self) -> bool {
+        crate::synth::focused_child(self.surface).is_some()
+    }
+
+    /// The surface's size in physical pixels.
+    pub fn pixel_size(&self) -> (u32, u32) {
+        self.surface.pixel_size()
+    }
+
+    /// The mounted application menu, if any.
+    pub fn app_menu(&self) -> Option<std::sync::Arc<[nsh_core::desktop::MenuItem]>> {
+        self.surface.chrome.menu.borrow().clone()
+    }
+
+    /// Chooses an application menu action without a menu area.
+    pub fn choose_menu_action(&self, id: u32, role: Option<nsh_core::desktop::MenuRole>) {
+        crate::chrome::choose(self.surface, id, role, None);
+    }
+
+    /// Whether Windows supports this menu role.
+    pub fn supports_menu_role(&self, role: Option<nsh_core::desktop::MenuRole>) -> bool {
+        !crate::chrome::unsupported(role)
+    }
+}
+
 /// Forwards batches from the engine thread to the main thread.
 struct Sink {
     /// The window to wake (an `HWND` as an integer: window handles may be
