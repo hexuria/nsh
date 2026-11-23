@@ -16,7 +16,7 @@ use crate::surface::Surface;
 
 /// A point of the content view (points from its top left) in window
 /// coordinates (from its bottom left).
-pub(crate) fn to_window(window: &NSWindow, x: f64, y: f64) -> NSPoint {
+pub fn to_window(window: &NSWindow, x: f64, y: f64) -> NSPoint {
     let height = window.contentView().map_or(0.0, |v| v.frame().size.height);
     NSPoint::new(x as CGFloat, height - y as CGFloat)
 }
@@ -85,12 +85,13 @@ fn nanoseconds(event: &NSEvent) -> i64 {
     (event.timestamp() * 1e9).round() as i64
 }
 
-pub(crate) fn mouse(window: &NSWindow, kind: NSEventType, x: f64, y: f64, clicks: isize) {
+/// Posts a mouse event of `kind` to `window` at `(x, y)` (content points).
+pub fn mouse(window: &NSWindow, kind: NSEventType, x: f64, y: f64, clicks: isize) {
     mouse_with(window, kind, x, y, clicks, NSEventModifierFlags::empty());
 }
 
 /// A mouse event of `window` at `(x, y)` (content points).
-pub(crate) fn mouse_event(
+pub fn mouse_event(
     window: &NSWindow,
     kind: NSEventType,
     x: f64,
@@ -140,7 +141,7 @@ pub(crate) fn mouse_with(
 }
 
 /// Seconds since the system started, as event timestamps are.
-pub(crate) fn timestamp() -> f64 {
+pub fn timestamp() -> f64 {
     objc2_foundation::NSProcessInfo::processInfo().systemUptime()
 }
 
@@ -149,7 +150,7 @@ pub(crate) fn timestamp() -> f64 {
 /// `CGMomentumScrollPhase` (`0`: none), stamped `at` (seconds since the
 /// system started).
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn wheel_with(
+pub fn wheel_with(
     window: &NSWindow,
     x: f64,
     y: f64,
@@ -219,7 +220,8 @@ pub(crate) fn wheel_with(
     }
 }
 
-pub(crate) fn type_text(surface: &Rc<Surface>, window: &NSWindow, text: &str) {
+/// Types `text` as keys in `window`.
+pub fn type_text(surface: &Rc<Surface>, window: &NSWindow, text: &str) {
     for c in text.chars() {
         let s = c.to_string();
         key_event(surface, window, &s, 0, NSEventModifierFlags::empty());
@@ -237,7 +239,8 @@ pub(crate) fn modifier(name: &str) -> Option<NSEventModifierFlags> {
     })
 }
 
-pub(crate) fn key(surface: &Rc<Surface>, window: &NSWindow, name: &str) {
+/// Presses the key `name` names (modifiers first, then the key) in `window`.
+pub fn key(surface: &Rc<Surface>, window: &NSWindow, name: &str) {
     let mut flags = NSEventModifierFlags::empty();
     let mut name = name;
     // `cmd++` is Command and `+`.
@@ -458,7 +461,7 @@ fn find_item(
 /// A PNG of the window's content as the window server composites it
 /// ([`composited`]), or, where it cannot give one, as AppKit draws it in
 /// process ([`drawn`]). Neither needs the Screen Recording permission.
-pub(crate) fn shot(window: &NSWindow) -> Result<Vec<u8>, String> {
+pub fn shot(window: &NSWindow) -> Result<Vec<u8>, String> {
     match composited(window) {
         Ok(png) => Ok(png),
         Err(why) => {
