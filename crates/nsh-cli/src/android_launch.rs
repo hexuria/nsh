@@ -1,6 +1,7 @@
 use std::{
     any::Any,
     io::Write as _,
+    path::PathBuf,
     process::{Command, Stdio},
     sync::OnceLock,
 };
@@ -29,6 +30,11 @@ impl<'a> AndroidLaunch<'a> {
     /// The adb serial of the device the host launches on.
     pub fn serial(&self) -> &str {
         self.serial
+    }
+
+    /// The adb binary this launch uses.
+    pub fn adb_path(&self) -> PathBuf {
+        self.sdk.adb()
     }
 
     /// Runs adb on this launch's device.
