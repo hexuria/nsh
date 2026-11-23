@@ -651,6 +651,16 @@ impl Surface {
         self.control(|c| c.dispatch_event(id, kind, payload));
     }
 
+    /// Fires key binding `id` as a `KeyCommand` on the root, as the
+    /// keymap reports one it matched.
+    pub fn key_command(&self, id: u32) {
+        self.event(
+            ROOT_ID,
+            EventKind::KeyCommand,
+            EventPayload::Value(nsh_core::PayloadValue::Number(id as f64)),
+        );
+    }
+
     /// Shows fatal app errors with `f` (development hosts).
     #[cfg(feature = "dev")]
     pub(crate) fn set_error_handler(&self, f: ErrorHandler) {
