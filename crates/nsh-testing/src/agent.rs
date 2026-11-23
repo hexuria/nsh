@@ -1524,6 +1524,62 @@ fn anchor(misses: usize, to_start: bool) -> Option<f32> {
     [0.5, roomy, other].get(misses).copied()
 }
 
+/// A surface a development host opened, as [`surface_opened`] hands it to
+/// the hook a development tool set ([`set_surface_hook`]).
+#[non_exhaustive]
+pub struct OpenedSurface<'a> {
+    /// The platform's handle on the surface: a type its platform crate
+    /// exports, which the hook downcasts.
+    pub surface: &'a dyn std::any::Any,
+}
+
+impl<'a> OpenedSurface<'a> {
+    /// The surface `surface` (the platform's handle on it).
+    pub fn new(surface: &'a dyn std::any::Any) -> Self {
+        OpenedSurface { surface }
+    }
+}
+
+/// What a hook attached to an opened surface ([`set_surface_hook`]): the
+/// host hands [`SurfaceAttachment::model`] every batch it applies and every
+/// error of the app, as it does `nsh test`'s model, and drops the
+/// attachment when the surface closes.
+#[non_exhaustive]
+pub struct SurfaceAttachment {
+    /// The model the host keeps current for the hook, if it wants one.
+    pub model: Option<std::sync::Arc<Model>>,
+    /// What the hook keeps while the surface is open (dropped with it).
+    pub guard: Box<dyn std::any::Any>,
+}
+
+impl SurfaceAttachment {
+    /// An attachment keeping `model` current and `guard` alive.
+    pub fn new(model: Option<std::sync::Arc<Model>>, guard: Box<dyn std::any::Any>) -> Self {
+        SurfaceAttachment { model, guard }
+    }
+}
+
+/// A function development hosts call when a surface opens
+/// ([`set_surface_hook`]).
+pub type SurfaceHook = fn(&OpenedSurface<'_>) -> Option<SurfaceAttachment>;
+
+static SURFACE_HOOK: std::sync::OnceLock<SurfaceHook> = std::sync::OnceLock::new();
+
+/// Sets the function a development host calls each time it opens a
+/// surface ([`surface_opened`]), once per process: the hook of a tool
+/// linked into the host (an app's crate, or a module it installs). `Err`
+/// gives `hook` back when one is set already.
+pub fn set_surface_hook(hook: SurfaceHook) -> Result<(), SurfaceHook> {
+    SURFACE_HOOK.set(hook)
+}
+
+/// Called by a development host when `surface` opens: what the hook
+/// ([`set_surface_hook`]) attached to it, `None` without a hook or when it
+/// attaches nothing.
+pub fn surface_opened(surface: &OpenedSurface<'_>) -> Option<SurfaceAttachment> {
+    SURFACE_HOOK.get().and_then(|hook| hook(surface))
+}
+
 /// Takes test steps on a host's app ([`Model`], [`Native`]).
 pub struct Agent {
     scene: std::sync::Arc<dyn Scene>,
@@ -2559,6 +2615,24 @@ mod tests {
             Ok(())
         }
         fn quit(&self) {}
+    }
+
+    #[test]
+    fn a_surface_hook_attaches_to_the_surfaces_hosts_open() {
+        assert!(surface_opened(&OpenedSurface::new(&7_u32)).is_none());
+        fn hook(opened: &OpenedSurface<'_>) -> Option<SurfaceAttachment> {
+            let id = *opened.surface.downcast_ref::<u32>()?;
+            Some(SurfaceAttachment::new(
+                Some(Arc::new(Model::default())),
+                Box::new(id),
+            ))
+        }
+        assert!(set_surface_hook(hook).is_ok());
+        assert!(set_surface_hook(hook).is_err());
+        let attached = surface_opened(&OpenedSurface::new(&7_u32)).unwrap();
+        assert!(attached.model.is_some());
+        assert_eq!(attached.guard.downcast_ref::<u32>(), Some(&7));
+        assert!(surface_opened(&OpenedSurface::new(&"not a surface")).is_none());
     }
 
     #[test]
