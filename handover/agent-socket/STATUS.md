@@ -176,8 +176,10 @@ work is gone.
   `surface_opened` read the platform's empty one → `opened()` never fired.
   Fix: append `[patch."https://github.com/hexuria/nsh"]` (14 nsh-* crates) to
   the generated workspace — NOTE it is regenerated on every `nsh build`/`run`,
-  so the durable fix belongs in the nsh CLI's workspace generator (app-side,
-  fork-owned file? TBD).
+  so the durable fix belongs in the nsh CLI's workspace generator:
+  `write_workspace_manifest` in nsh-cli's rust_app.rs emits `[patch.{url}]`
+  only when the app's own nsh source is `Nsh::Git`; it must emit whenever ANY
+  nsh-* dep in the graph resolves from a git source (scan the lock/graph).
   Linux proof (docker nsh-linux-parity:gst + Xvfb, bundle host): window plane
   bound :17421 ("Native Shell"), data plane :17422 ("bir-shell") —
   hello/snapshot real tree (73 nodes, shell→locked-frame→setup), click
