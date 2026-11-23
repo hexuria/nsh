@@ -155,3 +155,16 @@ work is gone.
 - buwiz-forms Stage 3 branch pushed: `devin/stage3-plug-move` on hexuria/buwiz-forms (plug dep @ plug `devin/stage2-integration` 1e85cf6 + [patch] to app checkout + NSH_PINNED_REF = buwiz-next 04955773). gpui-agent dual-versioned (0.3.0 plug / 0.4.0 app) until Stage 4.
 
 - Stage 2 acceptance (e073, macOS, devin/stage3-plug-move): app gates all green (nsh-check/build/test), BUT plug window plane binds an empty 0×0 tree (no UI op lands; suspected missing nsh_gpui_agent_macos::install() in the app wiring) and the app data plane never bound. Investigation dispatched to e073.
+
+- Stage 3 app verification (mechanism found, fix in progress):
+  e073 proved two stacked app-side defects — (1) `use nsh_gpui_agent_macos as _;`
+  only links; `install()` must be called, verified call site = top of `native()`
+  in nsh/src/lib.rs (runs before any surface opens, probed Ok). (2) Port order
+  inverted: the data plane binds GPUI_AGENT_ADDR at engine start, before the
+  surface exists, and the plug binds at surface-open with no fallback → fix =
+  `choose()` requests port+1 for the data plane. Both dispatched to e073 (macOS)
+  and 5171 (Windows) for end-to-end verification; Linux wired identically by the
+  orchestrator session (dep @ stage2-integration 1e85cf6, agent::install_window_plane()
+  in native(), choose() bump) — cargo check --features agent + 135 tests green
+  in docker; live ops under Xvfb next. Dep-graph rule proven: every platform dep
+  must pin the SAME plug rev or nsh-gpui-agent/nsh-agent-actions resolve twice.
