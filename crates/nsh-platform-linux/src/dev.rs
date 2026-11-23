@@ -87,6 +87,19 @@ impl DevSurfaceView<'_> {
             .cloned()
             .map(|view| view.upcast())
     }
+
+    /// The node whose view takes a press at `at` in root coordinates.
+    pub fn node_at(
+        &self,
+        at: nsh_core::geometry::Point<nsh_core::geometry::Points>,
+    ) -> Option<nsh_core::NodeId> {
+        crate::input::pick_node(&self.surface.root, at.x.0, at.y.0)
+    }
+
+    /// Whether the mounted keymap contains this keystroke.
+    pub fn supports(&self, stroke: nsh_core::keymap::Keystroke) -> bool {
+        crate::keymap::supports(self.surface, stroke)
+    }
 }
 
 /// The client of the most recent session: logs go there.

@@ -1394,6 +1394,11 @@ fn pick(root: &NshView, x: f32, y: f32) -> Option<Hit> {
     pick_in(root, graphene::Point::new(x, y))
 }
 
+#[cfg(feature = "dev")]
+pub(crate) fn pick_node(root: &NshView, x: f32, y: f32) -> Option<nsh_core::NodeId> {
+    pick(root, x, y).map(|hit| hit.view.state().id)
+}
+
 fn pick_in(view: &NshView, p: graphene::Point) -> Option<Hit> {
     if !view.is_visible() || !view.can_target() {
         return None;
