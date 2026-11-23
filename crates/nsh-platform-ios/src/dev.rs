@@ -119,6 +119,7 @@ pub(crate) struct DevSession {
     /// Keeps the client (and its thread) alive.
     _client: Arc<DevClient>,
     ui: Rc<RefCell<DevUi>>,
+    _attachment: Option<nsh_testing::agent::SurfaceAttachment>,
 }
 
 impl DevSession {
@@ -133,6 +134,12 @@ impl DevSession {
         // queue is serial, so it comes before the bundle).
         let key = NEXT_KEY.fetch_add(1, Ordering::Relaxed);
         crate::agent::register(key, view.clone());
+        let attachment = nsh_testing::agent::surface_opened(
+            &nsh_testing::agent::OpenedSurface::new(&DevelopmentSurface { key }),
+        );
+        if let Some(model) = attachment.as_ref().and_then(|a| a.model.clone()) {
+            view.upgrade()?.set_observer_model(model);
+        }
         let tested = Arc::new(MainThreadBound::new(view.clone(), mtm));
         let tester = nsh_testing::agent::Tester::new(move |model| {
             let tested = tested.clone();
@@ -191,6 +198,7 @@ impl DevSession {
                 Some(DevSession {
                     _client: client,
                     ui,
+                    _attachment: attachment,
                 })
             }
             Err(err) => {

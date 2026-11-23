@@ -59,12 +59,18 @@ struct MainThreadSink {
     on_hot_failed: SharedHandler,
     #[cfg(feature = "dev")]
     test_model: TestModel,
+    #[cfg(feature = "dev")]
+    observer_model: TestModel,
 }
 
 impl MountSink for MainThreadSink {
     fn submit(&self, batch: MountBatch) {
         #[cfg(feature = "dev")]
         if let Some(model) = &*self.test_model.lock().unwrap_or_else(|e| e.into_inner()) {
+            model.apply(&batch);
+        }
+        #[cfg(feature = "dev")]
+        if let Some(model) = &*self.observer_model.lock().unwrap_or_else(|e| e.into_inner()) {
             model.apply(&batch);
         }
         let mounter = self.mounter.clone();
@@ -104,6 +110,10 @@ impl MountSink for MainThreadSink {
     fn report_error(&self, message: &str) {
         #[cfg(feature = "dev")]
         if let Some(model) = &*self.test_model.lock().unwrap_or_else(|e| e.into_inner()) {
+            model.error(message);
+        }
+        #[cfg(feature = "dev")]
+        if let Some(model) = &*self.observer_model.lock().unwrap_or_else(|e| e.into_inner()) {
             model.error(message);
         }
         let on_error = self.on_error.clone();
@@ -153,6 +163,8 @@ pub(crate) struct RootViewIvars {
     url_schemes: RefCell<Vec<String>>,
     #[cfg(feature = "dev")]
     test_model: TestModel,
+    #[cfg(feature = "dev")]
+    observer_model: TestModel,
 }
 
 define_class!(
@@ -372,6 +384,8 @@ impl RootView {
             url_schemes: RefCell::new(Vec::new()),
             #[cfg(feature = "dev")]
             test_model: TestModel::default(),
+            #[cfg(feature = "dev")]
+            observer_model: TestModel::default(),
         });
         // SAFETY: UIView's designated initializer.
         unsafe { msg_send![super(this), initWithFrame: frame] }
@@ -898,6 +912,8 @@ impl RootView {
             on_hot_failed: self.ivars().on_hot_failed.clone(),
             #[cfg(feature = "dev")]
             test_model: self.ivars().test_model.clone(),
+            #[cfg(feature = "dev")]
+            observer_model: self.ivars().observer_model.clone(),
         };
         // The embedding app's theme overrides are in the first frame, and
         // the links that came before are the app's address when its code
@@ -1132,6 +1148,16 @@ impl Surface {
             .view
             .ivars()
             .test_model
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = model;
+    }
+
+    #[cfg(feature = "dev")]
+    pub(crate) fn set_observer_model(&self, model: Option<Arc<nsh_testing::agent::Model>>) {
+        *self
+            .view
+            .ivars()
+            .observer_model
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = model;
     }
