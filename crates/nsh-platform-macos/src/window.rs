@@ -2243,7 +2243,7 @@ pub(crate) fn roots(surface: &Surface) -> Vec<NshView> {
 }
 
 /// The root `window` shows, if it is one of the surface's windows.
-pub(crate) fn root_in(surface: &Surface, window: &NSWindow) -> Option<NshView> {
+pub fn root_in(surface: &Surface, window: &NSWindow) -> Option<NshView> {
     if surface.root.ns().window().as_deref() == Some(window) {
         return Some(surface.root.clone());
     }
