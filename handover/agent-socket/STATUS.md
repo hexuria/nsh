@@ -74,7 +74,7 @@ work is gone.
 | web | yes (cli/dev doors incl. 089981575) | `web` | #4 open | TASK-10 PASSED on Windows Chrome (both modes; paired-tab screenshot is a documented limit) |
 | ios | yes | `devin/1795407430-ios-stage1` | #3 open | TASK-11 PASSED on iPhone 17 sim (all ops); README gap list reported |
 | linux | yes | `devin/linux-agent` @ 91de1a7 repinned to 56add34a | **#5 OPEN** (mergeable) | a32c TASK-16 passed all ops (3 README gaps); linux parity CLEAN: 217 common tests v0.6.1 vs 56add34a in docker (40-min timeout each, same prefix), 2 timing-flake flips, no systematic new failures |
-| windows | yes | `devin/windows-agent` @ d21e3a9 repinned | none | clean check DONE: all ops delivered on real window (hello/snapshot/type/set-value verified; Quit modal proven; +3 README gaps — port-held silent start, modal not in tree, key/keybinding invocation docs) |
+| windows | yes | `devin/windows-agent` @ d21e3a9 repinned | **#6 OPEN** (mergeable) | clean check DONE: all ops delivered on real window (hello/snapshot/type/set-value verified; Quit modal proven; +3 README gaps — port-held silent start, modal not in tree, key/keybinding invocation docs) |
 | android | yes | `devin/1795407849-android` @ 3a35f66 repinned | none | TASK-14 in flight on 5171 — build chain proven end-to-end (AVD gpui35, WHPX, NshDev.apk 217MB); emulator second boot in progress; 9 README gaps reported |
 | macos | yes | `devin/stage1-macos` @ bd0d241 repinned | none | TASK-15 DONE clean: all ops verified; gallery 391/73 vs stock 390/74, zero new failures |
 
