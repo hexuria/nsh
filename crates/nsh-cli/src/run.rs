@@ -810,13 +810,13 @@ fn run_android(
     }
     let env = android_app_env(&crate::package::read_config(entry)?);
     start.extend(env.iter().map(String::as_str));
-    let mut launch = crate::android_launch::AndroidLaunch::new(&sdk, &serial);
-    let _launch_attachment = if let Some(hook) = crate::android_launch::hook() {
+    let mut launch = crate::development_launch::DevelopmentHostLaunch::android(&sdk, &serial);
+    let _launch_attachment = if let Some(hook) = crate::development_launch::hook() {
         hook(&mut launch)?
     } else {
         None
     };
-    start.extend(launch.extras().iter().map(String::as_str));
+    start.extend(launch.android_extras().iter().map(String::as_str));
     let step = ui::Step::start("launching the development host");
     android::adb(&sdk, &serial, &start)?;
     step.finish();

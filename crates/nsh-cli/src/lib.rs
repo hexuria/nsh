@@ -4,7 +4,6 @@
 //! hosts and runners built for it.
 
 mod android;
-mod android_launch;
 mod apple;
 mod bindgen;
 mod build;
@@ -13,6 +12,7 @@ mod check;
 mod component;
 mod dev;
 mod dev_port;
+mod development_launch;
 mod entry;
 mod init;
 mod logger;
@@ -43,9 +43,11 @@ use std::{
     sync::{Arc, OnceLock, RwLock},
 };
 
-pub use android_launch::{AndroidLaunch, AndroidLaunchHook, set_android_launch_hook};
 use anyhow::Context as _;
 use clap::{Args, Parser, Subcommand};
+pub use development_launch::{
+    DevelopmentHostLaunch, DevelopmentHostLaunchHook, set_development_host_launch_hook,
+};
 use nsh_core::element::{Registry, description::SetDescription};
 pub use ui::{Stoppable, note, stop_requested};
 pub use web_session::{WebSession, WebSessionHook, set_web_session_hook};
