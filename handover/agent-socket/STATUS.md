@@ -168,3 +168,21 @@ work is gone.
   in native(), choose() bump) — cargo check --features agent + 135 tests green
   in docker; live ops under Xvfb next. Dep-graph rule proven: every platform dep
   must pin the SAME plug rev or nsh-gpui-agent/nsh-agent-actions resolve twice.
+
+- Stage 3 app verification COMPLETE on Linux + macOS (third defect found + fixed):
+  (3) The generated `nsh/.nsh/rust/Cargo.toml` is a separate workspace — the
+  app's `[patch]` doesn't reach it, so the plug's git-dep `nsh-testing`
+  resolved a second copy: `set_surface_hook` wrote the plug's OnceLock while
+  `surface_opened` read the platform's empty one → `opened()` never fired.
+  Fix: append `[patch."https://github.com/hexuria/nsh"]` (14 nsh-* crates) to
+  the generated workspace — NOTE it is regenerated on every `nsh build`/`run`,
+  so the durable fix belongs in the nsh CLI's workspace generator (app-side,
+  fork-owned file? TBD).
+  Linux proof (docker nsh-linux-parity:gst + Xvfb, bundle host): window plane
+  bound :17421 ("Native Shell"), data plane :17422 ("bir-shell") —
+  hello/snapshot real tree (73 nodes, shell→locked-frame→setup), click
+  `setup-solo` navigated to New taxpayer, type n5 "900123456" +
+  set-value new-tp-phone verified read-back, scroll/key delivered,
+  screenshot --inline ok, `invoke app.info` on :17422 ok. Screenshots saved.
+  e073's macOS proof identical (real tree, click nav, data plane).
+  Remaining per-platform verification: Windows (5171), Android emulator.
