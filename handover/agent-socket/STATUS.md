@@ -197,3 +197,25 @@ work is gone.
   activation), and `DevSurfaceView` exposes only the main root/window
   (hit tests, app_focused, resize in secondary windows). Token cannot
   post PR comments on the plug repo; this is the record.
+
+- Plug PR review triage (all open threads, #2–#6):
+  - #6 (windows): mirror-gating fixed @ 3e49f0d (same as linux 26bf494;
+    compile-check on the Windows box pending). README patch recipe
+    expanded @ 2ef29e0 to cover generated workspaces (.nsh/rust) and the
+    one-instance rule. Remaining 3 are secondary-window issues — same
+    door class as linux (window-aware DevSurfaceView APIs).
+  - #3 (ios): 6 open — token lifecycle (session replacement deletes the
+    new token; rejected shutdown stops agent), bootstrap blocks iOS 15,
+    native paste unavailable, device selection not isolated, README
+    rev-link mismatch.
+  - #4 (web): 7 open — caret keys fail in email fields, read-only edits
+    report success, rejected tab keys never release, per-node browser
+    calls on snapshot, browser profiles leak on failed launch, 2 test
+    gaps.
+  - #2 (bugfixes): ~15 open — second-round reviews of the new fixes
+    (tap/hold receiver split, shared-chord detection, hidden-link press
+    interception, swipe overshoot) + README tested-rev mismatch.
+  - Door-needing findings (8, linux+windows): require new exposure-only
+    APIs on the gpui-agent fork branch — `key_focus::focus` is pub(crate)
+    and DevSurfaceView only exposes the main root/window. Decision for
+    uriah: add doors this pass or defer.
