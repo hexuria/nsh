@@ -20,10 +20,15 @@ Each door is one commit, `<area>: <What it does>`.
 | iOS 2 | `nsh-platform-ios` | `DevSession::start` calls `surface_opened(&OpenedSurface::new(&DevelopmentSurface))` and retains its `SurfaceAttachment` | Keeps the hook's model current independently of `nsh test`, resets it when the engine is replaced, and drops the attachment with the development session. | iOS | +61 |
 | shared 5 | `nsh-testing` | `agent::Model::reset(&self)` | Clears the mounted scene and test setup when a host replaces its engine. | iOS (shared lifecycle) | +7 |
 | iOS 3 | `nsh-platform-ios` | `DevelopmentSurface::on_connected(&self, callback: impl Fn(&DevClient, &dyn Fn(&str, &str)) + Send + Sync + 'static)` | The development client's connection event, its log channel, and the host's existing error overlay (`title`, `message`). The tool supplies all messages and chooses whether to show an error. | iOS | +38 net |
+| shared 6 | `nsh-testing` | `agent::Model::frame(&self)` | Wakes waiters when the host receives a JavaScript animation frame. | Linux (shared lifecycle) | +9 |
+| Linux 1 | `nsh-platform-linux` (`dev`) | `dev::DevSurface: Send + Clone`; `native(&self) -> Box<dyn Native>`; `on_main<R: Send + 'static>(&self, read: impl FnOnce(DevSurfaceView<'_>) -> R + Send + 'static) -> Option<R>`; view accessors `root() -> gtk4::Widget`, `window() -> Option<gtk4::Window>`, `widget(NodeId) -> Option<gtk4::Widget>` | The existing native driver and mounted widgets on the GTK main thread. Surface creation calls `surface_opened`; its attachment receives batches, errors and frames, resets on stop, and drops on surface close. Without a hook there is no attachment. | Linux | +114 / -1 |
+| Linux 2 | `nsh-platform-linux` (`dev`) | `DevSurfaceView::node_at(&self, Point<Points>) -> Option<NodeId>`; `supports(&self, Keystroke) -> bool` | Existing native picking and read-only lookup of mounted shortcuts. | Linux | +33 |
+| Linux 3 | `nsh-platform-linux` (`dev`) | `DevSurfaceView::menu(&self) -> Option<Arc<[MenuItem]>>`; `choose(&self, id: u32, role: Option<MenuRole>)` | The mounted application menu and its existing selection dispatch. Path walking stays in the plug. | Linux | +15 |
 
 Foundation: 4 doors, about 260 lines in `nsh-testing`, against the 16,195 lines of agent work on `buwiz`.
 iOS adds 4 doors, 170 net source lines across `nsh-testing` and `nsh-platform-ios`.
-Measure with `git diff --stat v0.6.1 gpui-agent`.
+Linux adds 4 doors, +171 / -1 source lines across `nsh-testing` and `nsh-platform-linux`, reusing `Model::reset`.
+The table lists 12 doors in total. Measure against release commit `2f51d8611` with `git diff --stat 2f51d8611`.
 
 On this branch no crate depends on the `gpui-agent` library, no workspace member is named for it, and no file we
 added has "agent" in its path.
@@ -53,7 +58,7 @@ added has "agent" in its path.
   (`SemanticScene::long_press_disabled`).
 - `buwiz`'s changes to upstream's ordinary agent (`Agent::run`, `long_press`, `settled`, strict checks inside
   `find`, the `TestStep::Synth` arm) are not on this branch: the plug's `Agent` has them; `nsh test` runs upstream's.
-- `buwiz`'s `Model::reset`, `Model::frame`, the `SceneQuery` additions in `nsh-dev` (`SemanticTree`, `Keybindings`,
+- The `SceneQuery` additions in `nsh-dev` (`SemanticTree`, `Keybindings`,
   `Focused`, `HitAt`, `Focus`, `AppFocused`) and `RemoteScene`'s semantic queries are not here yet: the platform
   that needs one adds it as a door in Stage 1 (Android calls `Model::frame`; web's `RemoteScene` needs the queries).
 - `module.rs`/`run.rs` `tray` and `global_menu` on `buwiz` are not agent work: they ride on `buwiz-next`.
@@ -63,7 +68,6 @@ added has "agent" in its path.
 | Platform | Expected doors (from `handover/agent-socket/data/internal-names-by-platform.txt`) |
 |---|---|
 | macOS | the surface handle for door 4; `view::superview`, `provenance::*`, `input::{later, view_at, event, enter, focus_control, root_in}`, `AppView::act`, `synth`, `scroll::reveal`, `window::root_in`, `keymap::bindings`, `text_input::*`, `MacNative::activate` |
-| Linux | the surface handle; `input::pick_node`, `keymap::supports`, `input::focus_native`, `chrome::fire_menu_keybinding` |
 | Windows | the surface handle; `input::pick_node`, `text_input::{focus, focused}`, `chrome::fire_menu_keybinding` |
 | Android | the surface handle; `Model::frame`; a way for the plug to supply `TestAgent.java`'s additions |
 | iOS | the surface handle from `DevSession` |
