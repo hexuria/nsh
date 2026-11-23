@@ -29,7 +29,7 @@ pub(crate) struct DevSession {
     entry: PathBuf,
     src_dir: PathBuf,
     release: bool,
-    server: DevServer,
+    server: Arc<DevServer>,
     /// Whether other machines may connect.
     network: bool,
     devices: Arc<Devices>,
@@ -87,7 +87,7 @@ impl DevSession {
             entry,
             src_dir,
             release,
-            server,
+            server: Arc::new(server),
             network: listen.network,
             devices,
             hot: Default::default(),
@@ -102,6 +102,21 @@ impl DevSession {
             session.server.publish_root();
         }
         Ok(session)
+    }
+
+    /// Attaches a linked tool to this web session until its watch ends.
+    pub(crate) fn attach_web(&self) -> anyhow::Result<Option<Box<dyn std::any::Any>>> {
+        let Some(hook) = crate::web_session::hook() else {
+            return Ok(None);
+        };
+        let config = crate::package::read_config(&self.entry)?;
+        let (name, _) = crate::package::name_and_id(&self.entry, &config);
+        hook(&crate::WebSession {
+            server: self.server.clone(),
+            entry: &self.entry,
+            name: &name,
+            rust_root: self.rust_root,
+        })
     }
 
     /// The port the dev server listens on.
@@ -642,6 +657,69 @@ fn lan_ips() -> Vec<Ipv4Addr> {
 #[cfg(test)]
 mod tests {
     use super::Listen;
+
+    #[test]
+    fn web_session_hook_is_optional_fallible_and_keeps_an_attachment() {
+        use std::{
+            any::Any,
+            sync::{
+                Arc,
+                atomic::{AtomicBool, Ordering},
+            },
+        };
+
+        static DROPPED: AtomicBool = AtomicBool::new(false);
+        static SKIP: AtomicBool = AtomicBool::new(false);
+
+        struct Attachment;
+
+        impl Drop for Attachment {
+            fn drop(&mut self) {
+                DROPPED.store(true, Ordering::SeqCst);
+            }
+        }
+
+        fn hook(session: &crate::WebSession<'_>) -> anyhow::Result<Option<Box<dyn Any>>> {
+            assert!(session.entry.is_absolute());
+            assert!(!session.name.is_empty());
+            assert!(session.server.local_addr().ip().is_loopback());
+            if session.rust_root {
+                anyhow::bail!("unsupported root");
+            }
+            Ok((!SKIP.load(Ordering::SeqCst)).then(|| Box::new(Attachment) as Box<dyn Any>))
+        }
+
+        let entry = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs");
+        let server =
+            nsh_dev::DevServer::start("127.0.0.1:0".parse().unwrap(), "", None, |_| {}).unwrap();
+        let mut session = super::DevSession {
+            src_dir: entry.parent().unwrap().to_owned(),
+            entry,
+            release: false,
+            server: Arc::new(server),
+            network: false,
+            devices: Default::default(),
+            hot: Default::default(),
+            watch_files: Default::default(),
+            builds: Default::default(),
+            rust_root: false,
+        };
+        assert!(session.attach_web().unwrap().is_none());
+        assert!(crate::set_web_session_hook(hook).is_ok());
+        assert!(crate::set_web_session_hook(hook).is_err());
+        let attachment = session.attach_web().unwrap().unwrap();
+        assert!(attachment.is::<Attachment>());
+        assert!(!DROPPED.load(Ordering::SeqCst));
+        drop(attachment);
+        assert!(DROPPED.load(Ordering::SeqCst));
+        SKIP.store(true, Ordering::SeqCst);
+        assert!(session.attach_web().unwrap().is_none());
+        session.rust_root = true;
+        assert_eq!(
+            session.attach_web().err().unwrap().to_string(),
+            "unsupported root"
+        );
+    }
 
     fn on_network(port: u16) -> Listen {
         Listen {

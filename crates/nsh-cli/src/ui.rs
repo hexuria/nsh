@@ -98,12 +98,19 @@ static STOP_SIGNAL: AtomicI32 = AtomicI32::new(0);
 /// what it set up outside it on its way out (`nsh run`'s `adb reverse`);
 /// a second one ends the process. [`crate::main`] then ends it as the
 /// signal would have.
-pub(crate) struct Stoppable(());
+pub struct Stoppable(());
 
 impl Stoppable {
-    pub(crate) fn new() -> Stoppable {
+    /// Defers termination by the first stop signal until the command exits.
+    pub fn new() -> Stoppable {
         STOPPABLE.fetch_add(1, Ordering::SeqCst);
         Stoppable(())
+    }
+}
+
+impl Default for Stoppable {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -114,7 +121,7 @@ impl Drop for Stoppable {
 }
 
 /// Whether a signal asked the command to stop ([`Stoppable`]).
-pub(crate) fn stop_requested() -> bool {
+pub fn stop_requested() -> bool {
     STOP_SIGNAL.load(Ordering::SeqCst) != 0 || crate::dev_port::stop_requested()
 }
 
@@ -540,7 +547,7 @@ pub(crate) fn done(message: impl Display) {
 }
 
 /// `→ message`: where to find something.
-pub(crate) fn note(message: impl Display) {
+pub fn note(message: impl Display) {
     print(&format!("{} {message}", cyan("→")));
 }
 

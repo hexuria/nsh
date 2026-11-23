@@ -358,6 +358,7 @@ fn run_web(
     crate::runtime::web(crate::runtime::WebKind::Dev, true)?.context("no web runtime")?;
     let session = DevSession::start(entry, listen, release, limits)?;
     session.print_web_url();
+    let _attachment = session.attach_web()?;
     session.watch(|| Ok(false))
 }
 
@@ -514,6 +515,7 @@ fn run_rust_app(
             crate::runtime::web(crate::runtime::WebKind::Dev, true)?.context("no web runtime")?;
             let session = DevSession::start(&entry, listen, false, None)?;
             session.print_web_url();
+            let _attachment = session.attach_web()?;
             session.watch(|| Ok(false))
         }
         Target::Gpui | Target::Tui => unreachable!("handled before Rust runner selection"),
