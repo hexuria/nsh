@@ -122,6 +122,8 @@ enum Event {
     Bundle(Arc<Bundle>),
 }
 
+type ObserverHook = fn(SocketAddr, &serde_json::Value) -> bool;
+
 struct Shared {
     /// Directory whose media files are served at `/assets/` (the app's
     /// directory, the build's asset root; [`asset_in_root`] says which of
@@ -134,7 +136,7 @@ struct Shared {
     /// the page).
     web: Mutex<std::collections::HashMap<String, axum::body::Bytes>>,
     page_scripts: Mutex<Vec<String>>,
-    observer_hook: Mutex<Option<fn(SocketAddr, &serde_json::Value) -> bool>>,
+    observer_hook: Mutex<Option<ObserverHook>>,
     /// The commands that install the app's host, by platform.
     install: Mutex<std::collections::HashMap<HostPlatform, String>>,
     /// The limits hosts run apps with ([`DevServer::set_limits`]).

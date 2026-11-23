@@ -437,6 +437,10 @@ pub struct Activity {
 /// the host), or one asked about through the host ([`RemoteScene`]: the
 /// web, whose agent runs in `nsh`).
 pub trait Scene: Send + Sync {
+    /// Copies the host's mounted views and application commands.
+    fn screen_snapshot(&self) -> Result<crate::snapshot::ScreenSnapshot, String> {
+        Err("this host provides no mounted-view snapshot".into())
+    }
     /// How busy the app is.
     fn activity(&self) -> Result<Activity, String>;
     /// Waits until a batch after the `seen`th came or the app threw,
@@ -547,6 +551,9 @@ pub trait Scene: Send + Sync {
 }
 
 impl Scene for Model {
+    fn screen_snapshot(&self) -> Result<crate::snapshot::ScreenSnapshot, String> {
+        Ok(self.screen(Screen::snapshot))
+    }
     fn input_value_text(&self, selector: &str) -> Result<Option<String>, String> {
         let state = self.lock();
         let Some(id) = state.screen.input_id(selector)? else {
@@ -837,6 +844,7 @@ pub fn answer(model: &Model, step: &TestStep) -> Option<Result<serde_json::Value
         TestStep::Dialogs => model.dialogs().and_then(|d| json(to_value(d))),
         TestStep::PendingDialog => model.pending_dialog().and_then(|d| json(to_value(d))),
         TestStep::Scene { query } => match query {
+            SceneQuery::ScreenSnapshot => json(to_value(model.screen(Screen::snapshot))),
             SceneQuery::Activity => model.activity().map(|a| {
                 serde_json::json!({
                     "batches": a.batches,
@@ -895,6 +903,10 @@ pub struct RemoteScene {
 }
 
 impl RemoteScene {
+    /// Reads the host's owned mounted-view snapshot.
+    pub fn screen_snapshot(&self) -> Result<crate::snapshot::ScreenSnapshot, String> {
+        self.query(SceneQuery::ScreenSnapshot)
+    }
     /// Asks through `ask`, which takes a step on the host and gives its
     /// value.
     pub fn new(
@@ -924,6 +936,9 @@ impl RemoteScene {
 }
 
 impl Scene for RemoteScene {
+    fn screen_snapshot(&self) -> Result<crate::snapshot::ScreenSnapshot, String> {
+        RemoteScene::screen_snapshot(self)
+    }
     fn input_value_text(&self, selector: &str) -> Result<Option<String>, String> {
         self.query(SceneQuery::InputValueText {
             selector: selector.into(),
@@ -1811,6 +1826,7 @@ impl Agent {
         let json = |r: Result<Value, serde_json::Error>| r.map_err(|e| e.to_string());
         let scene = &*self.scene;
         match query {
+            SceneQuery::ScreenSnapshot => scene.screen_snapshot().and_then(|s| json(to_value(s))),
             SceneQuery::Activity => scene.activity().map(|a| {
                 serde_json::json!({
                     "batches": a.batches,

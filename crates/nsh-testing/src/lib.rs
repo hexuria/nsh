@@ -47,6 +47,8 @@ mod run;
 mod runner;
 mod screen;
 mod selector;
+#[cfg(any(feature = "agent", feature = "js"))]
+pub mod snapshot;
 mod storage;
 mod trace;
 #[cfg(feature = "js")]

@@ -3114,9 +3114,31 @@ impl Screen {
     }
 
     /// The app's keyboard shortcuts (`nsh/keymap`).
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn keymap(&self) -> Option<&nsh_core::keymap::Keymap> {
         self.keymap.as_deref()
+    }
+
+    /// Copies the mounted views, hierarchy, shortcuts and application menu
+    /// into owned data. Views are ordered by id; child and stack order is retained.
+    #[cfg(any(feature = "agent", feature = "js"))]
+    pub fn snapshot(&self) -> crate::snapshot::ScreenSnapshot {
+        use crate::snapshot::{KeyBindingSnapshot, MenuItemSnapshot, ScreenSnapshot, ViewSnapshot};
+        let mut ids: Vec<_> = self.nodes.keys().copied().chain([ROOT]).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        ScreenSnapshot {
+            root: ROOT,
+            views: ids
+                .into_iter()
+                .filter_map(|id| ViewSnapshot::read(self, id))
+                .collect(),
+            keymap: self
+                .keymap()
+                .map(|k| k.bindings().iter().map(KeyBindingSnapshot::from).collect()),
+            app_menu: self
+                .app_menu()
+                .map(|m| m.iter().map(MenuItemSnapshot::from).collect()),
+        }
     }
 
     /// Whether a JS responder keeps native drags from starting.

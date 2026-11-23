@@ -727,6 +727,8 @@ pub enum TestStep {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "query", rename_all = "snake_case")]
 pub enum SceneQuery {
+    /// Owned mounted-view data, hierarchy, keymap and application menu.
+    ScreenSnapshot,
     /// The textual accessibility value of a composite input, if supplied.
     InputValueText {
         /// The input selector.
@@ -1100,6 +1102,8 @@ impl From<log::Level> for LogLevel {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn hello_metadata_and_observer_round_trip() {
         let old = r#"{"type":"hello","protocol":2,"bytecode_version":"","device":"page"}"#;
@@ -1156,8 +1160,19 @@ mod tests {
         }
         assert!(serde_json::from_str::<super::TestStep>(r#"{"step":"page","args":null}"#).is_err());
     }
-    use super::*;
 
+    #[test]
+    fn screen_snapshot_queries_round_trip() {
+        let step = super::TestStep::Scene {
+            query: super::SceneQuery::ScreenSnapshot,
+        };
+        let json = serde_json::json!({"step":"scene", "query":{"query":"screen_snapshot"}});
+        assert_eq!(serde_json::to_value(&step).unwrap(), json);
+        assert_eq!(
+            serde_json::from_value::<super::TestStep>(json).unwrap(),
+            step
+        );
+    }
     #[test]
     fn wire_format_is_stable() {
         let msg = ServerMessage::Bundle {
