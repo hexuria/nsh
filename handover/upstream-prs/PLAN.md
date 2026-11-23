@@ -123,8 +123,9 @@ Change any of these before starting; do not re-ask them mid-run.
 3. **Each pull request is rebuilt on upstream `main`**, not cherry-picked blind from `buwiz`. Our commits were
    written against 0.6.1 and the surrounding code has moved.
 4. **Split by problem, not by commit.** A theme is usually one pull request; a theme that fixes two things is two.
-5. **The fork line is not touched here.** Landing a change upstream does not remove it from `buwiz`. The ledger
-   records it, and whoever next rebuilds the fork line on an upstream release drops what that release contains.
+5. **The fork line is not touched here.** Landing a change upstream does not remove it from `buwiz` or from
+   `buwiz-next` (the app's new line, which the other handover builds). The ledger records it, and whoever next
+   rebuilds the fork line on an upstream release drops what that release contains.
 6. **gpui-agent is never mentioned** in an upstream title, description or comment, and no pull request exists to
    serve it. A change goes upstream because it is right for NSH.
 7. **Doors come later, as their own track** (below).
@@ -156,7 +157,7 @@ States: `not started`, `already upstream`, `issue open`, `agreed`, `declined`, `
 
 ## Doors
 
-The other handover produces `SOCKET.md` on branch `buwiz-socket`: the list of small public items our own crates
+The other handover produces `SOCKET.md` on branch `gpui-agent` of `hexuria/nsh` (an upstream release plus the doors, nothing else): the list of small public items our own crates
 need from NSH. Each is new public API, so each goes through the new-API path: an issue first.
 
 The case to make is upstream's own rule: a feature belongs in NSH only when an nshm cannot provide it. A door is

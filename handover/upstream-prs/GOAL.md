@@ -61,10 +61,10 @@ Rules for every session:
 - Any pull request or comment upstream that carries gpui-agent work or names it.
 - Reopening or resubmitting #449, #1500 or #112, or theme X01.
 - Opening a pull request for an N theme or a door without a maintainer's agreement on its issue.
-- Pushing to, rebasing or force-pushing `buwiz`, `buwiz-socket` or `main` on `hexuria/nsh`.
+- Pushing to, rebasing or force-pushing `buwiz`, `buwiz-next`, `gpui-agent` or `main` on `hexuria/nsh`.
 - Merging anything, anywhere. Upstream's maintainers merge through their queue.
 - Pinging maintainers repeatedly, or arguing a declined change.
-- Starting the doors track before `SOCKET.md` exists on `buwiz-socket` and its doors are proven.
+- Starting the doors track before `SOCKET.md` exists on branch `gpui-agent` and its doors are proven.
 
 ## If something cannot be done as planned
 
