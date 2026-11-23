@@ -661,6 +661,32 @@ impl Surface {
         );
     }
 
+    /// The ids of the app's own windows currently mounted
+    /// (`Window.open` dialog roots).
+    pub fn app_windows(&self) -> Vec<NodeId> {
+        crate::window::app_window_ids(self)
+    }
+
+    /// The node a press at `x`/`y` in the app window `id`'s
+    /// coordinates lands on (`None` while it is not mounted).
+    pub fn window_node_at(&self, id: NodeId, x: f32, y: f32) -> Option<NodeId> {
+        let (_, view) = crate::window::window_and_view(self, id)?;
+        crate::input::view_at(&view, x, y).map(|view| view.id())
+    }
+
+    /// Whether the app window `id` is key (`None` while it is not
+    /// mounted).
+    pub fn window_focused(&self, id: NodeId) -> Option<bool> {
+        let (window, _) = crate::window::window_and_view(self, id)?;
+        Some(crate::window::is_key(&window))
+    }
+
+    /// Resizes the app window `id`'s content area (`false` while it
+    /// is not mounted).
+    pub fn resize_window(&self, id: NodeId, size: Size<Points>) -> bool {
+        crate::window::resize(self, id, size)
+    }
+
     /// Shows fatal app errors with `f` (development hosts).
     #[cfg(feature = "dev")]
     pub(crate) fn set_error_handler(&self, f: ErrorHandler) {
