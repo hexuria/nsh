@@ -170,6 +170,13 @@ impl Model {
         self.changed.notify_all();
     }
 
+    /// Reads the screen the applied batches built ([`Model::apply`]). The
+    /// model is held while `read` runs, so a batch the host applies waits
+    /// for it.
+    pub fn screen<R>(&self, read: impl FnOnce(&Screen) -> R) -> R {
+        read(&self.lock().screen)
+    }
+
     fn lock(&self) -> MutexGuard<'_, State> {
         self.state.lock().unwrap_or_else(|e| e.into_inner())
     }
