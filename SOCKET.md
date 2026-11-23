@@ -54,6 +54,9 @@ added has "agent" in its path.
 
 ## Rows the platform sessions add
 
+Shared lifecycle door: `nsh-testing::agent::Model::reset(&self)` clears the
+model when a development host replaces its engine (+7 lines; needed by iOS).
+
 | Platform | Expected doors (from `handover/agent-socket/data/internal-names-by-platform.txt`) |
 |---|---|
 | macOS | the surface handle for door 4; `view::superview`, `provenance::*`, `input::{later, view_at, event, enter, focus_control, root_in}`, `AppView::act`, `synth`, `scroll::reveal`, `window::root_in`, `keymap::bindings`, `text_input::*`, `MacNative::activate` |

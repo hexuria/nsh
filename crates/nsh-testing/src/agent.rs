@@ -141,6 +141,13 @@ struct State {
 }
 
 impl Model {
+    /// Clears the mounted scene and test setup before a host replaces its engine.
+    pub fn reset(&self) {
+        self.setup.lock().unwrap_or_else(|e| e.into_inner()).take();
+        *self.lock() = State::default();
+        self.changed.notify_all();
+    }
+
     /// Takes in a batch the host applied (on its main thread, after
     /// applying it).
     pub fn apply(&self, batch: &MountBatch) {
