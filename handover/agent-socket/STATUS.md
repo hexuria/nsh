@@ -230,3 +230,24 @@ work is gone.
   rejection on hosts without identity dispatch is the intended
   fail-closed contract (menu chords already dispatch by action id via
   `fire_menu_keybinding`). 56 tests green.
+
+- Review round 2 (this session): PR #2 receiver cluster completed —
+  per-gesture hidden owners (press vs hold), span picks mirror `link_at`
+  (smallest range, first-on-tie), coordinate holds consult link spans
+  first, shared-receiver covering siblings covered by a new test
+  @c48e549. 57 tests green.
+- PR #3 (iOS) fixes pushed @53ca27b: paste advertised on iOS; TokenFile
+  + interrupt handler now verify ownership before deleting the shared
+  token; bootstrap MinimumOSVersion lowered to the bundle's real 15.0.
+  Still open: iOS `Native::focused` reporting (fork-side, same class as
+  the windows `focused()` gap — added to the doors list), ephemeral-port
+  publication (minor).
+- PR #4 (web) fixes pushed @7a29bf5: owned mode advertises paste +
+  long_press; pairing key now injected only into the dev-server origin.
+  Still open: unauthenticated loopback DevTools port (real, standard
+  local-dev posture; proper fix = --remote-debugging-pipe transport),
+  duplicated-tab pairing takeover (needs per-tab addressing),
+  per-node blocking browser calls (perf).
+- Doors list additions: `Native::focused()` implementations for windows
+  and iOS in nsh-testing (typing on an already-focused field currently
+  clicks first, clearing the selection).
