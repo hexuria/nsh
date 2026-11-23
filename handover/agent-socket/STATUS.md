@@ -151,3 +151,5 @@ work is gone.
 - Other tracks' results are in the buwiz-forms Bot's dead session; the open
   state is whatever `feat/nsh-release` and its CI show on
   https://github.com/hexuria/buwiz-forms/issues/269.
+
+- buwiz-forms Stage 3 branch pushed: `devin/stage3-plug-move` on hexuria/buwiz-forms (plug dep @ plug `devin/stage2-integration` 1e85cf6 + [patch] to app checkout + NSH_PINNED_REF = buwiz-next 04955773). gpui-agent dual-versioned (0.3.0 plug / 0.4.0 app) until Stage 4.
