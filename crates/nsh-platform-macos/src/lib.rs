@@ -22,7 +22,7 @@
 
 #![cfg(target_os = "macos")]
 
-mod access;
+pub mod access;
 #[cfg(feature = "dev")]
 pub mod agent;
 mod animation;
