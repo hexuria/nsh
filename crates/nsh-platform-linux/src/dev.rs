@@ -100,6 +100,16 @@ impl DevSurfaceView<'_> {
     pub fn supports(&self, stroke: nsh_core::keymap::Keystroke) -> bool {
         crate::keymap::supports(self.surface, stroke)
     }
+
+    /// The currently mounted application menu.
+    pub fn menu(&self) -> Option<Arc<[nsh_core::desktop::MenuItem]>> {
+        crate::chrome::menu(self.surface)
+    }
+
+    /// Chooses an application menu action through its native dispatch path.
+    pub fn choose(&self, id: u32, role: Option<nsh_core::desktop::MenuRole>) {
+        crate::chrome::choose(self.surface, id, role);
+    }
 }
 
 /// The client of the most recent session: logs go there.

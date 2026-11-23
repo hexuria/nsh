@@ -129,6 +129,11 @@ fn window(surface: &Surface) -> Option<gtk::Window> {
     surface.root.root().and_downcast::<gtk::Window>()
 }
 
+#[cfg(feature = "dev")]
+pub(crate) fn menu(surface: &Surface) -> Option<Arc<[MenuItem]>> {
+    surface.chrome.menu.borrow().clone()
+}
+
 fn hidden(surface: &Surface) -> bool {
     surface.chrome.style.get() == TitleBarStyle::Hidden
 }
