@@ -27,6 +27,68 @@ use rustc_hash::FxHashMap;
 
 use crate::{app::AppView, image::AssetBase};
 
+/// A development surface identified independently of the GTK main thread.
+#[derive(Clone)]
+#[non_exhaustive]
+pub struct DevSurface {
+    pub(crate) key: u64,
+}
+
+impl DevSurface {
+    /// The native driver for this surface.
+    pub fn native(&self) -> Box<dyn nsh_testing::agent::Native> {
+        Box::new(crate::agent::LinuxNative::new(self.key))
+    }
+
+    /// Calls `read` on the GTK main thread, waiting at most ten seconds.
+    /// Returns `None` if the surface is gone or the main thread does not answer.
+    pub fn on_main<R: Send + 'static>(
+        &self,
+        read: impl FnOnce(DevSurfaceView<'_>) -> R + Send + 'static,
+    ) -> Option<R> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let key = self.key;
+        glib::MainContext::default().invoke_with_priority(glib::Priority::DEFAULT, move || {
+            let _ = tx.send(
+                crate::surface::Surface::by_key(key)
+                    .map(|surface| read(DevSurfaceView { surface: &surface })),
+            );
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(10))
+            .ok()
+            .flatten()
+    }
+}
+
+/// Main-thread access to a development surface's mounted widgets.
+#[non_exhaustive]
+pub struct DevSurfaceView<'a> {
+    surface: &'a Rc<crate::surface::Surface>,
+}
+
+impl DevSurfaceView<'_> {
+    /// The root widget of the surface.
+    pub fn root(&self) -> gtk::Widget {
+        self.surface.root.clone().upcast()
+    }
+
+    /// The GTK window containing the surface.
+    pub fn window(&self) -> Option<gtk::Window> {
+        crate::synth::window(self.surface)
+    }
+
+    /// The widget mounted for `id`.
+    pub fn widget(&self, id: nsh_core::NodeId) -> Option<gtk::Widget> {
+        self.surface
+            .mounter
+            .borrow()
+            .views
+            .get(&id)
+            .cloned()
+            .map(|view| view.upcast())
+    }
+}
+
 /// The client of the most recent session: logs go there.
 static CLIENT: Mutex<std::sync::Weak<DevClient>> = Mutex::new(std::sync::Weak::new());
 /// While connected, logs go to the dev server only (the developer's

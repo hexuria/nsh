@@ -173,6 +173,8 @@ pub(crate) struct Surface {
     /// The model of a test session's app (`nsh test --target linux`).
     #[cfg(feature = "dev")]
     test_model: RefCell<Option<Arc<nsh_testing::agent::Model>>>,
+    #[cfg(feature = "dev")]
+    attachment: RefCell<Option<nsh_testing::agent::SurfaceAttachment>>,
     /// The GPU device shader views render with, opened when the first
     /// shader is mounted (`None` inside: there is none).
     shader_renderer: std::cell::OnceCell<Option<Rc<nsh_engine::shader::Renderer>>>,
@@ -282,6 +284,8 @@ impl Surface {
             on_hot_update_failed: RefCell::new(None),
             #[cfg(feature = "dev")]
             test_model: RefCell::default(),
+            #[cfg(feature = "dev")]
+            attachment: RefCell::default(),
             shader_renderer: std::cell::OnceCell::new(),
             audio: Default::default(),
             asset_base: RefCell::new(None),
@@ -297,6 +301,13 @@ impl Surface {
             fps_overlay: RefCell::default(),
         });
         SURFACES.with(|s| s.borrow_mut().insert(key, Rc::downgrade(&surface)));
+        #[cfg(feature = "dev")]
+        {
+            let handle = crate::dev::DevSurface { key };
+            *surface.attachment.borrow_mut() = nsh_testing::agent::surface_opened(
+                &nsh_testing::agent::OpenedSurface::new(&handle),
+            );
+        }
         let weak = Rc::downgrade(&surface);
         root.on_resize(move |width, height| {
             if let Some(surface) = weak.upgrade() {
@@ -452,6 +463,15 @@ impl Surface {
 
     /// Stops the app and removes its views.
     pub(crate) fn stop(&self) {
+        #[cfg(feature = "dev")]
+        if let Some(model) = self
+            .attachment
+            .borrow()
+            .as_ref()
+            .and_then(|a| a.model.as_ref())
+        {
+            model.reset();
+        }
         crate::global_shortcut::clear(self);
         crate::tray::clear(self);
         // Dropping the engine joins its thread.
@@ -575,11 +595,31 @@ impl Surface {
                     if let Some(model) = &*self.test_model.borrow() {
                         model.error(message.clone());
                     }
+                    #[cfg(feature = "dev")]
+                    if let Some(model) = self
+                        .attachment
+                        .borrow()
+                        .as_ref()
+                        .and_then(|a| a.model.as_ref())
+                    {
+                        model.error(message.clone());
+                    }
                     if let Some(f) = &*self.on_error.borrow() {
                         f(&message);
                     }
                 }
-                Message::Frame => self.js_frame.set(true),
+                Message::Frame => {
+                    self.js_frame.set(true);
+                    #[cfg(feature = "dev")]
+                    if let Some(model) = self
+                        .attachment
+                        .borrow()
+                        .as_ref()
+                        .and_then(|a| a.model.as_ref())
+                    {
+                        model.frame();
+                    }
+                }
                 Message::HotUpdateFailed => {
                     if let Some(f) = &*self.on_hot_update_failed.borrow() {
                         f();
@@ -619,6 +659,15 @@ impl Surface {
         crate::window::batch_applied(self);
         #[cfg(feature = "dev")]
         if let Some(model) = &*self.test_model.borrow() {
+            model.apply(batch);
+        }
+        #[cfg(feature = "dev")]
+        if let Some(model) = self
+            .attachment
+            .borrow()
+            .as_ref()
+            .and_then(|a| a.model.as_ref())
+        {
             model.apply(batch);
         }
     }
@@ -796,6 +845,8 @@ impl Surface {
 
 impl Drop for Surface {
     fn drop(&mut self) {
+        #[cfg(feature = "dev")]
+        self.attachment.get_mut().take();
         crate::global_shortcut::clear(self);
         crate::tray::clear(self);
         let key = self.key;
