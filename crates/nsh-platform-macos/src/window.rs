@@ -752,6 +752,35 @@ fn with_held<R>(surface: &Surface, id: NodeId, f: impl FnOnce(&Held) -> R) -> Op
     windows.get(&id).map(|w| f(&w.held))
 }
 
+/// The window and its root view of the app's window `id`, for
+/// development surfaces (secondary-window hit tests, focus and resize).
+#[cfg(feature = "dev")]
+pub(crate) fn window_and_view(
+    surface: &Surface,
+    id: NodeId,
+) -> Option<(Retained<NSWindow>, NshView)> {
+    let windows = surface.windows.borrow();
+    let w = windows.get(&id)?;
+    Some((w.window.clone(), w.view.clone()))
+}
+
+/// The ids of the app's own windows currently mounted.
+#[cfg(feature = "dev")]
+pub(crate) fn app_window_ids(surface: &Surface) -> Vec<NodeId> {
+    surface.windows.borrow().keys().copied().collect()
+}
+
+/// Resizes the app window `id`'s content area.
+#[cfg(feature = "dev")]
+pub(crate) fn resize(surface: &Surface, id: NodeId, size: Size<Points>) -> bool {
+    let windows = surface.windows.borrow();
+    let Some(w) = windows.get(&id) else {
+        return false;
+    };
+    w.window.setContentSize(ns_size(size));
+    true
+}
+
 /// The root node of the window `window` is, if it is the surface's.
 fn id_of(surface: &Surface, window: &NSWindow) -> Option<NodeId> {
     if surface.root.ns().window().as_deref() == Some(window) {
