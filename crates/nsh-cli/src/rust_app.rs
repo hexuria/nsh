@@ -230,6 +230,10 @@ pub(crate) struct RustApp {
     workspace: PathBuf,
     /// Where nsh's crates come from.
     nsh: Nsh,
+    /// The sources other than crates.io whose nsh crates the workspaces of
+    /// the app's crates patch (`[patch."<url>"]`, [`patched_sources`]),
+    /// patched to the checkout in the generated workspace as well.
+    patched: Vec<String>,
     /// The crates `nsh.json` `"rust"` lists, in its order: each is a UI set
     /// of its own, after nsh's.
     crates: Vec<AppCrate>,
@@ -328,12 +332,18 @@ impl Nsh {
     /// Cargo's resolved checkout, including patched registry dependencies,
     /// or crates.io when that checkout is another version ([`retargeted`]).
     /// Mixed sources stop the command before a build fails on two
-    /// `nsh-core`s.
-    fn of(crates: &[AppCrate]) -> anyhow::Result<Nsh> {
+    /// `nsh-core`s. Also gives the crates' workspace root manifests, in
+    /// their order, each once.
+    fn of(crates: &[AppCrate]) -> anyhow::Result<(Nsh, Vec<PathBuf>)> {
         // The first dependency on nsh seen, and what it is (for errors).
         let mut first: Option<(Nsh, String)> = None;
+        let mut roots: Vec<PathBuf> = Vec::new();
         for c in crates {
-            for dep in nsh_dependencies(c)? {
+            let (dependencies, root) = nsh_dependencies(c)?;
+            if !roots.contains(&root) {
+                roots.push(root);
+            }
+            for dep in dependencies {
                 let name = dep["name"].as_str().unwrap_or_default();
                 let req = dep["req"].as_str().unwrap_or("*");
                 let (nsh, what) = match dep["path"].as_str() {
@@ -373,9 +383,9 @@ impl Nsh {
         if let Nsh::Git { checkout, .. } = &nsh
             && checkout_version(checkout)? != VERSION
         {
-            return Ok(Nsh::Registry);
+            return Ok((Nsh::Registry, roots));
         }
-        Ok(nsh)
+        Ok((nsh, roots))
     }
 
     /// The checkout, if it is one.
@@ -825,6 +835,7 @@ pub(crate) fn runner_only(entry: &Path) -> anyhow::Result<RustApp> {
     let app = RustApp {
         workspace: dir.join(".nsh/rust"),
         nsh,
+        patched: Vec::new(),
         crates: Vec::new(),
         watched,
         root: None,
@@ -851,7 +862,12 @@ pub(crate) fn of(entry: &Path, unify: bool) -> anyhow::Result<Option<RustApp>> {
         return Ok(None);
     };
     let crates = crates(dir, rust)?;
-    let nsh = Nsh::of(&crates)?;
+    let (nsh, roots) = Nsh::of(&crates)?;
+    let patched = if nsh.source().is_some() {
+        patched_sources(&roots)
+    } else {
+        Vec::new()
+    };
     let watched = watched(&crates, nsh.source());
     let workspace = dir.join(".nsh/rust");
     let retargeted = retargeted(&crates, &nsh)?;
@@ -864,6 +880,7 @@ pub(crate) fn of(entry: &Path, unify: bool) -> anyhow::Result<Option<RustApp>> {
     let app = RustApp {
         workspace,
         nsh,
+        patched,
         crates,
         watched,
         root,
@@ -1179,8 +1196,9 @@ const NSH_CRATES: &[&str] = &[
 ];
 
 /// The dependencies of the app's crate `c` on nsh's crates, as `cargo
-/// metadata --no-deps` gives them (`name`, `req`, `path` for one by path).
-fn nsh_dependencies(c: &AppCrate) -> anyhow::Result<Vec<serde_json::Value>> {
+/// metadata --no-deps` gives them (`name`, `req`, `path` for one by path),
+/// and the root manifest of its workspace.
+fn nsh_dependencies(c: &AppCrate) -> anyhow::Result<(Vec<serde_json::Value>, PathBuf)> {
     let manifest = c.dir.join("Cargo.toml");
     let output = Command::new(cargo())
         .args([
@@ -1210,6 +1228,12 @@ fn nsh_dependencies(c: &AppCrate) -> anyhow::Result<Vec<serde_json::Value>> {
                 .find(|p| p["name"].as_str() == Some(&c.package))
         })
         .with_context(|| format!("cargo metadata has no package {}", c.package))?;
+    let root = Path::new(
+        metadata["workspace_root"]
+            .as_str()
+            .context("cargo metadata has no workspace_root")?,
+    )
+    .join("Cargo.toml");
     let mut dependencies: Vec<_> = package["dependencies"]
         .as_array()
         .into_iter()
@@ -1244,7 +1268,49 @@ fn nsh_dependencies(c: &AppCrate) -> anyhow::Result<Vec<serde_json::Value>> {
             serde_json::from_slice(&output.stdout).context("cargo metadata's resolved output")?;
         resolve_git_dependencies(&mut dependencies, &resolved, &c.package)?;
     }
-    Ok(dependencies)
+    Ok((dependencies, root))
+}
+
+/// The sources other than crates.io (`"https://github.com/…/nsh"`, a
+/// registry's name) whose nsh crates the workspace root manifests `roots`
+/// patch, as the manifests write them: each once, by manifest, then by name
+/// (the stable order of [`toml::Table`]). A crate the app depends on
+/// may take nsh's crates from Git, which the app's own `[patch."<url>"]`
+/// redirects to the checkout; `[patch]` applies only at a workspace root, so
+/// the generated workspace must repeat it or build a second nsh. A manifest
+/// that cannot be read is warned of and left out: Cargo read it already, and
+/// an app with no such patch builds as before.
+fn patched_sources(roots: &[PathBuf]) -> Vec<String> {
+    let mut sources = Vec::new();
+    for root in roots {
+        let table = fs::read_to_string(root)
+            .map_err(anyhow::Error::from)
+            .and_then(|text| Ok(text.parse::<toml::Table>()?));
+        let table = match table {
+            Ok(table) => table,
+            Err(e) => {
+                ui::warn(format_args!(
+                    "cannot read the [patch] tables of {}: {e}",
+                    ui::path(root)
+                ));
+                continue;
+            }
+        };
+        let Some(patch) = table.get("patch").and_then(toml::Value::as_table) else {
+            continue;
+        };
+        for (source, crates) in patch {
+            let patches_nsh = crates.as_table().is_some_and(|crates| {
+                crates
+                    .keys()
+                    .any(|name| NSH_CRATES.contains(&name.as_str()))
+            });
+            if source != "crates-io" && patches_nsh && !sources.contains(source) {
+                sources.push(source.clone());
+            }
+        }
+    }
+    sources
 }
 
 /// Replace Git declarations and patched registry declarations with Cargo's
@@ -2572,10 +2638,19 @@ opt-level = \"s\"
                 ));
             }
             manifest.push_str(&patches);
-            if let Nsh::Git { url, .. } = &self.nsh {
+            let git = match &self.nsh {
+                Nsh::Git { url, .. } => Some(url),
+                _ => None,
+            };
+            if let Some(url) = git {
                 // The app still declares Git dependencies. Redirect those
                 // too so its types and the generated hosts share one core.
                 manifest.push_str(&format!("\n[patch.{url:?}]\n{patches}"));
+            }
+            // What the app's workspaces patch to the checkout (a dependency
+            // of theirs taking nsh from Git) builds against it here too.
+            for source in self.patched.iter().filter(|s| Some(*s) != git) {
+                manifest.push_str(&format!("\n[patch.{source:?}]\n{patches}"));
             }
         }
         write(&path, &manifest)
@@ -3678,6 +3753,7 @@ mod tests {
         RustApp {
             workspace: dir.join(".nsh/rust"),
             nsh: Nsh::Source(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")),
+            patched: Vec::new(),
             watched: crates.iter().map(|c| c.dir.clone()).collect(),
             crates,
             root,
@@ -4610,7 +4686,9 @@ mod tests {
                     }
                 })
                 .collect();
-            Nsh::of(&crates).map_err(|e| e.to_string())
+            Nsh::of(&crates)
+                .map(|(nsh, _)| nsh)
+                .map_err(|e| e.to_string())
         };
         let this = super::VERSION;
         // crates.io: this version, exactly or by a requirement it meets.
@@ -4742,7 +4820,7 @@ mod tests {
             "",
             &format!("nsh-core = {{ git = {url:?} }}\nnsh-base = {{ git = {url:?} }}\n"),
         );
-        let nsh = Nsh::of(&[AppCrate {
+        let (nsh, _) = Nsh::of(&[AppCrate {
             package: "git-app".into(),
             dir: native.clone(),
         }])
@@ -4766,6 +4844,168 @@ mod tests {
         let host = std::fs::read_to_string(app.workspace.join("ios-host/Cargo.toml")).unwrap();
         assert!(host.contains("nsh-ios-host = { path ="), "{host}");
         assert!(!host.contains("version = \"="), "{host}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_app_s_patches_of_nsh_carry_into_the_generated_workspace() {
+        let dir = std::env::temp_dir().join(format!("nsh-rust-patched-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let checkout =
+            dunce::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).unwrap();
+        let path_of = |c: &str| {
+            checkout
+                .join("crates")
+                .join(c)
+                .to_string_lossy()
+                .into_owned()
+        };
+        // A dependency of the app's takes nsh from Git; the app's workspace
+        // redirects that to the checkout it takes nsh from by path.
+        let app_dir = dir.join("app");
+        let native = app_dir.join("native");
+        write_crate(
+            &native,
+            "patched-app",
+            "",
+            &format!("nsh-core = {{ path = {:?} }}\n", path_of("nsh-core")),
+        );
+        write_crate(&app_dir.join("other"), "other", "", "");
+        std::fs::write(
+            app_dir.join("Cargo.toml"),
+            format!(
+                "[workspace]\nmembers = [\"native\"]\nresolver = \"3\"\n\n\
+                 [patch.\"https://example.invalid/nsh\"]\nnsh-testing = {{ path = {:?} }}\n\n\
+                 [patch.\"https://example.invalid/other\"]\nother = {{ path = \"other\" }}\n",
+                path_of("nsh-testing")
+            ),
+        )
+        .unwrap();
+        let crates = [AppCrate {
+            package: "patched-app".into(),
+            dir: native.clone(),
+        }];
+        let (nsh, roots) = Nsh::of(&crates).unwrap();
+        assert_eq!(nsh, Nsh::Source(checkout.clone()));
+        assert_eq!(roots.len(), 1);
+        assert_eq!(
+            dunce::canonicalize(&roots[0]).unwrap(),
+            dunce::canonicalize(app_dir.join("Cargo.toml")).unwrap()
+        );
+        let patched = super::patched_sources(&roots);
+        // The table naming no nsh crate stays the app's own.
+        assert_eq!(patched, ["https://example.invalid/nsh"]);
+        let mut app = app(&app_dir, &[("patched-app", native)], None);
+        app.nsh = nsh;
+        app.patched = patched;
+        app.write_workspace().unwrap();
+        let manifest = std::fs::read_to_string(app.workspace.join("Cargo.toml")).unwrap();
+        let table = |header: &str| -> String {
+            manifest
+                .lines()
+                .skip_while(|l| *l != header)
+                .skip(1)
+                .take_while(|l| !l.is_empty())
+                .map(|l| format!("{l}\n"))
+                .collect()
+        };
+        let crates_io = table("[patch.crates-io]");
+        assert!(
+            crates_io.contains(&format!(
+                "nsh-testing = {{ path = {:?} }}",
+                path_of("nsh-testing")
+            )),
+            "{manifest}"
+        );
+        assert_eq!(table("[patch.\"https://example.invalid/nsh\"]"), crates_io);
+        assert!(!manifest.contains("example.invalid/other"), "{manifest}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn patched_sources_are_the_app_s_patches_of_nsh_in_any_form() {
+        let dir = std::env::temp_dir().join(format!("nsh-rust-patch-forms-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let root = |name: &str, text: &str| {
+            let path = dir.join(name).join("Cargo.toml");
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, text).unwrap();
+            path
+        };
+        let roots = [
+            root(
+                "table",
+                "[workspace]\n[patch.\"https://example.invalid/b\"]\nnsh-core = { path = \"x\" }\n\
+                 [patch.crates-io]\nnsh-core = { path = \"x\" }\n",
+            ),
+            root(
+                "dotted",
+                "patch.\"https://example.invalid/a\".nsh-base = { path = \"x\" }\n\
+                 patch.my-registry.nsh-js.path = \"x\"\n\
+                 patch.\"https://example.invalid/b\" = { nsh-base = { path = \"x\" } }\n\
+                 [workspace]\n",
+            ),
+            root(
+                "none",
+                "[workspace]\n[patch.\"https://example.invalid/c\"]\nserde = { path = \"x\" }\n",
+            ),
+            dir.join("missing/Cargo.toml"),
+        ];
+        // Each once, by manifest and then by name, without crates.io or what
+        // patches no nsh crate; a manifest that cannot be read adds none.
+        assert_eq!(
+            super::patched_sources(&roots),
+            [
+                "https://example.invalid/b",
+                "https://example.invalid/a",
+                "my-registry"
+            ]
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_app_without_patches_of_nsh_gets_the_same_workspace() {
+        let dir = std::env::temp_dir().join(format!("nsh-rust-unpatched-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let checkout =
+            dunce::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).unwrap();
+        let native = dir.join("app/native");
+        let core = checkout.join("crates/nsh-core");
+        write_crate(
+            &native,
+            "unpatched-app",
+            "",
+            &format!("nsh-core = {{ path = {:?} }}\n", core.to_string_lossy()),
+        );
+        let (nsh, roots) = Nsh::of(&[AppCrate {
+            package: "unpatched-app".into(),
+            dir: native.clone(),
+        }])
+        .unwrap();
+        assert!(super::patched_sources(&roots).is_empty());
+        let mut app = app(&dir.join("app"), &[("unpatched-app", native)], None);
+        app.nsh = nsh;
+        let manifest = || {
+            app.write_workspace_manifest(&app.workspace, "[workspace]\n", false)
+                .unwrap();
+            std::fs::read_to_string(app.workspace.join("Cargo.toml")).unwrap()
+        };
+        let before = manifest();
+        let crates_io = before.find("\n[patch.crates-io]\n").unwrap();
+        assert_eq!(
+            before[crates_io..].matches("[patch.").count(),
+            1,
+            "{before}"
+        );
+        assert!(
+            before.ends_with(&format!(
+                "nsh-platform-web = {{ path = {:?} }}\n",
+                checkout.join("crates/nsh-platform-web").to_string_lossy()
+            )),
+            "{before}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
