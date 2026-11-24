@@ -3907,6 +3907,7 @@ dependencies = [
  "sha2 0.10.9",
  "syntect",
  "tar",
+ "toml 1.1.8+spec-1.1.0",
  "tungstenite 0.30.0",
  "ureq",
  "url",
