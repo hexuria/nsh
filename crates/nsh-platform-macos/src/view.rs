@@ -1707,7 +1707,7 @@ fn scripted_type() -> Option<NSEventType> {
 
 /// Runs `f` (which hands `event` to a window) with `event` as the one
 /// AppKit handles, for the root's `hitTest:`.
-#[cfg(any(feature = "dev", feature = "gpui-agent", test))]
+#[cfg(any(feature = "dev", test))]
 pub(crate) fn scripted<R>(event: &NSEvent, f: impl FnOnce() -> R) -> R {
     let old = SCRIPTED.replace(Some(event.retain()));
     let r = f();
@@ -2525,39 +2525,6 @@ impl NshView {
         })
     }
 
-    /// Its ancestors as [`clip_span`] takes them, innermost first.
-    #[cfg(feature = "gpui-agent")]
-    fn clip_ancestors(&self) -> impl Iterator<Item = (crate::sight::Span, (f32, f32), bool)> {
-        std::iter::successors(self.parent_view(), NshView::parent_view).map(|p| {
-            let clips = p.state().clips() || p.state().id == ROOT_ID;
-            (
-                crate::sight::placed(p.ns().frame()),
-                crate::scroll::bounds_origin(&p),
-                clips,
-            )
-        })
-    }
-
-    /// The part of it that [`NshView::shown`] finds not clipped away, in
-    /// the root's coordinates; `None` when nothing of it shows. The agent
-    /// presses the middle of this part, not of the whole view: a row half
-    /// scrolled out is pressed where it can be seen.
-    #[cfg(feature = "gpui-agent")]
-    pub(crate) fn shown_part(&self) -> Option<NSRect> {
-        let ns = self.ns();
-        if ns.window().is_none() || ns.isHiddenOrHasHiddenAncestor() {
-            return None;
-        }
-        let (x0, y0, x1, y1) = clip_span(crate::sight::placed(ns.frame()), self.clip_ancestors())?;
-        // The walk ends in the root's parent's space: back into the root's.
-        let root = std::iter::successors(self.parent_view(), NshView::parent_view).last()?;
-        let origin = root.ns().frame().origin;
-        Some(NSRect::new(
-            NSPoint::new(f64::from(x0) - origin.x, f64::from(y0) - origin.y),
-            CGSize::new(f64::from(x1 - x0), f64::from(y1 - y0)),
-        ))
-    }
-
     /// Whether it is out of sight but within a viewport of showing: no
     /// more than its innermost scroll view's width or height past any
     /// clipping ancestor's edge (a list row a scroll brings in next).
@@ -3209,7 +3176,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpui-agent")]
     fn the_shown_part_of_a_row_half_scrolled_out_is_what_the_list_shows() {
         // A 600-point list at y 100 scrolled 20 points: the row at 0..40
         // shows from 20 to 40, at 100..120 in the screen.
