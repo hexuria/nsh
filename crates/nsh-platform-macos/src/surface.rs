@@ -663,12 +663,14 @@ impl Surface {
 
     /// The ids of the app's own windows currently mounted
     /// (`Window.open` dialog roots).
+    #[cfg(feature = "dev")]
     pub fn app_windows(&self) -> Vec<NodeId> {
         crate::window::app_window_ids(self)
     }
 
     /// The node a press at `x`/`y` in the app window `id`'s
     /// coordinates lands on (`None` while it is not mounted).
+    #[cfg(feature = "dev")]
     pub fn window_node_at(&self, id: NodeId, x: f32, y: f32) -> Option<NodeId> {
         let (_, view) = crate::window::window_and_view(self, id)?;
         crate::input::view_at(&view, x, y).map(|view| view.id())
@@ -676,6 +678,7 @@ impl Surface {
 
     /// Whether the app window `id` is key (`None` while it is not
     /// mounted).
+    #[cfg(feature = "dev")]
     pub fn window_focused(&self, id: NodeId) -> Option<bool> {
         let (window, _) = crate::window::window_and_view(self, id)?;
         Some(crate::window::is_key(&window))
@@ -683,6 +686,7 @@ impl Surface {
 
     /// Resizes the app window `id`'s content area (`false` while it
     /// is not mounted).
+    #[cfg(feature = "dev")]
     pub fn resize_window(&self, id: NodeId, size: Size<Points>) -> bool {
         crate::window::resize(self, id, size)
     }
