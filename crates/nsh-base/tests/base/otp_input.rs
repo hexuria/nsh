@@ -526,3 +526,25 @@ fn a_burst_of_keys_keeps_its_order() {
     app.type_in_burst("id:otp", "123456", 2).unwrap();
     see(&mut app, "Changes [1,12,123,1234,12345,123456]");
 }
+
+/// A key landing while the field is being rewritten is not dropped: the
+/// invalid character makes the input rewrite the field mid-burst, and the
+/// digits after it must all survive in order.
+#[test]
+fn a_key_during_the_rewrite_is_not_dropped() {
+    let mut app = start::<Uncontrolled>();
+    app.type_in_burst("id:otp", "1a23456", 3).unwrap();
+    see(&mut app, "Changes [1,12,123,1234,12345,123456]");
+}
+
+/// The keyboard changing layout or an input method restarting mid-entry —
+/// digits arriving around a composition — loses nothing and keeps the
+/// order (the composition commits nothing here, as a relayout's does).
+#[test]
+fn a_composition_mid_entry_drops_no_key() {
+    let mut app = start::<Uncontrolled>();
+    app.type_in_burst("id:otp", "123", 2).unwrap();
+    app.compose("id:otp", "").unwrap();
+    app.type_in_burst("id:otp", "456", 1).unwrap();
+    see(&mut app, "Changes [1,12,123,1234,12345,123456]");
+}
