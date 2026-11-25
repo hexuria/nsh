@@ -44,6 +44,8 @@ use nsh_core::{
 
 use crate::input;
 
+
+
 /// How long the caret shows and hides while it blinks (`gpui-base`'s
 /// `BlinkCursor` `INTERVAL`).
 const BLINK: Duration = Duration::from_millis(500);
@@ -264,6 +266,11 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
     // controlled `value` comes back a JS turn later, so keys typed before
     // it does build on this, not on the `value` shown.
     let typed = stored(code.get_untracked().to_string());
+    // The field's text as its last `on_change` reported it: the caret pin
+    // is measured against this, never the binding, which lags a JS turn
+    // behind what the user typed (a keystroke's selection event is
+    // processed before its text).
+    let reported = stored(code.get_untracked().to_string());
     // The codes reported and not yet seen come back as `value`.
     let echoes = stored(Vec::<String>::new());
     let correction = stored(None::<Spawned<()>>);
@@ -308,6 +315,7 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
         if let Some(task) = correction.replace(None) {
             task.cancel();
         }
+        reported.replace(text.to_owned());
         let before = field.get_untracked();
         let (deleted, inserted) = diff(&before, text);
         let shown = typed.get();
@@ -453,9 +461,19 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                 .on_change(move |text: &str| changed(text))
                 .on_selection_change(move |selection: &Selection| {
                     // The caret stays at the end: nothing is edited in the
-                    // middle.
-                    let end = utf16_len(&field.get_untracked());
-                    if (selection.start, selection.end) != (end, end) {
+                    // middle. The end is measured against the field's last
+                    // reported text, never the binding, which lags a JS
+                    // turn behind what the user typed: a keystroke's
+                    // selection event arrives ahead of its text, so the
+                    // binding's end is short of where typing put the caret,
+                    // and pinning to it would pull the caret back into the
+                    // text mid-burst. Only a caret strictly inside the
+                    // reported text is pinned back: past or at its end the
+                    // caret is where typing left it (clicks and arrows
+                    // cannot reach past the text), and the write would
+                    // itself be the edit it means to prevent.
+                    let end = utf16_len(&reported.get());
+                    if selection.end < end {
                         field_ref.set_selection(end, end);
                     }
                 })

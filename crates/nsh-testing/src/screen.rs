@@ -1023,7 +1023,9 @@ impl Screen {
             Command::SetSelection { start, end, count } => {
                 // As the platforms apply it: dropped when the user edited
                 // since the count the write was made against.
-                if let Some(input) = self.input_mut(id) {
+                if let Some(input) = self.input_mut(id)
+                    && *count >= input.count
+                {
                     input.selection = (*start, *end);
                 }
             }

@@ -3309,6 +3309,9 @@ pub(crate) fn set_selection(view: &NshView, start: u32, end: u32, count: u32) {
     let Some(input) = view.state().input.clone() else {
         return;
     };
+    if count < input.count.get() {
+        return;
+    }
     let selected = input.editor.borrow().select(start, end);
     if !selected {
         // A field only has a selection while it is edited.
