@@ -264,11 +264,6 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
     // controlled `value` comes back a JS turn later, so keys typed before
     // it does build on this, not on the `value` shown.
     let typed = stored(code.get_untracked().to_string());
-    // The field's text as its last `on_change` reported it: the caret pin
-    // is measured against this, never the binding, which lags a JS turn
-    // behind what the user typed (a keystroke's selection event is
-    // processed before its text).
-    let reported = stored(code.get_untracked().to_string());
     // The codes reported and not yet seen come back as `value`.
     let echoes = stored(Vec::<String>::new());
     let correction = stored(None::<Spawned<()>>);
@@ -313,7 +308,6 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
         if let Some(task) = correction.replace(None) {
             task.cancel();
         }
-        reported.replace(text.to_owned());
         let before = field.get_untracked();
         let (deleted, inserted) = diff(&before, text);
         let shown = typed.get();
@@ -466,26 +460,21 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                 .optional_label(props.accessibility_label)
                 .value(move || field.get())
                 .on_change(move |text: &str| changed(text))
-                .on_selection_change(move |selection: &Selection| {
-                    // The caret stays at the end: nothing is edited in the
-                    // middle. The end is measured against the field's last
-                    // reported text, never the binding, which lags a JS
-                    // turn behind what the user typed: a keystroke's
-                    // selection event arrives ahead of its text, so the
-                    // binding's end is short of where typing put the caret,
-                    // and pinning to it would pull the caret back into the
-                    // text mid-burst. Only a caret strictly inside the
-                    // reported text is pinned back: past or at its end the
-                    // caret is where typing left it (clicks and arrows
-                    // cannot reach past the text), and the write would
-                    // itself be the edit it means to prevent.
-                    let end = utf16_len(&reported.get());
-                    // Only a bare caret is pinned. A selection is the user's
-                    // own (a long press, for the edit menu): pinning it back
-                    // to the end would undo it before the menu even shows.
-                    if selection.start == selection.end && selection.end < end {
-                        field_ref.set_selection(end, end);
-                    }
+                .on_selection_change(move |_selection: &Selection| {
+                    // The caret is the user's own, wherever they put it:
+                    // a selection is theirs for the edit menu, and a caret
+                    // inside the text is where an arrow or a click left
+                    // it. The reconstruction reads any single contiguous
+                    // edit exactly — what the field lost, wherever it lost
+                    // it, comes out of the code and the rest close up — so
+                    // nothing is pinned to the end. Pinning was the burst
+                    // fault itself: measured against the binding, which
+                    // lags a JS turn behind what the user typed, it yanked
+                    // the caret into the text mid-burst and the next key
+                    // landed inside it; and it undid the caret moves a
+                    // selection starts with, so a cut of the first digits
+                    // cut the last. The rewrite after a correction places
+                    // the caret at the end itself, count-guarded.
                 })
                 .on_focus(move || {
                     focused.set(true);

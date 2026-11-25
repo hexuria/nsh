@@ -357,12 +357,14 @@ fn the_focus_is_reported_as_it_comes_and_goes() {
 }
 
 #[test]
-fn the_caret_stays_at_the_end() {
+fn a_caret_inside_the_text_is_the_users_own() {
     let (mut app, inputs) = start_observing::<Uncontrolled>();
     app.type_text("id:otp", "12").unwrap();
     see(&mut app, "Changes [1,12]");
-    // A press into the middle of the field's text moves its caret there,
-    // which goes back to the end.
+    // A caret inside the text (an arrow key, a click, the start of a
+    // drag) is not pinned to the end: pinning it was the burst fault, and
+    // it undid the caret moves a selection starts with. The reconstruction
+    // reads an edit wherever it happens, so the end needs no enforcing.
     let field = inputs
         .lock()
         .unwrap()
@@ -371,6 +373,7 @@ fn the_caret_stays_at_the_end() {
         .expect("the field")
         .0;
     let at = PayloadValue::Number;
+    let before = app.screen().commands().len();
     app.engine().control().dispatch_event(
         field,
         EventKind::SelectionChange,
@@ -378,16 +381,11 @@ fn the_caret_stays_at_the_end() {
     );
     app.wait(Duration::from_millis(50)).unwrap();
     assert!(
-        app.screen().commands().contains(&(
-            field,
-            Command::SetSelection {
-                start: 2,
-                end: 2,
-                count: 2
-            }
-        )),
-        "{:?}",
-        app.screen().commands()
+        !app.screen().commands()[before..]
+            .iter()
+            .any(|(id, c)| *id == field && matches!(c, Command::SetSelection { .. })),
+        "no pin answers a caret: {:?}",
+        &app.screen().commands()[before..]
     );
 }
 
@@ -585,4 +583,177 @@ fn a_users_selection_is_not_pinned_away() {
         "no pin answers a selection: {:?}",
         &app.screen().commands()[before..]
     );
+}
+
+/// Three digits in, a selection removed with Backspace (what the edit
+/// menu's Cut and the delete keys share: the range goes, the rest close
+/// up): one digit first, middle or last, two, or all of them.
+#[test]
+fn a_selection_cut_removes_exactly_it() {
+    for (from, end, rest) in [
+        (0, 1, "23"),
+        (1, 2, "13"),
+        (2, 3, "12"),
+        (0, 2, "3"),
+        (1, 3, "1"),
+        (0, 3, ""),
+    ] {
+        let mut app = start::<Uncontrolled>();
+        app.type_text("id:otp", "123").unwrap();
+        see(&mut app, "Changes [1,12,123]");
+        app.select("id:otp", from, end).unwrap();
+        app.press_key("backspace").unwrap();
+        app.wait(Duration::from_millis(50)).unwrap();
+        assert_eq!(field(&mut app, "id:otp"), rest, "cut ({from},{end}) of 123");
+    }
+}
+
+/// The forward delete key over a selection removes exactly it too.
+#[test]
+fn a_selection_forward_delete_removes_exactly_it() {
+    let mut app = start::<Uncontrolled>();
+    app.type_text("id:otp", "123").unwrap();
+    app.select("id:otp", 1, 2).unwrap();
+    app.press_key("delete").unwrap();
+    app.wait(Duration::from_millis(50)).unwrap();
+    assert_eq!(field(&mut app, "id:otp"), "13");
+}
+
+/// Typing over a selection replaces exactly it, the rest untouched.
+#[test]
+fn typing_over_a_selection_replaces_exactly_it() {
+    for (from, end, code) in [(1, 2, "153"), (0, 1, "523"), (2, 3, "125"), (0, 3, "5")] {
+        let mut app = start::<Uncontrolled>();
+        app.type_text("id:otp", "123").unwrap();
+        app.select("id:otp", from, end).unwrap();
+        app.type_text("id:otp", "5").unwrap();
+        app.wait(Duration::from_millis(50)).unwrap();
+        assert_eq!(
+            field(&mut app, "id:otp"),
+            code,
+            "type 5 over ({from},{end}) of 123"
+        );
+    }
+}
+
+/// Backspace with no selection removes the digit before the caret: at
+/// the end, the last cell's.
+#[test]
+fn a_bare_backspace_removes_the_digit_before_the_caret() {
+    let mut app = start::<Uncontrolled>();
+    app.type_text("id:otp", "123").unwrap();
+    app.press_key("backspace").unwrap();
+    app.wait(Duration::from_millis(50)).unwrap();
+    assert_eq!(field(&mut app, "id:otp"), "12");
+}
+
+/// The controlled matrix: the same cut, delete and type-over cases with
+/// the app owning the code, as every real use has it.
+#[test]
+fn a_controlled_selection_cut_removes_exactly_it() {
+    for (from, end, rest) in [(0, 1, "23"), (1, 2, "13"), (2, 3, "12"), (0, 3, "")] {
+        let mut app = start::<Controlled>();
+        app.clear("id:otp").unwrap();
+        app.type_text("id:otp", "123").unwrap();
+        see(&mut app, "Code [123]");
+        app.select("id:otp", from, end).unwrap();
+        app.press_key("backspace").unwrap();
+        app.wait(Duration::from_millis(80)).unwrap();
+        assert_eq!(
+            field(&mut app, "id:otp"),
+            rest,
+            "controlled cut ({from},{end}) of 123"
+        );
+    }
+}
+
+/// The controlled roundtrip a turn late, as a TSX app's comes back: a
+/// cut still removes exactly the selection.
+#[test]
+fn a_late_controlled_selection_cut_removes_exactly_it() {
+    for (from, end, rest) in [(0, 1, "23"), (1, 2, "13"), (2, 3, "12"), (0, 3, "")] {
+        let mut app = start::<Late>();
+        app.type_text("id:otp", "123").unwrap();
+        app.wait(Duration::from_millis(150)).unwrap();
+        app.select("id:otp", from, end).unwrap();
+        app.press_key("backspace").unwrap();
+        app.wait(Duration::from_millis(150)).unwrap();
+        assert_eq!(
+            field(&mut app, "id:otp"),
+            rest,
+            "late cut ({from},{end}) of 123"
+        );
+    }
+}
+
+/// Typing over a selection in the controlled input, the echo a turn late.
+#[test]
+fn a_late_controlled_type_over_replaces_exactly_it() {
+    let mut app = start::<Late>();
+    app.type_text("id:otp", "123").unwrap();
+    app.wait(Duration::from_millis(150)).unwrap();
+    app.select("id:otp", 1, 2).unwrap();
+    app.type_text("id:otp", "5").unwrap();
+    app.wait(Duration::from_millis(150)).unwrap();
+    assert_eq!(field(&mut app, "id:otp"), "153");
+}
+
+/// The keyboard path to a selection, as a user forms it: arrows move the
+/// caret, shifted arrows grow the selection. A caret inside the text must
+/// stay where the arrow put it — before the fix the pin yanked it back to
+/// the end, so a selection meant for the first or middle digit formed at
+/// the end and the cut or delete removed the wrong digits.
+#[test]
+fn an_arrowed_selection_cuts_exactly_it() {
+    // (arrows left from the end, shifted left, the digits of 123 that stay)
+    for (lefts, shifted, rest) in [
+        (2, 1, "23"), // first digit
+        (1, 1, "13"), // middle
+        (0, 1, "12"), // last
+        (1, 2, "3"),  // first two
+        (0, 2, "1"),  // last two
+    ] {
+        let mut app = start::<Uncontrolled>();
+        app.type_text("id:otp", "123").unwrap();
+        see(&mut app, "Changes [1,12,123]");
+        for _ in 0..lefts {
+            app.press_key("left").unwrap();
+        }
+        for _ in 0..shifted {
+            app.press_key("shift+left").unwrap();
+        }
+        app.press_key("backspace").unwrap();
+        app.wait(Duration::from_millis(80)).unwrap();
+        assert_eq!(
+            field(&mut app, "id:otp"),
+            rest,
+            "left {lefts} shift+left {shifted} of 123"
+        );
+    }
+}
+
+/// Typing over an arrowed selection replaces exactly it.
+#[test]
+fn typing_over_an_arrowed_selection_replaces_exactly_it() {
+    let mut app = start::<Uncontrolled>();
+    app.type_text("id:otp", "123").unwrap();
+    see(&mut app, "Changes [1,12,123]");
+    app.press_key("left").unwrap();
+    app.press_key("shift+left").unwrap();
+    app.type_text("id:otp", "5").unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(field(&mut app, "id:otp"), "153");
+}
+
+/// A bare backspace after arrows removes the digit before the caret, not
+/// the last digit.
+#[test]
+fn a_bare_backspace_after_arrows_removes_the_digit_before_the_caret() {
+    let mut app = start::<Uncontrolled>();
+    app.type_text("id:otp", "123").unwrap();
+    see(&mut app, "Changes [1,12,123]");
+    app.press_key("left").unwrap();
+    app.press_key("backspace").unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(field(&mut app, "id:otp"), "13");
 }
