@@ -277,6 +277,11 @@ pub(crate) struct AndroidConfig {
     /// TLS. Off by default, as Android has it from API 28 on.
     #[serde(default)]
     pub(crate) uses_cleartext_traffic: bool,
+    /// Android may back the app's data up to the user's Google account and
+    /// copy it to a new device (`android:allowBackup`). On unless `false`,
+    /// as Android has it; `false` also writes the rules that keep the data
+    /// out of both on Android 12 and later.
+    pub(crate) allow_backup: Option<bool>,
 }
 
 impl AndroidConfig {
@@ -290,6 +295,11 @@ impl AndroidConfig {
             );
         }
         Ok(level)
+    }
+
+    /// `allowBackup`: on unless the app turned it off.
+    pub(crate) fn allow_backup(&self) -> bool {
+        self.allow_backup.unwrap_or(true)
     }
 }
 
@@ -1470,6 +1480,7 @@ fn package_android(
             activity: "com.longbridge.nsh.AppActivity",
             dev: options.development,
             cleartext: config.android.uses_cleartext_traffic,
+            backup: config.android.allow_backup(),
             notifications: config.notifications(),
             microphone: config.web_media("microphone"),
             camera: config.web_media("camera"),
@@ -2840,6 +2851,35 @@ mod tests {
         assert!(cleartext(
             serde_json::json!({ "android": { "usesCleartextTraffic": true } })
         ));
+    }
+
+    #[test]
+    fn android_backup_is_on_unless_turned_off() {
+        let backup = |json: serde_json::Value| {
+            serde_json::from_value::<AppConfig>(json)
+                .unwrap()
+                .android
+                .allow_backup()
+        };
+        assert!(backup(serde_json::json!({})));
+        assert!(backup(
+            serde_json::json!({ "android": { "targetSdk": 36 } })
+        ));
+        assert!(backup(
+            serde_json::json!({ "android": { "allowBackup": true } })
+        ));
+        assert!(!backup(
+            serde_json::json!({ "android": { "allowBackup": false } })
+        ));
+        // A value of another form is left out with a warning, and backup
+        // stays as Android has it: the warning is what tells the app.
+        let (config, ignored) = parse_config(r#"{ "android": { "allowBackup": "no" } }"#).unwrap();
+        assert!(config.android.allow_backup());
+        assert_eq!(ignored.len(), 1, "{ignored:?}");
+        assert!(
+            ignored[0].starts_with("android.allowBackup:"),
+            "{ignored:?}"
+        );
     }
 
     #[test]

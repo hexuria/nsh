@@ -63,7 +63,7 @@ TSX app adds its entry (`nsh package App.tsx --target …`).
 
 `nsh.json` also holds `rust` and `root` (the app's crates and its root component, [Building with Rust](./rust.md)),
 `theme` and `appearance`, `tailwind` (see [Tailwind](./tailwind.md)), `capabilities` (see
-[Sandbox and capabilities](./sandbox-and-capabilities.md)), `android` (`targetSdk` and `usesCleartextTraffic`, [below](#target-api-level)), `ios` and `macos` (the `Info.plist` keys and entitlements
+[Sandbox and capabilities](./sandbox-and-capabilities.md)), `android` (`targetSdk`, `usesCleartextTraffic` and `allowBackup`, [below](#target-api-level)), `ios` and `macos` (the `Info.plist` keys and entitlements
 of their packages, [below](#infoplist-keys-and-entitlements); `macos.activationPolicy`, a [menu bar app](./macos.md#menu-bar-apps)) and `updater`, which makes desktop packages update themselves
 (see [App Updates](./app-updates.md)) and every native package take [OTA updates](./ota-updates.md); [Project structure](./project-structure.md#nshjson) lists
 every key. A key or value NSH cannot read is reported as a warning and left out, so an app written for a newer NSH
@@ -200,6 +200,23 @@ Packaged apps make requests over HTTPS. For servers without TLS, such as one on 
 ```
 
 Development builds (`nsh run --target android`) always allow plain HTTP: they load the app from the dev server over it.
+
+### Backup
+
+Android backs an app's data up to the user's Google account and copies it to their next device
+([Auto Backup](https://developer.android.com/identity/data/autobackup)). An app whose data must stay on the device,
+such as one that keeps a sign-in or a key in its files, turns that off with `android.allowBackup`:
+
+```json
+{
+  "android": { "allowBackup": false }
+}
+```
+
+The package then declares `android:allowBackup="false"` and `android:fullBackupContent="false"`, and data extraction
+rules (`android:dataExtractionRules`, Android 12 and later) that leave every part of the app's storage out of both the
+cloud backup and the transfer to another device. Without the key, or with `true`, the package says nothing about backup
+and Android's own default applies.
 
 ### Google Play: App Bundles
 
