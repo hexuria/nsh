@@ -859,6 +859,7 @@ pub(crate) fn install_android_host(
                 activity: "com.longbridge.nsh.DevActivity",
                 dev: true,
                 cleartext: true,
+                backup: true,
                 notifications: true,
                 // The host runs any app: its pages may capture media.
                 microphone: true,

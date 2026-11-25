@@ -56,7 +56,7 @@ nsh package App.tsx --target ios-simulator --run
 | `build` | number | `1` | 构建号（`CFBundleVersion`、`versionCode`）。每次上传新版本都要递增。 |
 | `icon` | string \| object | 无 | 一张正方形 PNG，最好是 1024×1024，路径相对于 `nsh.json`；也可按平台分别提供（[图标](#图标)）。 |
 
-`nsh.json` 还包含 `rust` 和 `root`（应用的 crate 和根组件，见[用 Rust 开发](./rust.md)）、`theme` 和 `appearance`、`tailwind`（见 [Tailwind](./tailwind.md)）、`capabilities`（见[沙箱与能力](./sandbox-and-capabilities.md)）、`android`（`targetSdk` 和 `usesCleartextTraffic`，见下文“目标 API 级别”和“明文 HTTP”）、`ios` 和 `macos`（对应包的 `Info.plist` 键和 entitlements，见[下文](#infoplist-键与-entitlements)；`macos.activationPolicy` 用于[菜单栏应用](./macos.md#菜单栏应用)）以及让桌面包自我更新、让所有原生包接收 [OTA 更新](./ota-updates.md)的 `updater`（见[应用更新](./app-updates.md)）；[项目结构](./project-structure.md#nshjson)列出了所有键。NSH 读不懂的键或值会给出警告并被略过：为更新的 NSH 写的应用在较旧的 NSH 上照样能构建，拼写错误也会在警告里看到。
+`nsh.json` 还包含 `rust` 和 `root`（应用的 crate 和根组件，见[用 Rust 开发](./rust.md)）、`theme` 和 `appearance`、`tailwind`（见 [Tailwind](./tailwind.md)）、`capabilities`（见[沙箱与能力](./sandbox-and-capabilities.md)）、`android`（`targetSdk`、`usesCleartextTraffic` 和 `allowBackup`，见下文“目标 API 级别”、“明文 HTTP”和“备份”）、`ios` 和 `macos`（对应包的 `Info.plist` 键和 entitlements，见[下文](#infoplist-键与-entitlements)；`macos.activationPolicy` 用于[菜单栏应用](./macos.md#菜单栏应用)）以及让桌面包自我更新、让所有原生包接收 [OTA 更新](./ota-updates.md)的 `updater`（见[应用更新](./app-updates.md)）；[项目结构](./project-structure.md#nshjson)列出了所有键。NSH 读不懂的键或值会给出警告并被略过：为更新的 NSH 写的应用在较旧的 NSH 上照样能构建，拼写错误也会在警告里看到。
 
 上表中的每个键都可以在命令行上覆盖，这在 CI 中很方便：
 
@@ -178,6 +178,22 @@ platform（`sdkmanager "platforms;android-36"`）：
 ```
 
 开发构建（`nsh run --target android`）始终允许明文 HTTP：它们通过明文 HTTP 从开发服务器加载应用。
+
+### 备份
+
+Android 会把应用的数据备份到用户的 Google 账号，并复制到用户的下一台设备
+（[自动备份](https://developer.android.com/identity/data/autobackup)）。如果应用的数据必须留在设备上（比如把登录信息或密钥存在
+自己的文件里），用 `android.allowBackup` 关掉它：
+
+```json
+{
+  "android": { "allowBackup": false }
+}
+```
+
+这样打出的包会声明 `android:allowBackup="false"` 和 `android:fullBackupContent="false"`，以及数据提取规则
+（`android:dataExtractionRules`，Android 12 及以上），把应用存储的每个部分都排除在云备份和设备间迁移之外。不写这个键或写 `true` 时，
+包里不声明任何备份设置，使用 Android 自己的默认行为。
 
 ### Google Play：App Bundle
 

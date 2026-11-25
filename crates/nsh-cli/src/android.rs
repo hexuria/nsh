@@ -189,6 +189,45 @@ fn newest(dir: &Path) -> Option<PathBuf> {
     versions.pop()
 }
 
+/// Resource name (`@xml/…`) of the data extraction rules of an app that
+/// turned backup off.
+const NO_BACKUP_RULES: &str = "nsh_no_backup";
+
+/// Every place Android's backup rules can name: the app's private storage
+/// by kind, its external storage, and the same in device-protected storage.
+const BACKUP_DOMAINS: [&str; 9] = [
+    "root",
+    "file",
+    "database",
+    "sharedpref",
+    "external",
+    "device_root",
+    "device_file",
+    "device_database",
+    "device_sharedpref",
+];
+
+/// The data extraction rules (Android 12 and later) of an app that turned
+/// backup off: nothing goes into a cloud backup, and nothing into a
+/// transfer to another device, which `android:allowBackup="false"` alone
+/// leaves on for an app that targets Android 12.
+fn no_backup_rules_xml() -> String {
+    let excludes: String = BACKUP_DOMAINS
+        .iter()
+        .map(|domain| format!("\n        <exclude domain=\"{domain}\" path=\".\" />"))
+        .collect();
+    format!(
+        r#"<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>{excludes}
+    </cloud-backup>
+    <device-transfer>{excludes}
+    </device-transfer>
+</data-extraction-rules>
+"#
+    )
+}
+
 /// What goes into an APK.
 pub(crate) struct Apk<'a> {
     pub(crate) package: &'a str,
@@ -206,6 +245,10 @@ pub(crate) struct Apk<'a> {
     /// builds (the dev server's assets) and apps whose `nsh.json` sets
     /// `android.usesCleartextTraffic`.
     pub(crate) cleartext: bool,
+    /// Android may back the app's data up to the user's Google account and
+    /// copy it to a new device (nsh.json `android.allowBackup`): on, as
+    /// Android has it, unless the app says `false`.
+    pub(crate) backup: bool,
     /// The app may show notifications: `POST_NOTIFICATIONS` is declared.
     pub(crate) notifications: bool,
     /// Web pages may use the microphone and the camera
@@ -282,7 +325,7 @@ pub(crate) fn build(sdk: &Sdk, apk: &Apk<'_>, format: Format, out: &Path) -> any
     }
     fs::create_dir_all(&work)?;
 
-    // Resources: only the launcher icon.
+    // Resources: the launcher icon.
     let mut flat = Vec::new();
     if let Some(icon) = apk.icon {
         // aapt2 parses the file's path itself: the components joined in one
@@ -321,6 +364,24 @@ pub(crate) fn build(sdk: &Sdk, apk: &Apk<'_>, format: Format, out: &Path) -> any
                 .arg("-o")
                 .arg(&compiled))?;
         }
+        for entry in fs::read_dir(&compiled)? {
+            flat.push(entry?.path());
+        }
+    }
+
+    // Backup turned off: the rules the manifest names.
+    if !apk.backup {
+        let xml = work.join("res").join("xml");
+        fs::create_dir_all(&xml)?;
+        let rules = xml.join(format!("{NO_BACKUP_RULES}.xml"));
+        fs::write(&rules, no_backup_rules_xml())?;
+        let compiled = work.join("compiled-xml");
+        fs::create_dir_all(&compiled)?;
+        run(Command::new(sdk.tool("aapt2"))
+            .arg("compile")
+            .arg(&rules)
+            .arg("-o")
+            .arg(&compiled))?;
         for entry in fs::read_dir(&compiled)? {
             flat.push(entry?.path());
         }
@@ -385,6 +446,17 @@ fn manifest_xml(apk: &Apk<'_>) -> String {
     } else {
         ""
     };
+    // `allowBackup` is what Android 11 and earlier read (it turns both the
+    // cloud backup and the transfer off there), `fullBackupContent` says
+    // the same of the automatic backup's files, and the rules are Android
+    // 12's (`no_backup_rules_xml`).
+    let backup = if apk.backup {
+        String::new()
+    } else {
+        format!(
+            "\n        android:allowBackup=\"false\"\n        android:fullBackupContent=\"false\"\n        android:dataExtractionRules=\"@xml/{NO_BACKUP_RULES}\""
+        )
+    };
     let rust = if apk.rust {
         "\n        <meta-data android:name=\"com.longbridge.nsh.RUST\" android:value=\"true\" />"
     } else {
@@ -438,7 +510,7 @@ fn manifest_xml(apk: &Apk<'_>) -> String {
             <data android:mimeType="text/plain" />
         </intent>
     </queries>
-    <application android:label="{label}"{icon}{cleartext}
+    <application android:label="{label}"{icon}{cleartext}{backup}
         android:extractNativeLibs="false"
         android:enableOnBackInvokedCallback="true"
         android:supportsRtl="true"
@@ -855,6 +927,7 @@ mod tests {
             activity: "com.longbridge.nsh.AppActivity",
             dev: false,
             cleartext: false,
+            backup: true,
             notifications,
             microphone: false,
             camera: false,
@@ -935,6 +1008,44 @@ mod tests {
         let activity = manifest.find("<activity").unwrap();
         let at = manifest.find(attribute).expect(&manifest);
         assert!(application < at && at < activity, "{manifest}");
+    }
+
+    #[test]
+    fn an_app_that_turns_backup_off_keeps_its_data_on_the_device() {
+        // Unless the app says so, the manifest leaves backup as Android
+        // has it.
+        let manifest = super::manifest_xml(&apk(false, false));
+        for attribute in ["allowBackup", "fullBackupContent", "dataExtractionRules"] {
+            assert!(!manifest.contains(attribute), "{manifest}");
+        }
+        let manifest = super::manifest_xml(&super::Apk {
+            backup: false,
+            ..apk(false, false)
+        });
+        let application = manifest.find("<application").unwrap();
+        let provider = manifest.find("<provider").unwrap();
+        for attribute in [
+            r#"android:allowBackup="false""#,
+            r#"android:fullBackupContent="false""#,
+            r#"android:dataExtractionRules="@xml/nsh_no_backup""#,
+        ] {
+            let at = manifest
+                .find(attribute)
+                .unwrap_or_else(|| panic!("{manifest}"));
+            assert!(application < at && at < provider, "{manifest}");
+        }
+        // The rules keep every kind of the app's storage out of both the
+        // cloud backup and the transfer to another device.
+        let rules = super::no_backup_rules_xml();
+        let (cloud, transfer) = rules.split_once("<device-transfer>").unwrap();
+        assert!(cloud.contains("<cloud-backup>"), "{rules}");
+        for section in [cloud, transfer] {
+            assert!(!section.contains("<include"), "{rules}");
+            for domain in super::BACKUP_DOMAINS {
+                let exclude = format!(r#"<exclude domain="{domain}" path="." />"#);
+                assert_eq!(section.matches(&exclude).count(), 1, "{rules}");
+            }
+        }
     }
 
     #[test]
