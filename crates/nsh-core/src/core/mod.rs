@@ -2968,7 +2968,21 @@ impl<M: TextEngine> Core<M> {
                 Ok(())
             }
             Op::Command { id, command } => {
-                self.key(id)?;
+                let key = self.key(id)?;
+                // A selection written against the text the writer last saw
+                // is stale the moment the user edits again: it goes with
+                // the input's edit count, as a value does.
+                let command = match command {
+                    Command::SetSelection { start, end, .. } => {
+                        let count = self.nodes[key as usize]
+                            .input
+                            .as_ref()
+                            .map(|input| input.count)
+                            .unwrap_or(0);
+                        Command::SetSelection { start, end, count }
+                    }
+                    command => command,
+                };
                 self.commands.push((id, command));
                 Ok(())
             }
@@ -6509,8 +6523,11 @@ impl<M: TextEngine> Core<M> {
                     Prop::Selection(start, end) => {
                         // Applied after the batch's value.
                         let id = node.id;
-                        self.commands
-                            .push((id, Command::SetSelection { start, end }));
+                        let count = input.count;
+                        self.commands.push((
+                            id,
+                            Command::SetSelection { start, end, count },
+                        ));
                         return Ok(());
                     }
                     _ => return Ok(()),

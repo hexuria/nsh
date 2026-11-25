@@ -380,7 +380,7 @@ fn the_caret_stays_at_the_end() {
     assert!(
         app.screen()
             .commands()
-            .contains(&(field, Command::SetSelection { start: 2, end: 2 })),
+            .contains(&(field, Command::SetSelection { start: 2, end: 2, count: 2 })),
         "{:?}",
         app.screen().commands()
     );
@@ -506,4 +506,23 @@ fn filled_cells_take_their_data_filled_classes() {
     app.wait(Duration::from_millis(50)).unwrap();
     assert_eq!(field(&mut app, "id:otp"), "12");
     assert_eq!(filled_cells(&styles), 4);
+}
+
+/// Nine digits in one burst, as the OS delivers fast typing: several in
+/// flight while the first keys' roundtrip lands mid-burst. Before the
+/// caret fix the pins the lagging binding caused pulled the caret back
+/// into the text and the rest of the keys landed in the middle of it.
+#[test]
+fn a_burst_of_keys_keeps_its_order() {
+    let (mut app, inputs) = start_observing::<Uncontrolled>();
+    let field = inputs
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|i| i.2)
+        .expect("the field")
+        .0;
+    let _ = field;
+    app.type_in_burst("id:otp", "123456", 2).unwrap();
+    see(&mut app, "Changes [1,12,123,1234,12345,123456]");
 }

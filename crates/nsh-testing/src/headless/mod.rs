@@ -2113,6 +2113,29 @@ impl Headless {
         self.done()
     }
 
+    /// Types `text` into the input `selector` names as the OS delivers a
+    /// fast burst: the keys land in the input while the writes of the ones
+    /// before them are still in flight — no settling between characters —
+    /// and `apply_after` keys in, the batches arrived so far are applied
+    /// (the roundtrip of the first keys landing mid-burst), then the rest
+    /// of the keys land before anything more is applied.
+    pub fn type_in_burst(
+        &mut self,
+        selector: &str,
+        text: &str,
+        apply_after: usize,
+    ) -> Result<(), String> {
+        let id = self.input_step(selector, format!("burst({selector}, {text:?})"))?;
+        self.input_with(InputModality::Keyboard);
+        for (i, c) in text.chars().enumerate() {
+            if i == apply_after {
+                self.settle();
+            }
+            self.key(id, c);
+        }
+        self.done()
+    }
+
     /// The step `paste(<selector>, <content>)`: the user pastes `content`
     /// into the input `selector` names, as a paste with it on the clipboard
     /// does: the input takes the focus, `onPaste` reports it, then, while
@@ -2319,18 +2342,40 @@ impl Headless {
         {
             return;
         }
-        input.text.push(c);
+        // Insert at the caret, as the platform view does: over the
+        /// selection, which collapses after the inserted character (the
+        // selection is in UTF-16 units, the text indexed in bytes).
+        let selection = input.selection;
+        let at = |units: u32| {
+            let mut seen = 0u32;
+            input
+                .text
+                .char_indices()
+                .find_map(|(byte, ch)| {
+                    let here = seen;
+                    seen += ch.len_utf16() as u32;
+                    (here == units).then_some(byte)
+                })
+                .unwrap_or(input.text.len())
+        };
+        let (start, end) = (at(selection.0.min(selection.1)), at(selection.0.max(selection.1)));
+        input.text.replace_range(start..end, &c.to_string());
+        let caret = selection.0.min(selection.1) + c.len_utf16() as u32;
+        input.selection = (caret, caret);
         input.count += 1;
         let payload = EventPayload::Text {
             text: input.text.clone(),
             count: input.count,
         };
+        // The platforms report the caret's move ahead of the text it came
+        // with (the selection event is dispatched in the same native
+        // insertion, the text after it).
+        self.report_selection(id);
         // Always reported: the engine keeps the text for layout and for
         // dropping stale values, whether JS listens or not.
         self.engine
             .control()
             .dispatch_event(id, EventKind::ChangeText, payload);
-        self.report_selection(id);
     }
 
     /// `onSelectionChange` and `onCaretMove` of input `id` after an edit,
@@ -2340,7 +2385,7 @@ impl Headless {
         let Some(input) = self.screen.input(id) else {
             return;
         };
-        let end = PayloadValue::Number(input.text.encode_utf16().count() as f64);
+        let end = PayloadValue::Number(input.selection.0 as f64);
         self.send(
             id,
             EventKind::SelectionChange,

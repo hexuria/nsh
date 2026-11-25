@@ -300,7 +300,7 @@ impl Mounter {
                 }
                 MountItem::Command {
                     id,
-                    command: Command::SetSelection { start, end },
+                    command: Command::SetSelection { start, end, count },
                 } => {
                     if let Some(field) = self.get_mut(id).and_then(|v| v.field.as_mut()) {
                         field.select(start, end);
