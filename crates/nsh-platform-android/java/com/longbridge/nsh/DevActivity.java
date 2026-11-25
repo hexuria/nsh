@@ -153,6 +153,18 @@ public final class DevActivity extends Activity {
             activity.getWindow().setAttributes(attributes);
         }
         systemBars(activity);
+        logBars(activity, "edgeToEdge");
+    }
+
+    /** Throwaway (try/android-nav-contrast-log): what the window says about its navigation bar. */
+    static void logBars(Activity activity, String when) {
+        android.view.Window w = activity.getWindow();
+        android.util.Log.i("NshBars", when
+                + " contrastEnforced=" + (Build.VERSION.SDK_INT >= 29 ? String.valueOf(w.isNavigationBarContrastEnforced()) : "n/a")
+                + " navColor=#" + Integer.toHexString(w.getNavigationBarColor())
+                + " decorFits=" + (Build.VERSION.SDK_INT >= 30 ? "set-false-by-nsh" : "n/a")
+                + " cutoutMode=" + (Build.VERSION.SDK_INT >= 28 ? w.getAttributes().layoutInDisplayCutoutMode : -1)
+                + " flags=#" + Integer.toHexString(w.getAttributes().flags));
     }
 
     /** Dark system bar icons in light mode, light ones in dark mode (the system's, until the app sets its own). */

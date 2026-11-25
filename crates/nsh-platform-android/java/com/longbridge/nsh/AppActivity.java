@@ -45,6 +45,12 @@ public final class AppActivity extends Activity {
     }
 
     @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        DevActivity.logBars(this, "focus=" + hasFocus);
+    }
+
+    @Override
     public void onConfigurationChanged(android.content.res.Configuration config) {
         super.onConfigurationChanged(config);
         DevActivity.systemBars(this);
