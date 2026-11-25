@@ -124,6 +124,11 @@ public final class DevActivity extends Activity {
     /** Draw behind the system bars: the app gets them as `safeArea()`. */
     @SuppressWarnings("deprecation")
     static void edgeToEdge(Activity activity) {
+        // The decor view first: creating it reads the window's theme again
+        // and resets what was set before from it, the navigation bar's
+        // contrast among them (measured on API 34: set false here, read
+        // true right after, the scrim still drawn).
+        activity.getWindow().getDecorView();
         if (Build.VERSION.SDK_INT >= 30) {
             activity.getWindow().setDecorFitsSystemWindows(false);
         } else {
