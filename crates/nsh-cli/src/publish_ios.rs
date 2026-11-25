@@ -13,13 +13,13 @@ use base64::{
     Engine as _,
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
 };
+use md5::{Digest, Md5};
 use ring::{
     rand::SystemRandom,
     signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair},
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use md5::{Digest, Md5};
 
 use crate::ui;
 
@@ -516,7 +516,10 @@ mod tests {
         for part in [&b"message "[..], &b"digest"[..]] {
             digest.update(part);
         }
-        assert_eq!(format!("{:x}", digest.finalize()), "f96b697d7cb7938d525a2f31aaf161d0");
+        assert_eq!(
+            format!("{:x}", digest.finalize()),
+            "f96b697d7cb7938d525a2f31aaf161d0"
+        );
     }
 
     fn operation(offset: u64, length: u64) -> UploadOperation {
