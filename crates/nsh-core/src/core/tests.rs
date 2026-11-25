@@ -15230,7 +15230,14 @@ mod components {
             commands,
             [
                 (input, Command::Focus),
-                (input, Command::SetSelection { start: 3, end: 3 }),
+                (
+                    input,
+                    Command::SetSelection {
+                        start: 3,
+                        end: 3,
+                        count: 1
+                    }
+                ),
                 (input, Command::InsertText("!".into()))
             ]
         );

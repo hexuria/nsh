@@ -3301,11 +3301,15 @@ pub fn editing_in(root: &NshView) -> bool {
         .is_some_and(|text| text.isDescendantOf(root))
 }
 
-/// `setSelection` (UTF-16 offsets).
-pub(crate) fn set_selection(view: &NshView, start: u32, end: u32) {
+/// `setSelection` (UTF-16 offsets), dropped when the user edited the
+/// input since the count the write was made against, as a stale value is.
+pub(crate) fn set_selection(view: &NshView, start: u32, end: u32, count: u32) {
     let Some(input) = view.state().input.clone() else {
         return;
     };
+    if count < input.count.get() {
+        return;
+    }
     let selected = input.editor.borrow().select(start, end);
     if !selected {
         // A field only has a selection while it is edited.

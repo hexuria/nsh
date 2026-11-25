@@ -681,6 +681,9 @@ pub(crate) struct Input {
     pub(crate) text: String,
     /// The edits reported so far ([`nsh_core::EventPayload::Text`]).
     pub(crate) count: u32,
+    /// The caret or selection (UTF-16 units), as the platform view keeps
+    /// it: keys insert at it, writes and selection commands move it.
+    pub(crate) selection: (u32, u32),
     pub(crate) config: Box<InputConfig>,
     /// What an input method composes in it (`app.compose`), at the end of
     /// its text: marked, not in `text` until it commits.
@@ -926,6 +929,16 @@ impl Screen {
                 if let Some(input) = self.input_mut(*id)
                     && *count >= input.count
                 {
+                    // The caret rides out the write as the platforms keep
+                    // it: at the end it stays at the end, inside it keeps
+                    // its place within the new text.
+                    let len = text.encode_utf16().count() as u32;
+                    let old_len = input.text.encode_utf16().count() as u32;
+                    input.selection = if input.selection.0 >= old_len {
+                        (len, len)
+                    } else {
+                        (input.selection.0.min(len), input.selection.1.min(len))
+                    };
                     input.text = text.clone();
                 }
             }
@@ -1004,6 +1017,16 @@ impl Screen {
     /// keeps it.
     fn command(&mut self, id: NodeId, command: &Command) {
         match command {
+            Command::SetSelection { start, end, count } => {
+                // As the platforms apply it: dropped when the user edited
+                // since the count the write was made against.
+                if let Some(input) = self.input_mut(id)
+                    && *count >= input.count
+                {
+                    input.selection = (*start, *end);
+                }
+            }
+
             Command::Dialog(dialog) => self.dialogs.push((**dialog).clone()),
             Command::CloseDialog(dialog) => {
                 self.closed_dialogs.insert(*dialog);

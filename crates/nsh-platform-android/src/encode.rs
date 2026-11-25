@@ -641,10 +641,11 @@ pub(crate) fn encode(batch: MountBatch, web_generation: u64) -> Encoded {
                         e.bool(block);
                     }
                     Command::ClearJsResponder => e.int(15),
-                    Command::SetSelection { start, end } => {
+                    Command::SetSelection { start, end, count } => {
                         e.int(16);
                         e.int(start as i32);
                         e.int(end as i32);
+                        e.int(count as i32);
                     }
                     Command::Announce(text) => {
                         e.int(17);

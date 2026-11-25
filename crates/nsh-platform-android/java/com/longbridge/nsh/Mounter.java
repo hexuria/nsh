@@ -2518,8 +2518,8 @@ final class Mounter {
             }
             case 15: clearJsResponder(); break;
             case 16: {
-                int start = b.getInt(), end = b.getInt();
-                if (v instanceof InputBox) ((InputBox) v).select(start, end);
+                int start = b.getInt(), end = b.getInt(), count = b.getInt();
+                if (v instanceof InputBox) ((InputBox) v).select(start, end, count);
                 break;
             }
             case 49: {

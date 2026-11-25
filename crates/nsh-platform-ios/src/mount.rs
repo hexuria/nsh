@@ -2086,8 +2086,8 @@ impl Mounter {
                 crate::audio::command(&self.audio, &self.control, &command, base.as_ref());
             }
             (Command::SetJsResponder { block }, _) => self.set_js_responder(id, block),
-            (Command::SetSelection { start, end }, Native::Input(input)) => {
-                input.select(start, end)
+            (Command::SetSelection { start, end, count }, Native::Input(input)) => {
+                input.select(start, end, count)
             }
             // Not carried out on iOS yet: the app's paste is lost, so say so.
             (Command::InsertText(_), _) => {
