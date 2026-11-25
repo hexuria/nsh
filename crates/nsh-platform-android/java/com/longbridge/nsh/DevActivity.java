@@ -134,6 +134,24 @@ public final class DevActivity extends Activity {
         }
         activity.getWindow().setStatusBarColor(0);
         activity.getWindow().setNavigationBarColor(0);
+        // With three-button navigation the system lays a translucent scrim
+        // over a transparent navigation bar (API 29+): a band across the
+        // bottom of the app, in a colour that is not the app's. The app
+        // paints that strip itself (`safeArea().bottom`), as it does with
+        // gesture navigation; dialogs do the same (`ModalHost`).
+        if (Build.VERSION.SDK_INT >= 29) activity.getWindow().setNavigationBarContrastEnforced(false);
+        // Around a camera cutout on a short edge too: in landscape the
+        // window would otherwise stop short of the cutout's side, a black
+        // bar the app cannot paint. From API 30 on, where `safeArea()`
+        // counts the cutout (`NshView.publishEnvironment`), so nothing of
+        // the app is drawn under it unasked. Android 15 does this by itself
+        // for an app that targets it.
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.view.WindowManager.LayoutParams attributes = activity.getWindow().getAttributes();
+            attributes.layoutInDisplayCutoutMode =
+                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            activity.getWindow().setAttributes(attributes);
+        }
         systemBars(activity);
     }
 
