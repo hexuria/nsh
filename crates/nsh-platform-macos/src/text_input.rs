@@ -95,8 +95,6 @@ use crate::{
     view::{NshView, ns_rect},
 };
 
-
-
 /// The view that edits.
 #[derive(Clone)]
 enum Editor {

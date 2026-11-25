@@ -645,6 +645,7 @@ pub(crate) fn encode(batch: MountBatch, web_generation: u64) -> Encoded {
                         e.int(16);
                         e.int(start as i32);
                         e.int(end as i32);
+                        e.int(count as i32);
                     }
                     Command::Announce(text) => {
                         e.int(17);

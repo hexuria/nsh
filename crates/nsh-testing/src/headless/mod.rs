@@ -2358,7 +2358,10 @@ impl Headless {
                 })
                 .unwrap_or(input.text.len())
         };
-        let (start, end) = (at(selection.0.min(selection.1)), at(selection.0.max(selection.1)));
+        let (start, end) = (
+            at(selection.0.min(selection.1)),
+            at(selection.0.max(selection.1)),
+        );
         input.text.replace_range(start..end, &c.to_string());
         let caret = selection.0.min(selection.1) + c.len_utf16() as u32;
         input.selection = (caret, caret);

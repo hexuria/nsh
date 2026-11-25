@@ -44,8 +44,6 @@ use nsh_core::{
 
 use crate::input;
 
-
-
 /// How long the caret shows and hides while it blinks (`gpui-base`'s
 /// `BlinkCursor` `INTERVAL`).
 const BLINK: Duration = Duration::from_millis(500);

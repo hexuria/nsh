@@ -937,10 +937,7 @@ impl Screen {
                     input.selection = if input.selection.0 >= old_len {
                         (len, len)
                     } else {
-                        (
-                            input.selection.0.min(len),
-                            input.selection.1.min(len),
-                        )
+                        (input.selection.0.min(len), input.selection.1.min(len))
                     };
                     input.text = text.clone();
                 }

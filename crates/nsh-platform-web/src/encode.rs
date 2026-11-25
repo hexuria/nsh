@@ -1477,6 +1477,7 @@ fn encode_command(out: &mut Out, id: u32, command: &Command) {
                 .str("setSelection")
                 .num(*start)
                 .num(*end)
+                .num(*count)
                 .end();
         }
         Command::InsertText(text) => {

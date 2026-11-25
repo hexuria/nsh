@@ -2087,7 +2087,7 @@ impl Mounter {
             }
             (Command::SetJsResponder { block }, _) => self.set_js_responder(id, block),
             (Command::SetSelection { start, end, count }, Native::Input(input)) => {
-                input.select(start, end)
+                input.select(start, end, count)
             }
             // Not carried out on iOS yet: the app's paste is lost, so say so.
             (Command::InsertText(_), _) => {

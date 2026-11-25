@@ -6524,10 +6524,8 @@ impl<M: TextEngine> Core<M> {
                         // Applied after the batch's value.
                         let id = node.id;
                         let count = input.count;
-                        self.commands.push((
-                            id,
-                            Command::SetSelection { start, end, count },
-                        ));
+                        self.commands
+                            .push((id, Command::SetSelection { start, end, count }));
                         return Ok(());
                     }
                     _ => return Ok(()),

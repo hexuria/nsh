@@ -378,9 +378,14 @@ fn the_caret_stays_at_the_end() {
     );
     app.wait(Duration::from_millis(50)).unwrap();
     assert!(
-        app.screen()
-            .commands()
-            .contains(&(field, Command::SetSelection { start: 2, end: 2, count: 2 })),
+        app.screen().commands().contains(&(
+            field,
+            Command::SetSelection {
+                start: 2,
+                end: 2,
+                count: 2
+            }
+        )),
         "{:?}",
         app.screen().commands()
     );

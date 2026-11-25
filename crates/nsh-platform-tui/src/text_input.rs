@@ -73,7 +73,12 @@ impl Field {
         }
     }
 
-    pub(crate) fn select(&mut self, start: u32, end: u32) {
+    /// Selects `start..end` unless the user edited since the core wrote it
+    /// against `count` (the same staleness a value write is dropped for).
+    pub(crate) fn select(&mut self, start: u32, end: u32, count: u32) {
+        if count < self.count {
+            return;
+        }
         let text = self.model.text();
         self.model.select(
             text_edit::utf16_to_byte(text, start),

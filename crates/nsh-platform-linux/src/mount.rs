@@ -422,7 +422,7 @@ impl Mounter {
             },
             Command::SetSelection { start, end, count } => {
                 if let Some(view) = view {
-                    crate::text_input::set_selection(view, *start, *end);
+                    crate::text_input::set_selection(view, *start, *end, *count);
                 }
             }
             Command::InsertText(text) => {
