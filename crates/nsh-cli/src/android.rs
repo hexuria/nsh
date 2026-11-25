@@ -271,6 +271,9 @@ pub(crate) struct Apk<'a> {
     pub(crate) abis: &'a [String],
     /// Launcher icon (square PNG).
     pub(crate) icon: Option<&'a Path>,
+    /// The launcher icon in layers (nsh.json `android.adaptiveIcon`), which
+    /// Android 8 and later take over `icon`.
+    pub(crate) adaptive_icon: Option<&'a crate::package::AdaptiveIcon>,
     /// Files under `assets/` in the APK: (path in the APK, contents).
     pub(crate) assets: Vec<(String, Vec<u8>)>,
     /// Notification sounds, raw resources: (resource name, file).
@@ -327,22 +330,17 @@ pub(crate) fn build(sdk: &Sdk, apk: &Apk<'_>, format: Format, out: &Path) -> any
 
     // Resources: the launcher icon.
     let mut flat = Vec::new();
-    if let Some(icon) = apk.icon {
-        // aapt2 parses the file's path itself: the components joined in one
-        // go (`join("res/mipmap-xxxhdpi")`) leave a mix of `/` and `\` on
-        // Windows, which it calls no valid file path. Joined by component
-        // the path comes out uniform.
-        let res = work.join("res").join("mipmap-xxxhdpi");
-        fs::create_dir_all(&res)?;
-        let icon_path = res.join("ic_launcher.png");
-        resize_png(icon, &icon_path, 192)?;
+    let icons = launcher_icon_resources(apk, &work.join("res"))?;
+    if !icons.is_empty() {
         let compiled = work.join("compiled");
         fs::create_dir_all(&compiled)?;
-        run(Command::new(sdk.tool("aapt2"))
-            .arg("compile")
-            .arg(&icon_path)
-            .arg("-o")
-            .arg(&compiled))?;
+        for icon in &icons {
+            run(Command::new(sdk.tool("aapt2"))
+                .arg("compile")
+                .arg(icon)
+                .arg("-o")
+                .arg(&compiled))?;
+        }
         for entry in fs::read_dir(&compiled)? {
             flat.push(entry?.path());
         }
@@ -435,11 +433,99 @@ pub(crate) fn build(sdk: &Sdk, apk: &Apk<'_>, format: Format, out: &Path) -> any
     Ok(())
 }
 
-fn manifest_xml(apk: &Apk<'_>) -> String {
-    let icon = if apk.icon.is_some() {
-        r#" android:icon="@mipmap/ic_launcher""#
+/// The densities of the adaptive icon's layers: (qualifier, pixels per
+/// four dp).
+const ICON_DENSITIES: [(&str, u32); 5] = [
+    ("mdpi", 4),
+    ("hdpi", 6),
+    ("xhdpi", 8),
+    ("xxhdpi", 12),
+    ("xxxhdpi", 16),
+];
+
+/// Writes the launcher icon's resources under `res` and returns the files
+/// to compile. `icon` becomes `mipmap-xxxhdpi/ic_launcher.png` (192 px).
+/// An adaptive icon adds its layers, 108 dp at every density, its
+/// background colour, and `mipmap-anydpi-v26/ic_launcher.xml` and
+/// `ic_launcher_round.xml`, which Android 8 and later (every device NSH
+/// runs on) take over the bitmap.
+fn launcher_icon_resources(apk: &Apk<'_>, res: &Path) -> anyhow::Result<Vec<PathBuf>> {
+    // aapt2 parses the file's path itself: the components joined in one go
+    // (`join("res/mipmap-xxxhdpi")`) leave a mix of `/` and `\` on Windows,
+    // which it calls no valid file path. Joined by component the path comes
+    // out uniform.
+    let mut files = Vec::new();
+    if let Some(icon) = apk.icon {
+        let dir = res.join("mipmap-xxxhdpi");
+        fs::create_dir_all(&dir)?;
+        let file = dir.join("ic_launcher.png");
+        resize_png(icon, &file, 192)?;
+        files.push(file);
+    }
+    let Some(adaptive) = apk.adaptive_icon else {
+        return Ok(files);
+    };
+    let mut layers = vec![("ic_launcher_foreground", adaptive.foreground.as_path())];
+    if let Some(monochrome) = &adaptive.monochrome {
+        layers.push(("ic_launcher_monochrome", monochrome));
+    }
+    for (density, per_four_dp) in ICON_DENSITIES {
+        let dir = res.join(format!("mipmap-{density}"));
+        fs::create_dir_all(&dir)?;
+        for (name, source) in &layers {
+            let file = dir.join(format!("{name}.png"));
+            resize_png(source, &file, 108 * per_four_dp / 4)?;
+            files.push(file);
+        }
+    }
+    let values = res.join("values");
+    fs::create_dir_all(&values)?;
+    let colors = values.join("nsh_launcher_icon.xml");
+    fs::write(
+        &colors,
+        format!(
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>\n    <color name=\"ic_launcher_background\">{}</color>\n</resources>\n",
+            adaptive.background
+        ),
+    )?;
+    files.push(colors);
+    let anydpi = res.join("mipmap-anydpi-v26");
+    fs::create_dir_all(&anydpi)?;
+    let xml = adaptive_icon_xml(adaptive.monochrome.is_some());
+    // The round icon is the same: the launcher masks it to a circle.
+    for name in ["ic_launcher", "ic_launcher_round"] {
+        let file = anydpi.join(format!("{name}.xml"));
+        fs::write(&file, &xml)?;
+        files.push(file);
+    }
+    Ok(files)
+}
+
+/// The adaptive icon's drawable. Android 12 and older skip the
+/// `monochrome` layer.
+fn adaptive_icon_xml(monochrome: bool) -> String {
+    let monochrome = if monochrome {
+        "\n    <monochrome android:drawable=\"@mipmap/ic_launcher_monochrome\" />"
     } else {
         ""
+    };
+    format!(
+        r#"<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />{monochrome}
+</adaptive-icon>
+"#
+    )
+}
+
+fn manifest_xml(apk: &Apk<'_>) -> String {
+    let icon = match (apk.icon, apk.adaptive_icon) {
+        (_, Some(_)) => {
+            r#" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round""#
+        }
+        (Some(_), None) => r#" android:icon="@mipmap/ic_launcher""#,
+        (None, None) => "",
     };
     let cleartext = if apk.cleartext {
         r#" android:usesCleartextTraffic="true""#
@@ -937,10 +1023,134 @@ mod tests {
             runtime: std::path::Path::new("."),
             abis: &[],
             icon: None,
+            adaptive_icon: None,
             assets: Vec::new(),
             sounds: Vec::new(),
             signing: super::Signing::Debug,
         }
+    }
+
+    #[test]
+    fn an_adaptive_icon_is_the_launcher_and_round_icon_in_layers() {
+        let dir = std::env::temp_dir().join(format!("nsh-android-icon-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let png = |name: &str| {
+            let path = dir.join(name);
+            image::RgbaImage::new(500, 500).save(&path).unwrap();
+            path
+        };
+        let icon = png("icon.png");
+        let adaptive = crate::package::AdaptiveIcon {
+            foreground: png("fg.png"),
+            background: "#ffffff".to_owned(),
+            monochrome: None,
+        };
+        let names = |res: &std::path::Path, files: &[std::path::PathBuf]| -> Vec<String> {
+            files
+                .iter()
+                .map(|f| {
+                    f.strip_prefix(res)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/")
+                })
+                .collect()
+        };
+        let side = |file: &std::path::Path| image::image_dimensions(file).unwrap();
+
+        // A plain icon: the bitmap alone, as before.
+        let res = dir.join("plain");
+        let plain = super::Apk {
+            icon: Some(&icon),
+            ..apk(false, false)
+        };
+        let files = super::launcher_icon_resources(&plain, &res).unwrap();
+        assert_eq!(names(&res, &files), ["mipmap-xxxhdpi/ic_launcher.png"]);
+        assert_eq!(side(&files[0]), (192, 192));
+        let manifest = super::manifest_xml(&plain);
+        assert!(
+            manifest.contains(r#"android:icon="@mipmap/ic_launcher""#),
+            "{manifest}"
+        );
+        assert!(!manifest.contains("roundIcon"), "{manifest}");
+        assert!(!super::manifest_xml(&apk(false, false)).contains("android:icon"));
+
+        // In layers: the foreground at 108 dp in every density, the
+        // background colour, and one drawable for the icon and the round icon.
+        let res = dir.join("adaptive");
+        let layered = super::Apk {
+            icon: Some(&icon),
+            adaptive_icon: Some(&adaptive),
+            ..apk(false, false)
+        };
+        let files = super::launcher_icon_resources(&layered, &res).unwrap();
+        assert_eq!(
+            names(&res, &files),
+            [
+                "mipmap-xxxhdpi/ic_launcher.png",
+                "mipmap-mdpi/ic_launcher_foreground.png",
+                "mipmap-hdpi/ic_launcher_foreground.png",
+                "mipmap-xhdpi/ic_launcher_foreground.png",
+                "mipmap-xxhdpi/ic_launcher_foreground.png",
+                "mipmap-xxxhdpi/ic_launcher_foreground.png",
+                "values/nsh_launcher_icon.xml",
+                "mipmap-anydpi-v26/ic_launcher.xml",
+                "mipmap-anydpi-v26/ic_launcher_round.xml",
+            ]
+        );
+        let sides: Vec<u32> = files[1..6].iter().map(|f| side(f).0).collect();
+        assert_eq!(sides, [108, 162, 216, 324, 432]);
+        let colors = std::fs::read_to_string(&files[6]).unwrap();
+        assert!(
+            colors.contains(r##"<color name="ic_launcher_background">#ffffff</color>"##),
+            "{colors}"
+        );
+        let drawable = std::fs::read_to_string(&files[7]).unwrap();
+        assert_eq!(drawable, std::fs::read_to_string(&files[8]).unwrap());
+        for layer in [
+            r#"<background android:drawable="@color/ic_launcher_background" />"#,
+            r#"<foreground android:drawable="@mipmap/ic_launcher_foreground" />"#,
+        ] {
+            assert!(drawable.contains(layer), "{drawable}");
+        }
+        assert!(!drawable.contains("monochrome"), "{drawable}");
+        let manifest = super::manifest_xml(&layered);
+        for attribute in [
+            r#"android:icon="@mipmap/ic_launcher""#,
+            r#"android:roundIcon="@mipmap/ic_launcher_round""#,
+        ] {
+            let at = manifest.find(attribute).expect(&manifest);
+            assert!(manifest.find("<application").unwrap() < at, "{manifest}");
+            assert!(at < manifest.find("<provider").unwrap(), "{manifest}");
+        }
+
+        // A themed icon's layer at every density too, named in the drawable;
+        // no `icon` is needed.
+        let res = dir.join("themed");
+        let themed_icon = crate::package::AdaptiveIcon {
+            monochrome: Some(png("mono.png")),
+            ..adaptive.clone()
+        };
+        let themed = super::Apk {
+            adaptive_icon: Some(&themed_icon),
+            ..apk(false, false)
+        };
+        let files = super::launcher_icon_resources(&themed, &res).unwrap();
+        let names = names(&res, &files);
+        for density in ["mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"] {
+            assert!(names.contains(&format!("mipmap-{density}/ic_launcher_monochrome.png")));
+        }
+        assert!(!names.contains(&"mipmap-xxxhdpi/ic_launcher.png".to_owned()));
+        let drawable =
+            std::fs::read_to_string(res.join("mipmap-anydpi-v26/ic_launcher.xml")).unwrap();
+        assert!(
+            drawable
+                .contains(r#"<monochrome android:drawable="@mipmap/ic_launcher_monochrome" />"#),
+            "{drawable}"
+        );
+        assert!(super::manifest_xml(&themed).contains("roundIcon"));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

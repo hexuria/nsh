@@ -870,6 +870,7 @@ pub(crate) fn install_android_host(
                 runtime,
                 abis: &[],
                 icon: None,
+                adaptive_icon: None,
                 assets: Vec::new(),
                 sounds: Vec::new(),
                 signing: Signing::Debug,

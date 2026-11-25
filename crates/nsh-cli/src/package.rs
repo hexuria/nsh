@@ -282,6 +282,48 @@ pub(crate) struct AndroidConfig {
     /// as Android has it; `false` also writes the rules that keep the data
     /// out of both on Android 12 and later.
     pub(crate) allow_backup: Option<bool>,
+    /// The launcher icon in layers ([`AdaptiveIcon`]), which each launcher
+    /// masks to its own shape. Without it, a launcher shrinks
+    /// `icon.android` into its mask.
+    pub(crate) adaptive_icon: Option<AdaptiveIcon>,
+}
+
+/// `nsh.json` `android.adaptiveIcon`: the launcher icon as Android 8 and
+/// later draw it, a foreground over a background, which the launcher masks
+/// to its shape (circle, squircle, rounded square) and moves in its
+/// animations. Paths are relative to `nsh.json`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AdaptiveIcon {
+    /// The foreground layer: a square PNG of 108×108 dp (432 px at
+    /// xxxhdpi), with its artwork inside the central circle of 66 dp, which
+    /// every mask keeps.
+    pub(crate) foreground: PathBuf,
+    /// The background layer: a colour, `#rrggbb`.
+    pub(crate) background: String,
+    /// The themed icon (Android 13 and later): a square PNG laid out like
+    /// the foreground, whose shape (its alpha) the system tints. Without
+    /// it, a themed launcher shows the full-colour icon.
+    pub(crate) monochrome: Option<PathBuf>,
+}
+
+impl AdaptiveIcon {
+    /// Its paths relative to `dir`, or why it is left out: a background
+    /// that is no `#rrggbb` colour.
+    fn relative_to(self, dir: &Path) -> Result<Self, String> {
+        let hex = self.background.strip_prefix('#').unwrap_or("");
+        if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(format!(
+                "android.adaptiveIcon.background: `{}` is not a colour `#rrggbb`",
+                self.background
+            ));
+        }
+        Ok(AdaptiveIcon {
+            foreground: dir.join(self.foreground),
+            background: self.background,
+            monochrome: self.monochrome.map(|m| dir.join(m)),
+        })
+    }
 }
 
 impl AndroidConfig {
@@ -804,6 +846,10 @@ pub(crate) fn read_config(entry: &Path) -> anyhow::Result<AppConfig> {
                 .map(|(platform, icon)| (platform, dir.join(icon)))
                 .collect(),
         )),
+        None => None,
+    };
+    config.android.adaptive_icon = match config.android.adaptive_icon.take() {
+        Some(icon) => icon.relative_to(dir).map_err(|e| ignored.push(e)).ok(),
         None => None,
     };
     warn_ignored(&path, &ignored);
@@ -1490,6 +1536,7 @@ fn package_android(
             runtime: &runtime,
             abis: &abis,
             icon: config.icon(PackageTarget::Android),
+            adaptive_icon: config.android.adaptive_icon.as_ref(),
             assets,
             sounds: android_sounds(config, built),
             signing,
@@ -3257,6 +3304,62 @@ mod tests {
                 .into()
             ))
         );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn nsh_json_android_adaptive_icon_is_read_relative_to_the_file() {
+        let dir = std::env::temp_dir().join(format!("nsh-adaptive-icon-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let entry = dir.join("app.tsx");
+        let adaptive = |json: &str| {
+            fs::write(dir.join("nsh.json"), json).unwrap();
+            read_config(&entry).unwrap().android.adaptive_icon
+        };
+        assert_eq!(adaptive("{}"), None);
+        assert_eq!(
+            adaptive(
+                r##"{ "android": { "adaptiveIcon": { "foreground": "a/fg.png", "background": "#FFffff" } } }"##
+            ),
+            Some(AdaptiveIcon {
+                foreground: dir.join("a/fg.png"),
+                background: "#FFffff".to_owned(),
+                monochrome: None,
+            })
+        );
+        assert_eq!(
+            adaptive(
+                r##"{ "android": { "adaptiveIcon": { "foreground": "fg.png", "background": "#000000", "monochrome": "mono.png" } } }"##
+            )
+            .unwrap()
+            .monochrome,
+            Some(dir.join("mono.png"))
+        );
+        // A background that is no colour leaves the adaptive icon out (with
+        // a warning), and the launcher wraps `icon.android` as before.
+        for background in ["white", "#fff", "#ff00ff00", "ffffff"] {
+            let json = format!(
+                r#"{{ "android": {{ "adaptiveIcon": {{ "foreground": "fg.png", "background": "{background}" }} }} }}"#
+            );
+            assert_eq!(adaptive(&json), None, "{background}");
+        }
+        let error = AdaptiveIcon {
+            foreground: "fg.png".into(),
+            background: "white".to_owned(),
+            monochrome: None,
+        }
+        .relative_to(&dir)
+        .unwrap_err();
+        assert!(
+            error.starts_with("android.adaptiveIcon.background:"),
+            "{error}"
+        );
+        // No foreground: the key is left out as any value NSH cannot read.
+        let (config, ignored) =
+            parse_config(r##"{ "android": { "adaptiveIcon": { "background": "#ffffff" } } }"##)
+                .unwrap();
+        assert_eq!(config.android.adaptive_icon, None);
+        assert_eq!(ignored.len(), 1, "{ignored:?}");
         fs::remove_dir_all(&dir).unwrap();
     }
 

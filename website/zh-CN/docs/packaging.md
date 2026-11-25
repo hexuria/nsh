@@ -56,7 +56,7 @@ nsh package App.tsx --target ios-simulator --run
 | `build` | number | `1` | 构建号（`CFBundleVersion`、`versionCode`）。每次上传新版本都要递增。 |
 | `icon` | string \| object | 无 | 一张正方形 PNG，最好是 1024×1024，路径相对于 `nsh.json`；也可按平台分别提供（[图标](#图标)）。 |
 
-`nsh.json` 还包含 `rust` 和 `root`（应用的 crate 和根组件，见[用 Rust 开发](./rust.md)）、`theme` 和 `appearance`、`tailwind`（见 [Tailwind](./tailwind.md)）、`capabilities`（见[沙箱与能力](./sandbox-and-capabilities.md)）、`android`（`targetSdk`、`usesCleartextTraffic` 和 `allowBackup`，见下文“目标 API 级别”、“明文 HTTP”和“备份”）、`ios` 和 `macos`（对应包的 `Info.plist` 键和 entitlements，见[下文](#infoplist-键与-entitlements)；`macos.activationPolicy` 用于[菜单栏应用](./macos.md#菜单栏应用)）以及让桌面包自我更新、让所有原生包接收 [OTA 更新](./ota-updates.md)的 `updater`（见[应用更新](./app-updates.md)）；[项目结构](./project-structure.md#nshjson)列出了所有键。NSH 读不懂的键或值会给出警告并被略过：为更新的 NSH 写的应用在较旧的 NSH 上照样能构建，拼写错误也会在警告里看到。
+`nsh.json` 还包含 `rust` 和 `root`（应用的 crate 和根组件，见[用 Rust 开发](./rust.md)）、`theme` 和 `appearance`、`tailwind`（见 [Tailwind](./tailwind.md)）、`capabilities`（见[沙箱与能力](./sandbox-and-capabilities.md)）、`android`（`targetSdk`、`usesCleartextTraffic`、`allowBackup` 和 `adaptiveIcon`，见下文“目标 API 级别”、“明文 HTTP”、“备份”和“自适应图标”）、`ios` 和 `macos`（对应包的 `Info.plist` 键和 entitlements，见[下文](#infoplist-键与-entitlements)；`macos.activationPolicy` 用于[菜单栏应用](./macos.md#菜单栏应用)）以及让桌面包自我更新、让所有原生包接收 [OTA 更新](./ota-updates.md)的 `updater`（见[应用更新](./app-updates.md)）；[项目结构](./project-structure.md#nshjson)列出了所有键。NSH 读不懂的键或值会给出警告并被略过：为更新的 NSH 写的应用在较旧的 NSH 上照样能构建，拼写错误也会在警告里看到。
 
 上表中的每个键都可以在命令行上覆盖，这在 CI 中很方便：
 
@@ -194,6 +194,29 @@ Android 会把应用的数据备份到用户的 Google 账号，并复制到用�
 这样打出的包会声明 `android:allowBackup="false"` 和 `android:fullBackupContent="false"`，以及数据提取规则
 （`android:dataExtractionRules`，Android 12 及以上），把应用存储的每个部分都排除在云备份和设备间迁移之外。不写这个键或写 `true` 时，
 包里不声明任何备份设置，使用 Android 自己的默认行为。
+
+### 自适应图标
+
+Android 8 及以上把启动器图标分层绘制：前景叠在背景上，各启动器按自己的形状（圆形、方圆形、圆角方形）裁切，并在动画里移动它。
+普通的 `icon` 则会被缩小放进这个形状里。`android.adaptiveIcon` 提供这些图层：
+
+```json
+{
+  "android": {
+    "adaptiveIcon": {
+      "foreground": "icon-foreground.png",
+      "background": "#ffffff",
+      "monochrome": "icon-monochrome.png"
+    }
+  }
+}
+```
+
+- `foreground`：一张按 108×108 dp 布局的正方形 PNG（最大尺寸 xxxhdpi 为 432 像素），图案放在中央直径 66 dp 的圆内，任何形状都会保留这一圆；其余部分可能被裁掉或移动。
+- `background`：一个颜色，`#rrggbb`。
+- `monochrome`（可选）：Android 13 及以上的主题图标，与前景同样布局的 PNG，系统按它的形状（透明度）着色。没有它时，主题启动器显示全彩图标。
+
+打出的包里有各密度的图层（`mipmap-mdpi` 到 `mipmap-xxxhdpi`）、可绘制资源 `mipmap-anydpi-v26/ic_launcher.xml`，以及同样的圆形图标（`android:roundIcon`）。`icon` 仍在包里，但 Android 不再显示它。`background` 不是 `#rrggbb` 颜色时会给出警告，自适应图标被略过。
 
 ### Google Play：App Bundle
 
@@ -338,7 +361,7 @@ entitlements：
 在 `nsh.json` 中（`"icon": "icon.png"`）或通过 `--icon` 提供一张正方形 PNG，最好是 1024×1024：
 
 - **iOS：** 由 Xcode 的 `actool` 编译进应用的资源目录（`Assets.car`），iOS 所需的各种尺寸都由它生成。
-- **Android：** 缩放到 192×192，用作启动器图标（`mipmap-xxxhdpi`）。
+- **Android：** 缩放到 192×192，用作启动器图标（`mipmap-xxxhdpi`），除非应用分层提供图标（[自适应图标](#自适应图标)）。
 - **macOS：** 由 `sips` 转换为 `AppIcon.icns`。`nsh run --target macos` 和 `nsh test --target macos` 会在程序坞和应用切换器里显示这张 PNG。
 - **Linux：** 复制为 `<id>.png`，`.desktop` 文件以它作为 `Icon`。
 - **Windows：** 缩放为 16 到 64 像素以及 256 像素，作为图标嵌入可执行文件，窗口、资源管理器和任务栏都会显示它；同时写到 bundle 旁的 `nsh\icon.ico`，通知会显示它。在 macOS 或 Linux 上打包时，可执行文件在资源管理器里保持默认图标，窗口和任务栏显示 `icon.ico`。`nsh run --target windows` 和 `nsh test --target windows` 也会显示它。
