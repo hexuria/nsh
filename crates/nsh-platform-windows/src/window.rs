@@ -2190,8 +2190,8 @@ impl Drop for Ticker {
 }
 
 /// The surface window `hwnd` (its own or one of the app's own) is of
-/// (other modules' window procedures, tests, the test agent).
-#[allow(dead_code)]
+/// (other modules' window procedures, the file dialogs' owner, tests, the
+/// test agent); `None` for a window that is not the app's.
 pub(crate) fn surface_of(hwnd: HWND) -> Option<Rc<Surface>> {
     data(hwnd).and_then(|d| d.surface.upgrade())
 }

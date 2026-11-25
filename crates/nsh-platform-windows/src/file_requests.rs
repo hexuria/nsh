@@ -48,7 +48,7 @@ pub(crate) fn request(surface: &Rc<Surface>, id: u32, request: &FileRequest) {
     let Some(control) = control else { return };
     // A window handle is an address the other thread only hands to the
     // dialog as its owner.
-    let owner = surface.hwnd().0 as isize;
+    let owner = dialog_owner(surface).0 as isize;
     let request = request.clone();
     let spawned = std::thread::Builder::new()
         .name("nsh-paths".into())
@@ -59,6 +59,23 @@ pub(crate) fn request(surface: &Rc<Surface>, id: u32, request: &FileRequest) {
         });
     if let Err(e) = spawned {
         log::warn!("cannot carry out a file request: {e}");
+    }
+}
+
+/// The window a dialog for `surface`'s request is owned by: the app's own
+/// window with the keyboard, the one the person just acted in, else the
+/// surface's window. A second window's code can run in the first window's
+/// core (a print preview's Save as PDF), so its requests come through the
+/// first window's surface: owned by that window, the dialog brought it
+/// forward over the window the person was in and could open hidden behind
+/// it. Owned by the window in front, it opens over that window and keeps it
+/// in front.
+fn dialog_owner(surface: &Surface) -> HWND {
+    let front = crate::window::foreground();
+    if !front.is_invalid() && crate::window::surface_of(front).is_some() {
+        front
+    } else {
+        surface.hwnd()
     }
 }
 
@@ -193,7 +210,7 @@ pub(crate) fn pick_files(surface: &Rc<Surface>, id: u32, request: &FilePickReque
     let Some(control) = control else { return };
     // A window handle is an address the other thread only hands to the
     // dialog as its owner.
-    let owner = surface.hwnd().0 as isize;
+    let owner = dialog_owner(surface).0 as isize;
     let request = request.clone();
     let spawned = std::thread::Builder::new()
         .name("nsh-picker".into())
