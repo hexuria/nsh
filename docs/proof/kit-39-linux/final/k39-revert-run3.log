@@ -1,0 +1,73 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.20s
+     Running tests/base/main.rs (/home/ubuntu/BuwizNsh/target-kit39final/debug/build/nsh-base/f6875d35e2e9bcd8/out/base-f6875d35e2e9bcd8)
+
+running 29 tests
+test otp_input::a_disabled_input_takes_no_input ... ok
+test otp_input::a_caret_inside_the_text_is_the_users_own ... FAILED
+test otp_input::a_default_value_is_the_first_code ... ok
+test otp_input::a_burst_of_keys_keeps_its_order ... ok
+test otp_input::a_bare_backspace_removes_the_digit_before_the_caret ... ok
+test otp_input::a_key_during_the_rewrite_is_not_dropped ... ok
+test otp_input::a_bare_backspace_after_arrows_removes_the_digit_before_the_caret ... FAILED
+test otp_input::a_users_selection_is_not_pinned_away ... ok
+test otp_input::a_composition_mid_entry_drops_no_key ... ok
+test otp_input::a_late_controlled_type_over_replaces_exactly_it ... ok
+test otp_input::a_selection_forward_delete_removes_exactly_it ... ok
+test otp_input::full_width_digits_are_taken_as_ascii_digits ... ok
+test otp_input::backspace_removes_the_last_digit ... ok
+test otp_input::a_pasted_code_replaces_the_code_and_shorter_text_is_appended ... ok
+test otp_input::an_arrowed_selection_cuts_exactly_it ... FAILED
+test otp_input::filled_cells_take_their_data_filled_classes ... ok
+test otp_input::the_caret_blinks_without_mount_items ... ok
+test otp_input::other_characters_are_dropped_and_the_field_keeps_the_code ... ok
+test otp_input::masked_cells_show_bullets_and_the_field_is_secure ... ok
+test otp_input::keys_typed_before_the_apps_code_comes_back_build_on_each_other ... ok
+test otp_input::typing_digits_fills_the_cells_and_reports_each_change ... ok
+test otp_input::the_length_caps_the_code_and_completes_it_once ... ok
+test otp_input::the_focus_is_reported_as_it_comes_and_goes ... ok
+test otp_input::the_apps_code_is_shown_and_only_its_changes_reported ... ok
+test otp_input::typing_over_an_arrowed_selection_replaces_exactly_it ... FAILED
+test otp_input::a_controlled_selection_cut_removes_exactly_it ... ok
+test otp_input::a_late_controlled_selection_cut_removes_exactly_it ... ok
+test otp_input::a_selection_cut_removes_exactly_it ... ok
+test otp_input::typing_over_a_selection_replaces_exactly_it ... ok
+
+failures:
+
+---- otp_input::a_caret_inside_the_text_is_the_users_own stdout ----
+
+thread 'otp_input::a_caret_inside_the_text_is_the_users_own' (21) panicked at crates/nsh-base/tests/base/otp_input.rs:383:5:
+no pin answers a caret: [(27, SetSelection { start: 2, end: 2, count: 2 })]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- otp_input::a_bare_backspace_after_arrows_removes_the_digit_before_the_caret stdout ----
+
+thread 'otp_input::a_bare_backspace_after_arrows_removes_the_digit_before_the_caret' (18) panicked at crates/nsh-base/tests/base/otp_input.rs:758:5:
+assertion `left == right` failed
+  left: "12"
+ right: "13"
+
+---- otp_input::an_arrowed_selection_cuts_exactly_it stdout ----
+
+thread 'otp_input::an_arrowed_selection_cuts_exactly_it' (51) panicked at crates/nsh-base/tests/base/otp_input.rs:727:9:
+assertion `left == right` failed: left 2 shift+left 1 of 123
+  left: "12"
+ right: "23"
+
+---- otp_input::typing_over_an_arrowed_selection_replaces_exactly_it stdout ----
+
+thread 'otp_input::typing_over_an_arrowed_selection_replaces_exactly_it' (83) panicked at crates/nsh-base/tests/base/otp_input.rs:745:5:
+assertion `left == right` failed
+  left: "125"
+ right: "153"
+
+
+failures:
+    otp_input::a_bare_backspace_after_arrows_removes_the_digit_before_the_caret
+    otp_input::a_caret_inside_the_text_is_the_users_own
+    otp_input::an_arrowed_selection_cuts_exactly_it
+    otp_input::typing_over_an_arrowed_selection_replaces_exactly_it
+
+test result: FAILED. 25 passed; 4 failed; 0 ignored; 0 measured; 1000 filtered out; finished in 6.96s
+
+error: test failed, to rerun pass `-p nsh-base --test base`

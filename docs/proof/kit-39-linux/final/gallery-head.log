@@ -1,0 +1,6 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.17s
+     Running `/home/ubuntu/BuwizNsh/target-kit39final/debug/xtask OtpInput`
+✓ built nsh (0.5s)
+✓ built examples/gallery/App.tsx (2.7 MB js, 12.3 MB bytecode, 2.5s)
+• Linux (devin-box) connected, build 1
+• Linux (devin-box) disconnected
