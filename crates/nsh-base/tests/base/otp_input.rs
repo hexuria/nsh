@@ -553,3 +553,36 @@ fn a_composition_mid_entry_drops_no_key() {
     app.type_in_burst("id:otp", "456", 1).unwrap();
     see(&mut app, "Changes [1,12,123,1234,12345,123456]");
 }
+
+/// A selection the user makes (a long press and drag, for the edit menu)
+/// is not pinned back to the end: only a bare caret is, so the menu's
+/// Paste has its selection to work on.
+#[test]
+fn a_users_selection_is_not_pinned_away() {
+    let (mut app, inputs) = start_observing::<Uncontrolled>();
+    app.type_text("id:otp", "12").unwrap();
+    see(&mut app, "Changes [1,12]");
+    let field = inputs
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|i| i.2)
+        .expect("the field")
+        .0;
+    let before = app.screen().commands().len();
+    let at = PayloadValue::Number;
+    app.engine().control().dispatch_event(
+        field,
+        EventKind::SelectionChange,
+        EventPayload::Map(vec![("start", at(0.0)), ("end", at(1.0))]),
+    );
+    app.wait(Duration::from_millis(50)).unwrap();
+    assert!(
+        app.screen().commands().len() == before
+            || !app.screen().commands()[before..]
+                .iter()
+                .any(|(id, c)| *id == field && matches!(c, Command::SetSelection { .. })),
+        "no pin answers a selection: {:?}",
+        &app.screen().commands()[before..]
+    );
+}

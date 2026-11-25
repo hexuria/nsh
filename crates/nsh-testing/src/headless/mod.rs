@@ -2216,6 +2216,25 @@ impl Headless {
         Ok(id)
     }
 
+    /// The step `select(<selector>, <start>, <end>)`: the user selects
+    /// `start..end` (UTF-16) in the input `selector` names, as a long press
+    /// and drag on a phone does, reported as the platforms report it.
+    pub fn select(&mut self, selector: &str, start: u32, end: u32) -> Result<(), String> {
+        let id = self.focus_step(selector, format!("select({selector}, {start}, {end})"))?;
+        if let Some(input) = self.screen.input_mut(id) {
+            input.selection = (start, end);
+        }
+        self.send(
+            id,
+            EventKind::SelectionChange,
+            EventPayload::Map(vec![
+                ("start", PayloadValue::Number(start as f64)),
+                ("end", PayloadValue::Number(end as f64)),
+            ]),
+        );
+        self.done()
+    }
+
     /// The step `compose(<selector>, <text>)`: an input method composes
     /// `text` in the input `selector` names, marked at the end of its
     /// text in place of what it composed (`onCompositionChange`), as a

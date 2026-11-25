@@ -447,7 +447,16 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                 .bg(AdaptiveColor::TRANSPARENT)
                 .text_color(AdaptiveColor::TRANSPARENT)
                 .selection_color(transparent_black())
-                .caret(false)
+                // The platform's own caret stays, only unseen: disabling it
+                // (`caret(false)`) is for an editor that draws and manages
+                // everything itself, and on the phones it cost the field its
+                // edit menu — a long press showed no Paste, though paste is
+                // this input's own design. Transparent is invisible without
+                // disabling anything.
+                .caret_color(transparent_black())
+                // A terminal draws no caret in the field: its own cursor
+                // stands at the cell that takes the next digit.
+                .when(parts.terminal, |v| v.caret(false))
                 .keyboard_type(KeyboardType::Number)
                 .auto_fill(AutoFill::OneTimeCode)
                 .auto_correct(false)
@@ -471,7 +480,10 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                     // cannot reach past the text), and the write would
                     // itself be the edit it means to prevent.
                     let end = utf16_len(&reported.get());
-                    if selection.end < end {
+                    // Only a bare caret is pinned. A selection is the user's
+                    // own (a long press, for the edit menu): pinning it back
+                    // to the end would undo it before the menu even shows.
+                    if selection.start == selection.end && selection.end < end {
                         field_ref.set_selection(end, end);
                     }
                 })
