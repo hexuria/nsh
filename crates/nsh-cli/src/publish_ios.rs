@@ -13,13 +13,13 @@ use base64::{
     Engine as _,
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
 };
+use md5::{Digest, Md5};
 use ring::{
     rand::SystemRandom,
     signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair},
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
 use crate::ui;
 
@@ -159,9 +159,11 @@ fn file_request(upload_id: &str, name: &str, size: u64) -> Value {
     }, "relationships":{"buildUpload":{"data":{"type":"buildUploads", "id":upload_id}}}}})
 }
 
+/// Commits the uploaded file. The checksum is the MD5 of the whole file: App Store Connect refuses `SHA_256` here with
+/// 409 ENTITY_ERROR.ATTRIBUTE.INVALID even when the hash is right, and accepts `MD5` (it works out the parts itself).
 fn complete_request(file_id: &str, checksum: &str) -> Value {
     json!({"data":{"type":"buildUploadFiles", "id":file_id, "attributes":{
-        "uploaded":true, "sourceFileChecksums":{"file":{"algorithm":"SHA_256", "hash":checksum}}
+        "uploaded":true, "sourceFileChecksums":{"file":{"algorithm":"MD5", "hash":checksum}}
     }}})
 }
 
@@ -328,7 +330,7 @@ pub(crate) fn publish(args: &Args) -> anyhow::Result<()> {
         "IPA bundle identifier does not match --app-id"
     );
     file.rewind()?;
-    let mut digest = Sha256::new();
+    let mut digest = Md5::new();
     let mut buffer = [0; 64 * 1024];
     loop {
         let n = file.read(&mut buffer)?;
@@ -479,7 +481,7 @@ mod tests {
     }
 
     #[test]
-    fn requests_link_the_app_upload_and_ipa_and_commit_sha256() {
+    fn requests_link_the_app_upload_and_ipa_and_commit_md5() {
         let ipa = Ipa {
             bundle_id: "com.example.app".into(),
             version: "1.2.3".into(),
@@ -502,8 +504,21 @@ mod tests {
         assert_eq!(
             complete_request("file-1", "abcd"),
             json!({"data":{
-                "type":"buildUploadFiles", "id":"file-1", "attributes":{"uploaded":true,"sourceFileChecksums":{"file":{"algorithm":"SHA_256","hash":"abcd"}}}
+                "type":"buildUploadFiles", "id":"file-1", "attributes":{"uploaded":true,"sourceFileChecksums":{"file":{"algorithm":"MD5","hash":"abcd"}}}
             }})
+        );
+    }
+
+    #[test]
+    fn the_commit_checksum_is_the_lowercase_hex_md5_of_the_whole_file() {
+        // RFC 1321's test vector, read the way publish reads the IPA: in pieces.
+        let mut digest = Md5::new();
+        for part in [&b"message "[..], &b"digest"[..]] {
+            digest.update(part);
+        }
+        assert_eq!(
+            format!("{:x}", digest.finalize()),
+            "f96b697d7cb7938d525a2f31aaf161d0"
         );
     }
 
