@@ -2362,7 +2362,7 @@ impl Headless {
             return;
         }
         // Insert at the caret, as the platform view does: over the
-        /// selection, which collapses after the inserted character (the
+        // selection, which collapses after the inserted character (the
         // selection is in UTF-16 units, the text indexed in bytes).
         let selection = input.selection;
         let at = |units: u32| {
