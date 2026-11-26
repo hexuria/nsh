@@ -4904,16 +4904,22 @@ mod tests {
         app.on_pick_save_path(None).unwrap();
         app.press("Save").unwrap();
         app.wait_for("Saved cancelled").unwrap();
-        app.on_pick_save_path(Some("/docs/a.md".into())).unwrap();
+        // Absolute on every OS the tests run on: reveal refuses the rest.
+        let docs = if cfg!(windows) {
+            "C:\\docs\\a.md"
+        } else {
+            "/docs/a.md"
+        };
+        app.on_pick_save_path(Some(docs.into())).unwrap();
         app.press("Save").unwrap();
-        app.wait_for("Saved /docs/a.md true").unwrap();
+        app.wait_for(&format!("Saved {docs} true")).unwrap();
         let requests = app.screen().file_requests();
         assert_eq!(requests.len(), 3);
         assert!(matches!(
             &requests[1],
             FileRequest::SaveDialog(save) if save.file_name.as_deref() == Some("Untitled.md")
         ));
-        assert_eq!(requests[2], FileRequest::RevealPath("/docs/a.md".into()));
+        assert_eq!(requests[2], FileRequest::RevealPath(docs.into()));
     }
 
     /// A clipping box with padding that holds a label, a box wider than it,
