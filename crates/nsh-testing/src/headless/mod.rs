@@ -379,6 +379,9 @@ pub struct Headless {
     observer: Option<Observer>,
     /// The app's clock.
     clock: Clock,
+    /// Where touches' `timestamp` counts from: the app's clock at the
+    /// start, so a long press's touch ends its delay after it began.
+    touch_epoch: std::time::Instant,
     /// On a manual clock: the engine asked for a frame.
     wanted: Option<Arc<AtomicBool>>,
     /// The embedding app's channel with the app (`EngineConfig::host`),
@@ -514,6 +517,7 @@ impl Headless {
             environment,
             viewport,
             observer: None,
+            touch_epoch: clock.now(),
             clock,
             wanted,
             host,
@@ -2347,7 +2351,12 @@ impl Headless {
         let location = at.and_then(|p| self.screen.bounds_in_root(target).map(|b| p - b.origin));
         let touch = nsh_core::TouchEvent {
             phase,
-            timestamp: 0.0,
+            timestamp: self
+                .clock
+                .now()
+                .saturating_duration_since(self.touch_epoch)
+                .as_secs_f64()
+                * 1000.0,
             points: vec![nsh_core::TouchPoint {
                 id: 0,
                 target,

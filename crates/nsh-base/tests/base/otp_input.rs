@@ -25,6 +25,16 @@ fn start<C: Component<Props = ()>>() -> Headless {
     start_observing::<C>().0
 }
 
+/// [`start`] on a given system, as that platform's backend runs.
+fn start_on<C: Component<Props = ()>>(os: nsh_core::platform::Os) -> Headless {
+    let mut config = EngineConfig::new(Root::of::<C>());
+    config.viewport = Size::new(px(390.0), px(844.0));
+    config.environment.os = os;
+    let mut app = Headless::start(config).unwrap();
+    app.first_render().unwrap();
+    app
+}
+
 /// [`start`], with the inputs made: whether each is secure, and whether
 /// it is a one-time code's field.
 fn start_observing<C: Component<Props = ()>>() -> (Headless, Inputs) {
@@ -818,6 +828,58 @@ fn typing_at_a_tapped_caret_inserts_there() {
     app.type_text("id:otp", "5").unwrap();
     app.wait(Duration::from_millis(80)).unwrap();
     assert_eq!(field(&mut app, "id:otp"), "152");
+}
+
+/// A long press over any cell selects the code whole, as the platform's
+/// own word selection does with a run of digits. It cannot come from the
+/// field's own hit-test: the hidden glyphs sit in one small strip at the
+/// field's start, so on the phones a long press over a cell right of the
+/// strip found no word and selected nothing.
+#[test]
+fn a_long_press_over_a_cell_selects_the_run() {
+    // (the cells are 30 wide in a row: over cell 1 and over cell 2)
+    for x in [35.0, 65.0] {
+        let mut app = start_on::<Uncontrolled>(nsh_core::platform::Os::Android);
+        app.type_text("id:otp", "123").unwrap();
+        app.long_press_at("label:Code", Point::new(px(x), px(20.0)))
+            .unwrap();
+        app.wait(Duration::from_millis(80)).unwrap();
+        assert_eq!(
+            app.screen().input_selection("id:otp").unwrap(),
+            Some((0, 3)),
+            "long press at x {x} selects the whole run"
+        );
+    }
+}
+
+/// On iOS a long press writes nothing: a selection write closes the edit
+/// menu the long press opens, and Paste with it. The platform's own long
+/// press (its loupe, its menu) stands.
+#[test]
+fn a_long_press_writes_nothing_on_ios() {
+    let mut app = start_on::<Uncontrolled>(nsh_core::platform::Os::Ios);
+    app.type_text("id:otp", "123").unwrap();
+    let before = app.screen().input_selection("id:otp").unwrap();
+    app.long_press_at("label:Code", Point::new(px(35.0), px(20.0)))
+        .unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(app.screen().input_selection("id:otp").unwrap(), before);
+}
+
+/// A tap on an empty field writes no caret: its only caret is 0 already,
+/// and on iOS the write would close the edit menu where Paste is.
+#[test]
+fn a_tap_on_an_empty_field_writes_no_caret() {
+    let mut app = start_on::<Uncontrolled>(nsh_core::platform::Os::Ios);
+    // Over cell 2: a written caret would be 2, past the empty text.
+    app.press_at("label:Code", Point::new(px(65.0), px(20.0)))
+        .unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    let selection = app.screen().input_selection("id:otp").unwrap();
+    assert!(
+        matches!(selection, None | Some((0, 0))),
+        "no caret written into an empty field: {selection:?}"
+    );
 }
 
 /// A selection the platform reports is drawn on exactly the cells it

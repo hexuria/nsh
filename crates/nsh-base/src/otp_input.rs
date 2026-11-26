@@ -39,6 +39,7 @@ use std::time::Duration;
 use nsh_core::{
     AutoFill, TouchEvent, TouchPhase,
     element::{Style, TextPartStyle},
+    platform::Os,
     prelude::*,
 };
 
@@ -433,11 +434,16 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
     // caret at 0 already. Writing it anyway took Paste away on iPhone and
     // iPad (the menu closed at once, or a hardware Cmd+V after the click
     // landed nowhere). A long press is the platform's: its menu, its
-    // loupe, its handle.
+    // loupe, its handle; on Android the run's selection below. A long
+    // press's own selection is still on its way to the report when the
+    // touch ends, so the touch that raised one is remembered here too, not
+    // left to the lagging signal.
     let pressed_at = stored(None::<f64>);
+    let long_pressed = stored(false);
     let place_caret = move |e: &TouchEvent| {
         if e.phase == TouchPhase::Start {
             pressed_at.replace(Some(e.timestamp));
+            long_pressed.replace(false);
             return;
         }
         if e.phase != TouchPhase::End || parts.disabled.get_untracked() {
@@ -446,6 +452,9 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
         let held = pressed_at
             .replace(None)
             .map_or(0.0, |start| (e.timestamp - start).max(0.0));
+        if long_pressed.get() {
+            return;
+        }
         let reported = selection.get_untracked();
         if reported.start != reported.end {
             return;
@@ -473,8 +482,35 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
         field_ref.set_selection(position, position);
     };
 
+    // A long press anywhere on the input selects the code whole, as the
+    // platform's own word selection does with a run of digits. It cannot
+    // come from the field's own hit-test: the hidden glyphs sit in one
+    // small strip at the field's start, so on the phones a long press
+    // over a cell right of the strip finds no word and selects nothing
+    // (spreading the glyphs across the cells' width was the other shape
+    // — but the cells are grouped, so no uniform pitch lines them up,
+    // and the run's positions would still be the font's, not the cells').
+    // The write is the field's real selection: the edit menu and the
+    // handles are the platform's own, and it is count-guarded, so a key
+    // typed before it lands wins over it. Android only: on iOS a selection
+    // write closes the edit menu the long press opens (Paste with it), and
+    // iOS's own long press keeps its loupe and menu; an empty field has
+    // nothing to select, so Paste stays the platform's there too.
+    let android = os() == Os::Android;
+    let select_run = move || {
+        if parts.disabled.get_untracked() {
+            return;
+        }
+        let len = utf16_len(&field.get_untracked());
+        if len > 0 {
+            long_pressed.replace(true);
+            field_ref.set_selection(0, len);
+        }
+    };
+
     view()
         .disabled(props.disabled)
+        .when(android, |v| v.on_long_press(select_run))
         // In a terminal the field is no wider than a Cell, under none of
         // the cells: a press on them gives it the keys, as the field
         // over them does elsewhere.
