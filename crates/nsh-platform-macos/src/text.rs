@@ -3614,7 +3614,7 @@ mod tests {
     /// covers its whole content box.
     #[test]
     fn drawing_in_a_shorter_or_narrower_layer_marks_the_text_cut() {
-        use std::{cell::Cell, sync::Arc};
+        use std::cell::Cell;
 
         use nsh_core::{Bounds, Point, ViewKind};
         use objc2_core_foundation::{CGFloat, CGPoint, CGRect, CGSize};
