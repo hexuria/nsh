@@ -2270,6 +2270,17 @@ impl Screen {
         }
     }
 
+    /// The selection of the input `selector` names (UTF-16 units; a caret
+    /// when the ends agree), as the platform view keeps it.
+    pub fn input_selection(&self, selector: &str) -> Result<Option<(u32, u32)>, String> {
+        let parsed = Selector::parse(selector)?;
+        match self.input_view(&parsed) {
+            Pick::One(id) => Ok(self.input(id).map(|input| input.selection)),
+            Pick::Many(n) => Err(format!("`{selector}` matches {n} inputs")),
+            Pick::None | Pick::Disabled => Ok(None),
+        }
+    }
+
     /// The input `selector` names, as [`Screen::input_text`] finds it.
     #[cfg(feature = "agent")]
     pub(crate) fn input_id(&self, selector: &str) -> Result<Option<NodeId>, String> {
@@ -2749,7 +2760,13 @@ impl Screen {
             return Pick::Disabled;
         }
         self.pick(selector, |id| {
-            let pressable = |v: &View| v.events.contains(EventKind::Press);
+            // An editable input is pressed as on every platform: the tap
+            // lands on it natively and focuses it; it needs no Press
+            // listener.
+            let pressable = |v: &View| {
+                v.events.contains(EventKind::Press)
+                    || v.input.as_ref().is_some_and(|input| input.config.editable)
+            };
             // A view in no pressable one that holds a combobox (a
             // `Select`'s root, which its `testID` names): its trigger, as
             // a `Button`'s `testID` names what the user presses.
@@ -3000,7 +3017,7 @@ impl Screen {
     /// View `id`'s bounds in the root's points: its frame moved by those
     /// of the views around it and the offsets of the scroll views around
     /// it (transforms aside).
-    pub(crate) fn bounds_in_root(&self, id: NodeId) -> Option<Bounds<Points>> {
+    pub fn bounds_in_root(&self, id: NodeId) -> Option<Bounds<Points>> {
         if let Some((text, ..)) = self.span(id) {
             return self.bounds_in_root(text);
         }

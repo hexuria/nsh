@@ -391,7 +391,14 @@ final class InputBox extends FrameLayout implements Node {
                 }
             });
         }
-        edit.setHighlightColor(hasSelectionColor ? (selectionColor & 0x00ffffff) | 0x55000000 : 0x5533b5e5);
+        // A fully transparent color stays transparent: an input drawing
+        // its selection itself (a one-time-code input's cells) asks for
+        // that, and forcing the default alpha onto it painted a highlight
+        // over the hidden glyphs, which do not sit where the cells do.
+        // Anything else keeps the default alpha, as before.
+        int selectionAlpha = (selectionColor >>> 24) == 0 ? 0 : 0x55;
+        edit.setHighlightColor(hasSelectionColor
+                ? (selectionColor & 0x00ffffff) | (selectionAlpha << 24) : 0x5533b5e5);
         boolean first = !configured;
         configured = true;
         if (first && autoFocus) post(this::focus);

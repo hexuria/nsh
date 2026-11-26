@@ -270,6 +270,10 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
     let focused = signal(false);
     let blink = Blink::new();
     let field_ref = element_ref();
+    // The field's selection as the platform reports it: the cells draw it,
+    // since the field's own highlight is transparent (its glyphs do not
+    // sit on the cells, so a native highlight would lie).
+    let selection = signal(Selection::default());
     cx.methods(OtpInputApi { field: field_ref });
 
     // A code the app sets (or the own one) is the code edits apply to and
@@ -300,6 +304,7 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
         code,
         focused,
         blink,
+        selection,
         terminal: crate::terminal::is_terminal(),
         frames: signal(Vec::new()),
     };
@@ -399,9 +404,7 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
             .map(|(g, cells)| {
                 // The field tells screen readers the code.
                 view()
-                    .when(parts.terminal, |v| {
-                        v.on_layout(move |b: &Bounds<Points>| put(group_frames, g, *b))
-                    })
+                    .on_layout(move |b: &Bounds<Points>| put(group_frames, g, *b))
                     .accessibility_elements_hidden(true)
                     .project_disabled(parts.disabled)
                     .app_class(group_class)
@@ -410,6 +413,41 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
             })
             .collect::<Vec<_>>()
     });
+
+    // A tap on the cells places the caret where it lands. The field's own
+    // placement cannot: its glyphs are one continuous run at its own font
+    // metrics, with no relation to the cells' positions, so on the phones
+    // every tap right of the short glyph run clamps to the end of the text.
+    // The cells' frames are known here, and the field covers the input
+    // exactly (inset 0, no padding), so the touch's location in it is in
+    // the input's own coordinates. The correction goes out when the touch
+    // ends in a bare caret: a long press's word selection, a double tap's,
+    // and a handle drag are selections by then and keep what the platform
+    // gave them. The write is count-guarded, so a key typed before it
+    // lands wins over it.
+    let place_caret = move |e: &TouchEvent| {
+        if e.phase != TouchPhase::End || parts.disabled.get_untracked() {
+            return;
+        }
+        if selection.get_untracked().start != selection.get_untracked().end {
+            return;
+        }
+        let Some(point) = e.points.iter().find(|p| p.changed).or(e.points.first()) else {
+            return;
+        };
+        let x = point.location.x.0;
+        let length = parts.length.get_untracked() as usize;
+        if length == 0 {
+            return;
+        }
+        let per_group = per_group.get_untracked();
+        let Some(position) = parts.frames.with_untracked(|cells| {
+            group_frames.with_untracked(|groups| caret_at(x, length, per_group, cells, groups))
+        }) else {
+            return;
+        };
+        field_ref.set_selection(position, position);
+    };
 
     view()
         .disabled(props.disabled)
@@ -423,6 +461,7 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                 }
             })
         })
+        .when(!parts.terminal, |v| v.on_touch(place_caret))
         .child(cells)
         .child(
             input()
@@ -460,7 +499,8 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                 .optional_label(props.accessibility_label)
                 .value(move || field.get())
                 .on_change(move |text: &str| changed(text))
-                .on_selection_change(move |_selection: &Selection| {
+                .on_selection_change(move |reported: &Selection| {
+                    selection.set(*reported);
                     // The caret is the user's own, wherever they put it:
                     // a selection is theirs for the edit menu, and a caret
                     // inside the text is where an arrow or a click left
@@ -502,6 +542,7 @@ struct Cells {
     code: Code,
     focused: Signal<bool>,
     blink: Blink,
+    selection: Signal<Selection>,
     /// In a terminal: the cells' frames (in their group), for its cursor.
     terminal: bool,
     frames: Signal<Vec<Bounds<Points>>>,
@@ -531,23 +572,47 @@ impl Cells {
             .min(length.saturating_sub(1))
     }
 
+    /// Whether the field's selection covers cell `ix`: one unit of it per
+    /// digit (ASCII), so the cell is inside when `[ix, ix + 1)` meets
+    /// `[start, end)`.
+    fn selected(self, ix: usize) -> bool {
+        let selection = self.selection.get();
+        selection.start != selection.end
+            && selection.start < ix as u32 + 1
+            && selection.end > ix as u32
+    }
+
     /// Cell `ix`: its digit (a bullet while masked) and `data-filled`, or
     /// the caret while it is the empty cell that takes the next digit and
-    /// the input has the focus.
+    /// the input has the focus, over the selection highlight when the
+    /// field's selection covers it.
     fn cell(self, ix: usize) -> AnyElement {
         let digit = move || self.code.get().chars().nth(ix);
         let frames = self.frames;
         view()
-            .when(self.terminal, |v| {
-                v.on_layout(move |b: &Bounds<Points>| put(frames, ix, *b))
-            })
+            .on_layout(move |b: &Bounds<Points>| put(frames, ix, *b))
             .project_focused(move || {
                 self.focused.get() && !self.disabled.get() && self.active() == ix
             })
             .project_disabled(self.disabled)
             .project_data("filled", move || digit().is_some())
+            .project_data("selected", move || self.selected(ix))
             .app_class(self.class)
             .inline_style(move || self.style.get())
+            .child(
+                // The platform's selection, which the field's own
+                // transparent highlight cannot show: it is drawn on the
+                // cells it really covers, behind the digit.
+                when(
+                    move || !self.terminal && self.selected(ix),
+                    move || {
+                        view()
+                            .absolute()
+                            .inset_0()
+                            .bg(crate::theme::theme().selection())
+                    },
+                ),
+            )
             .child(
                 when(
                     move || digit().is_some(),
@@ -599,6 +664,43 @@ impl Cells {
 /// `OtpInput::resolved_groups`): at least one, at most one per cell.
 fn group_count(length: usize, requested: usize) -> usize {
     requested.max(1).min(length.max(1))
+}
+
+/// The caret position nearest to `x` (in the input's coordinates): position
+/// `p` sits at the left edge of cell `p` (the right edge of the last cell
+/// for `length`), the cells' frames in their groups and the groups' in the
+/// input. `None` before the frames are known.
+fn caret_at(
+    x: f32,
+    length: usize,
+    per_group: usize,
+    cells: &[Bounds<Points>],
+    groups: &[Bounds<Points>],
+) -> Option<u32> {
+    let per_group = per_group.max(1);
+    let edge = |p: usize| -> Option<f32> {
+        if p < length {
+            let cell = cells.get(p)?;
+            let group = groups.get(p / per_group)?;
+            Some(group.origin.x.0 + cell.origin.x.0)
+        } else {
+            let last = length.checked_sub(1)?;
+            let cell = cells.get(last)?;
+            let group = groups.get(last / per_group)?;
+            Some(group.origin.x.0 + cell.origin.x.0 + cell.size.width.0)
+        }
+    };
+    let mut best: Option<(u32, f32)> = None;
+    for p in 0..=length {
+        let Some(ex) = edge(p) else { continue };
+        let distance = (ex - x).abs();
+        if best.is_none_or(|(_, d)| distance < d) {
+            best = Some((p as u32, distance));
+        }
+    }
+    // Every edge must be known: a half-laid-out input has no honest answer.
+    (0..=length).try_fold((), |_, p| edge(p).map(|_| ()))?;
+    Some(best?.0)
 }
 
 /// `c` as an ASCII digit: itself, or a full-width digit's (`０`–`９`, an

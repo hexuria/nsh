@@ -55,7 +55,9 @@ fn start_observing<C: Component<Props = ()>>() -> (Headless, Inputs) {
 /// its cells, and the field over them, have no size, and the screen (as a
 /// user) finds nothing to type into.
 fn sized(input: nsh_base::OtpInputElement) -> nsh_base::OtpInputElement {
-    input.cell_style(|s| s.w(px(30.0)).h(px(40.0)))
+    input
+        .cell_style(|s| s.w(px(30.0)).h(px(40.0)))
+        .group_class("flex-row")
 }
 
 /// What the app heard, as texts on screen.
@@ -756,4 +758,166 @@ fn a_bare_backspace_after_arrows_removes_the_digit_before_the_caret() {
     app.press_key("backspace").unwrap();
     app.wait(Duration::from_millis(80)).unwrap();
     assert_eq!(field(&mut app, "id:otp"), "13");
+}
+
+/// A tap on a cell places the caret where it lands: the left half of a
+/// cell before its digit, the right half after it, a tap past the last
+/// cell at the end. The field's own placement cannot do this — its glyphs
+/// are one continuous run with no relation to the cells — so the input
+/// corrects it from the cells' frames.
+#[test]
+fn a_tap_on_a_cell_places_the_caret_there() {
+    // (tap x in the input, caret; the cells are 30 wide in a row: cell 0
+    // is x 0-30, cell 1 x 30-60, cell 2 x 60-90)
+    for (x, caret) in [
+        (5.0, 0),  // left half of cell 0
+        (25.0, 1), // right half of cell 0
+        (35.0, 1), // left half of cell 1
+        (55.0, 2), // right half of cell 1
+        (65.0, 2), // left half of cell 2
+        (85.0, 3), // right half of cell 2
+    ] {
+        let mut app = start::<Uncontrolled>();
+        app.type_text("id:otp", "123").unwrap();
+        app.press_at("label:Code", Point::new(px(x), px(20.0)))
+            .unwrap();
+        app.wait(Duration::from_millis(80)).unwrap();
+        assert_eq!(
+            app.screen().input_selection("id:otp").unwrap(),
+            Some((caret, caret)),
+            "tap at x {x} of three 30-wide cells"
+        );
+    }
+}
+
+/// A tap's caret is where Backspace and typing then act: caret after the
+/// second digit, one Backspace removes the second digit, not the last.
+#[test]
+fn a_backspace_at_a_tapped_caret_removes_the_digit_before_it() {
+    let mut app = start::<Uncontrolled>();
+    app.type_text("id:otp", "123").unwrap();
+    see(&mut app, "Changes [1,12,123]");
+    // Right half of cell 1: the caret goes after digit 2.
+    app.press_at("label:Code", Point::new(px(55.0), px(20.0)))
+        .unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    app.press_key("backspace").unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(field(&mut app, "id:otp"), "13");
+}
+
+/// Typing at a tapped caret inserts there: caret after the first digit,
+/// a digit goes in before the second.
+#[test]
+fn typing_at_a_tapped_caret_inserts_there() {
+    let mut app = start::<Uncontrolled>();
+    app.type_text("id:otp", "12").unwrap();
+    app.press_at("label:Code", Point::new(px(25.0), px(20.0)))
+        .unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    app.type_text("id:otp", "5").unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(field(&mut app, "id:otp"), "152");
+}
+
+/// A selection the platform reports is drawn on exactly the cells it
+/// covers: the middle digit alone, or every cell for the whole run.
+#[test]
+fn a_reported_selection_is_drawn_on_the_right_cells() {
+    let (mut app, styles) = start_selected();
+    app.type_text("id:otp", "123").unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    // No selection: nothing drawn.
+    assert_eq!(marked_cells(&styles), 0, "no selection draws nothing");
+    app.select("id:otp", 1, 2).unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(marked_cells(&styles), 1, "one digit selected");
+    app.select("id:otp", 0, 3).unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(marked_cells(&styles), 3, "the whole run selected");
+    app.select("id:otp", 2, 2).unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(marked_cells(&styles), 0, "a caret draws nothing");
+}
+
+/// The highlight lands on the right cell, not just the right number of
+/// cells: a selection of the first digit marks a cell left of one a
+/// selection of the last digit marks.
+#[test]
+fn the_highlight_is_on_the_selected_cell() {
+    let (mut app, styles) = start_selected();
+    app.type_text("id:otp", "123").unwrap();
+    app.select("id:otp", 0, 1).unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    let first = marked_positions(&app, &styles);
+    app.select("id:otp", 2, 3).unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    let last = marked_positions(&app, &styles);
+    assert_eq!(first.len(), 1, "one cell for the first digit: {first:?}");
+    assert_eq!(last.len(), 1, "one cell for the last digit: {last:?}");
+    assert!(
+        first[0] < last[0],
+        "the first digit's cell is left of the last's: {first:?} vs {last:?}"
+    );
+}
+
+/// The color [`Selected`]'s `data-selected:` class gives a cell.
+const SELECTED: Color = Color(0x0202_02ff);
+
+/// A code whose selected cells take a background from `data-selected:`.
+#[component]
+fn Selected() -> impl IntoElement {
+    view().child(
+        view().test_id("otp").child(
+            sized(otp_input())
+                .length(6u32)
+                .cell_class("data-selected:bg-[#020202]")
+                .accessibility_label("Code"),
+        ),
+    )
+}
+
+/// [`Selected`], and which views its latest styles mark.
+fn start_selected() -> (Headless, Arc<Mutex<HashMap<NodeId, bool>>>) {
+    let mut app = Headless::start(EngineConfig {
+        viewport: Size::new(px(390.0), px(844.0)),
+        ..EngineConfig::new(Root::of::<Selected>())
+    })
+    .unwrap();
+    let styles = Arc::new(Mutex::new(HashMap::new()));
+    let seen = styles.clone();
+    app.observe(move |_, batch| {
+        let mut seen = seen.lock().unwrap();
+        for item in &batch.items {
+            match item {
+                MountItem::ViewStyle { id, style } => {
+                    seen.insert(*id, style.background_color == SELECTED);
+                }
+                MountItem::Delete { id } => {
+                    seen.remove(id);
+                }
+                _ => {}
+            }
+        }
+    });
+    app.first_render().unwrap();
+    (app, styles)
+}
+
+fn marked_cells(styles: &Mutex<HashMap<NodeId, bool>>) -> usize {
+    styles.lock().unwrap().values().filter(|f| **f).count()
+}
+
+/// The x positions of the marked cells' frames, for [`the_highlight_is_on_the_selected_cell`].
+fn marked_positions(app: &Headless, styles: &Mutex<HashMap<NodeId, bool>>) -> Vec<f32> {
+    let mut xs: Vec<f32> = styles
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(_, marked)| **marked)
+        .filter_map(|(id, _)| app.screen().bounds_in_root(*id))
+        .map(|b| b.origin.x.0)
+        .collect();
+    xs.sort_by(f32::total_cmp);
+    xs
 }
