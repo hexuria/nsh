@@ -71,6 +71,21 @@ use crate::{
 /// id -> key indirection on hot paths.
 type Key = u32;
 
+/// Queues a selection for `id` as platforms receive it: the public
+/// [`Command::SetSelection`] (what only watches the mount stream reads it),
+/// then the [`Command::SetSelectionAt`] the platforms carry out, with the edit
+/// count it was written against.
+fn push_selection(
+    commands: &mut Vec<(NodeId, Command)>,
+    id: NodeId,
+    start: u32,
+    end: u32,
+    count: u32,
+) {
+    commands.push((id, Command::SetSelection { start, end }));
+    commands.push((id, Command::SetSelectionAt { start, end, count }));
+}
+
 /// A raw text run with no node of its own ([`Core::runs`]).
 struct Run {
     text: String,
@@ -2972,18 +2987,19 @@ impl<M: TextEngine> Core<M> {
                 // A selection written against the text the writer last saw
                 // is stale the moment the user edits again: it goes with
                 // the input's edit count, as a value does.
-                let command = match command {
-                    Command::SetSelection { start, end, .. } => {
+                match command {
+                    // The count is always the core's own.
+                    Command::SetSelection { start, end }
+                    | Command::SetSelectionAt { start, end, .. } => {
                         let count = self.nodes[key as usize]
                             .input
                             .as_ref()
                             .map(|input| input.count)
                             .unwrap_or(0);
-                        Command::SetSelection { start, end, count }
+                        push_selection(&mut self.commands, id, start, end, count);
                     }
-                    command => command,
-                };
-                self.commands.push((id, command));
+                    command => self.commands.push((id, command)),
+                }
                 Ok(())
             }
         }
@@ -6524,8 +6540,7 @@ impl<M: TextEngine> Core<M> {
                         // Applied after the batch's value.
                         let id = node.id;
                         let count = input.count;
-                        self.commands
-                            .push((id, Command::SetSelection { start, end, count }));
+                        push_selection(&mut self.commands, id, start, end, count);
                         return Ok(());
                     }
                     _ => return Ok(()),

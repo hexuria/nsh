@@ -1017,7 +1017,9 @@ impl Screen {
     /// keeps it.
     fn command(&mut self, id: NodeId, command: &Command) {
         match command {
-            Command::SetSelection { start, end, count } => {
+            // Carried out from the `SetSelectionAt` the core sends after it.
+            Command::SetSelection { .. } => {}
+            Command::SetSelectionAt { start, end, count } => {
                 // As the platforms apply it: dropped when the user edited
                 // since the count the write was made against.
                 if let Some(input) = self.input_mut(id)
