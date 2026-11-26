@@ -63,7 +63,7 @@ TSX app adds its entry (`nsh package App.tsx --target …`).
 
 `nsh.json` also holds `rust` and `root` (the app's crates and its root component, [Building with Rust](./rust.md)),
 `theme` and `appearance`, `tailwind` (see [Tailwind](./tailwind.md)), `capabilities` (see
-[Sandbox and capabilities](./sandbox-and-capabilities.md)), `android` (`targetSdk`, `usesCleartextTraffic` and `allowBackup`, [below](#target-api-level)), `ios` and `macos` (the `Info.plist` keys and entitlements
+[Sandbox and capabilities](./sandbox-and-capabilities.md)), `android` (`targetSdk`, `usesCleartextTraffic`, `allowBackup` and `adaptiveIcon`, [below](#target-api-level)), `ios` and `macos` (the `Info.plist` keys and entitlements
 of their packages, [below](#infoplist-keys-and-entitlements); `macos.activationPolicy`, a [menu bar app](./macos.md#menu-bar-apps)) and `updater`, which makes desktop packages update themselves
 (see [App Updates](./app-updates.md)) and every native package take [OTA updates](./ota-updates.md); [Project structure](./project-structure.md#nshjson) lists
 every key. A key or value NSH cannot read is reported as a warning and left out, so an app written for a newer NSH
@@ -217,6 +217,35 @@ The package then declares `android:allowBackup="false"` and `android:fullBackupC
 rules (`android:dataExtractionRules`, Android 12 and later) that leave every part of the app's storage out of both the
 cloud backup and the transfer to another device. Without the key, or with `true`, the package says nothing about backup
 and Android's own default applies.
+
+### Adaptive icon
+
+Android 8 and later draw a launcher icon in layers: a foreground over a background, which each launcher masks to its
+own shape (a circle, a squircle, a rounded square) and moves in its animations. A plain `icon` is shrunk into that
+mask instead. `android.adaptiveIcon` gives the layers:
+
+```json
+{
+  "android": {
+    "adaptiveIcon": {
+      "foreground": "icon-foreground.png",
+      "background": "#ffffff",
+      "monochrome": "icon-monochrome.png"
+    }
+  }
+}
+```
+
+- `foreground`: a square PNG laid out on 108×108 dp (432 pixels is the largest size, xxxhdpi), its artwork inside the
+  central circle of 66 dp, which every mask keeps; the rest may be cut off or move.
+- `background`: a colour, `#rrggbb`.
+- `monochrome` (optional): the themed icon of Android 13 and later, a PNG laid out like the foreground whose shape (its
+  alpha) the system tints. Without it, a themed launcher shows the full-colour icon.
+
+The package then has the layers at every density (`mipmap-mdpi` to `mipmap-xxxhdpi`), the drawable
+`mipmap-anydpi-v26/ic_launcher.xml`, and the same as the round icon (`android:roundIcon`). The `icon` stays in the
+package and is no longer what Android shows. A background that is no `#rrggbb` colour is warned of and the adaptive
+icon left out.
 
 ### Google Play: App Bundles
 
@@ -378,7 +407,8 @@ Give one square PNG, ideally 1024×1024, in `nsh.json` (`"icon": "icon.png"`) or
 
 - **iOS:** compiled by Xcode's `actool` into the app's asset catalog (`Assets.car`), which derives every size iOS
   needs.
-- **Android:** resized to 192×192 and used as the launcher icon (`mipmap-xxxhdpi`).
+- **Android:** resized to 192×192 and used as the launcher icon (`mipmap-xxxhdpi`), unless the app gives the icon in
+  layers ([Adaptive icon](#adaptive-icon)).
 - **macOS:** converted by `sips` to `AppIcon.icns`. `nsh run --target macos` and `nsh test --target macos` show the
   PNG in the Dock and the app switcher.
 - **Linux:** copied as `<id>.png`, which the `.desktop` file names as its `Icon`.
