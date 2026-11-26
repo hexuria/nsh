@@ -921,3 +921,19 @@ fn marked_positions(app: &Headless, styles: &Mutex<HashMap<NodeId, bool>>) -> Ve
     xs.sort_by(f32::total_cmp);
     xs
 }
+
+/// SCRATCH: cut-equivalent deletion then a burst — reproduction probe.
+#[test]
+fn scratch_delete_then_burst() {
+    for controlled in [true, false] {
+        let mut app = if controlled { start::<Late>() } else { start::<Uncontrolled>() };
+        app.type_text("id:otp", "123").unwrap();
+        app.wait(Duration::from_millis(200)).unwrap();
+        app.select("id:otp", 1, 2).unwrap();
+        app.press_key("backspace").unwrap();
+        app.wait(Duration::from_millis(100)).unwrap();
+        app.type_text("id:otp", "56").unwrap();
+        app.wait(Duration::from_millis(200)).unwrap();
+        assert_eq!(field(&mut app, "id:otp"), "1563", "controlled={controlled}");
+    }
+}
