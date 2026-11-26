@@ -294,6 +294,9 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
         });
     });
 
+    // On the desktop (a hosted native editor owns the mouse there; see
+    // below) the input answers clicks itself.
+    let desktop = !crate::terminal::is_terminal() && os().is_desktop();
     let parts = Cells {
         length: props.length,
         masked: props.masked,
@@ -406,6 +409,7 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                 // The field tells screen readers the code.
                 view()
                     .on_layout(move |b: &Bounds<Points>| put(group_frames, g, *b))
+                    .when(desktop, |v| v.pointer_events(PointerEvents::None))
                     .accessibility_elements_hidden(true)
                     .project_disabled(parts.disabled)
                     .app_class(group_class)
@@ -508,6 +512,32 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
         }
     };
 
+    // On the desktop the field is a hosted native editor (an AppKit text
+    // field, a windowless RichEdit, a gtk::Text) that hit-testing hands the
+    // click to whole: the core never hears it, so neither does `place_caret`
+    // above, and the editor's own placement maps the click through the same
+    // unrelated glyph run — a click on digit 5 puts the caret at the end.
+    // There the field is hit-transparent (`pointerEvents: "none"`: it keeps
+    // the keyboard once focused, hit testing being the mouse's only road to
+    // it) and the input answers the mouse itself, with the same computed
+    // caret: a bare click places the caret on the nearest digit edge, a
+    // drag selects from where it began, a double click selects the code
+    // (one word, as the platforms select it). The cells take no pointer
+    // there either, so the finger always goes down on the input's own view
+    // and the touch's location is in the cells' own coordinates, whatever
+    // cell it was over.
+    let anchor: Signal<Option<u32>> = signal(None);
+    let last_click: Signal<f64> = signal(f64::NEG_INFINITY);
+    let caret_for = move |x: f32| {
+        let length = parts.length.get_untracked() as usize;
+        if length == 0 {
+            return None;
+        }
+        let per_group = per_group.get_untracked();
+        parts.frames.with_untracked(|cells| {
+            group_frames.with_untracked(|groups| caret_at(x, length, per_group, cells, groups))
+        })
+    };
     view()
         .disabled(props.disabled)
         .when(android, |v| v.on_long_press(select_run))
@@ -521,7 +551,51 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                 }
             })
         })
-        .when(!parts.terminal, |v| v.on_touch(place_caret))
+        .when(!parts.terminal && !desktop, |v| v.on_touch(place_caret))
+        .when(desktop, |v| {
+            v.claim_touches(TouchClaim::on_start().ask(move |request: &ClaimRequest| {
+                if !parts.disabled.get_untracked() {
+                    request.claim();
+                }
+            }))
+            .keep_touches(true)
+            .on_responder_grant(move |e: &ResponderEvent| {
+                if parts.disabled.get_untracked() {
+                    return;
+                }
+                field_ref.focus();
+                let x = e.location.x.0;
+                let now = e.timestamp;
+                // Two clicks within the platforms' double-click interval
+                // select the code: the digits are one word, and the run is
+                // what a double click in it selects everywhere.
+                if now - last_click.get_untracked() < 500.0 {
+                    last_click.set(f64::NEG_INFINITY);
+                    anchor.set(None);
+                    let end = utf16_len(&field.get_untracked());
+                    field_ref.set_selection(0, end);
+                    return;
+                }
+                last_click.set(now);
+                if let Some(position) = caret_for(x) {
+                    anchor.set(Some(position));
+                    field_ref.set_selection(position, position);
+                }
+            })
+            .on_responder_move(move |e: &ResponderEvent| {
+                let Some(from) = anchor.get_untracked() else {
+                    return;
+                };
+                let x = e.location.x.0;
+                if let Some(to) = caret_for(x)
+                    && to != from
+                {
+                    field_ref.set_selection(from.min(to), from.max(to));
+                }
+            })
+            .on_responder_release(move |_: &ResponderEvent| anchor.set(None))
+            .on_responder_terminate(move |_: &ResponderEvent| anchor.set(None))
+        })
         .child(cells)
         .child(
             input()
@@ -548,8 +622,17 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                 // disabling anything.
                 .caret_color(transparent_black())
                 // A terminal draws no caret in the field: its own cursor
-                // stands at the cell that takes the next digit.
-                .when(parts.terminal, |v| v.caret(false))
+                // stands at the cell that takes the next digit. Linux
+                // joins it on the desktop: there a targetable field keeps
+                // its own mouse no matter how the core's hit testing sees
+                // it (the widget takes the click natively and clamps the
+                // caret to the end, over the computed one), while an
+                // invisible field — no caret drawn, transparent text —
+                // leaves the pointer to what is under it, which is the
+                // input answering clicks itself (text_input.rs in
+                // nsh-platform-linux). The caret is transparent either
+                // way; hiding it only moves the pointer.
+                .when(parts.terminal || os() == Os::Linux, |v| v.caret(false))
                 .keyboard_type(KeyboardType::Number)
                 .auto_fill(AutoFill::OneTimeCode)
                 .auto_correct(false)
@@ -585,7 +668,12 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                     focused.set(false);
                     blink.stop();
                     cx.emit(OtpInputEvent::Blur);
-                }),
+                })
+                // On the desktop the mouse never reaches the field: the
+                // input answers it (see above). Hit testing is the
+                // mouse's only road to a field; the keyboard, the clipboard
+                // and the focus it is given are unaffected.
+                .when(desktop, |v| v.pointer_events(PointerEvents::None)),
         )
 }
 
