@@ -1092,8 +1092,13 @@ impl Input {
         set_paste(self.editor_view(), listens, inserts);
     }
 
-    /// Selects `start..end` of the text.
-    pub(crate) fn select(&self, start: u32, end: u32) {
+    /// Selects `start..end` of the text unless the user edited since the
+    /// core wrote it against `count` (the same staleness a value write is
+    /// dropped for: a late selection would pull the caret into live typing).
+    pub(crate) fn select(&self, start: u32, end: u32, count: u32) {
+        if count < self.count {
+            return;
+        }
         set_selection(self.editor_view(), start, end);
     }
 

@@ -2614,6 +2614,11 @@ pub enum Command {
         start: u32,
         /// End.
         end: u32,
+        /// The edit count the selection was written against: the platform
+        /// drops it when the user edited since, as with a value (the core
+        /// attaches it; a constructor outside the core leaves it 0).
+        #[doc(hidden)]
+        count: u32,
     },
     /// Insert text into an input in place of its selection, as the user's
     /// edit: the input's `maxLength` and line rules apply, `onChangeText`

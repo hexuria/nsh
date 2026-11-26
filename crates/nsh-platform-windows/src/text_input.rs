@@ -1651,10 +1651,15 @@ pub(crate) fn tab_to(view: &NshView) {
 }
 
 /// `setSelection` (UTF-16 offsets).
-pub(crate) fn set_selection(view: &NshView, start: u32, end: u32) {
+pub(crate) fn set_selection(view: &NshView, start: u32, end: u32, count: u32) {
     let Some(input) = input_of(view) else {
         return;
     };
+    // Written against an older text than the user's edits: a late selection
+    // would pull the caret into live typing, as a stale value would.
+    if count < input.count.get() {
+        return;
+    }
     let mut range = windows::Win32::UI::Controls::RichEdit::CHARRANGE {
         cpMin: start.min(i32::MAX as u32) as i32,
         cpMax: end.min(i32::MAX as u32) as i32,

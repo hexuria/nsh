@@ -34,6 +34,12 @@ use nsh_core::{
 
 use super::Headless;
 
+/// Which side of a bare caret a delete key takes its character from.
+enum Direction {
+    Backward,
+    Forward,
+}
+
 impl Headless {
     /// The steps `keyboard.down(<keys>)` / `keyboard.up(<keys>)`: holds or
     /// lets go of modifier keys (`"mod"`, `"shift"`, `"alt"`, `"ctrl"`,
@@ -276,6 +282,13 @@ impl Headless {
                         }
                         keymap::Key::Enter if plain => self.return_key(input),
                         keymap::Key::Backspace if plain => self.backspace(input),
+                        keymap::Key::Delete if plain => self.forward_delete(input),
+                        keymap::Key::Left if !(m.ctrl || m.alt) => {
+                            self.arrow(input, false, m.shift)
+                        }
+                        keymap::Key::Right if !(m.ctrl || m.alt) => {
+                            self.arrow(input, true, m.shift)
+                        }
                         keymap::Key::Char(c) if plain => {
                             let c = if m.shift { shifted(c) } else { c };
                             self.key(input, c);
@@ -596,24 +609,120 @@ impl Headless {
         }
     }
 
-    /// Backspace in input `id`: its last character goes.
+    /// Backspace in input `id`, as the platform view does it: a selection
+    /// goes whole and the caret collapses to its start; without one the
+    /// character before the caret goes. The caret's move is reported ahead
+    /// of the text it came with, as an insertion's is.
     fn backspace(&mut self, id: nsh_core::NodeId) {
         self.key_press(id, "Backspace");
+        self.erase(id, Direction::Backward);
+    }
+
+    /// The forward delete key in input `id`: a selection goes whole;
+    /// without one the character after the caret goes, the caret still.
+    fn forward_delete(&mut self, id: nsh_core::NodeId) {
+        self.key_press(id, "Delete");
+        self.erase(id, Direction::Forward);
+    }
+
+    /// The edit both delete keys share, `direction` deciding what a bare
+    /// caret removes.
+    /// An arrow key in input `id`, as the platform view does it: a bare
+    /// arrow collapses a selection to its end on that side, or moves the
+    /// caret one character; shifted, the selection grows or shrinks a
+    /// character at its moving end (the selection's `1` is the moving end
+    /// here). No text changes, so only the selection is reported.
+    fn arrow(&mut self, id: nsh_core::NodeId, forward: bool, shift: bool) {
+        let key = if forward { "ArrowRight" } else { "ArrowLeft" };
+        self.key_press(id, key);
         let Some(input) = self.screen.input_mut(id) else {
             return;
         };
-        if input.text.pop().is_none() {
-            return;
+        // The utf16 length of the text up to each char boundary.
+        let mut bounds: Vec<u32> = Vec::new();
+        let mut acc = 0u32;
+        for ch in input.text.chars() {
+            bounds.push(acc);
+            acc += ch.len_utf16() as u32;
         }
+        bounds.push(acc);
+        let step = |units: u32, forward: bool| -> u32 {
+            let ix = bounds
+                .iter()
+                .position(|b| *b >= units)
+                .unwrap_or(bounds.len() - 1);
+            if forward {
+                bounds.get(ix + 1).copied().unwrap_or(acc)
+            } else {
+                bounds[ix.saturating_sub(1)]
+            }
+        };
+        let (lo, hi) = (
+            input.selection.0.min(input.selection.1),
+            input.selection.0.max(input.selection.1),
+        );
+        if shift {
+            input.selection.1 = step(input.selection.1, forward);
+        } else {
+            let at = if lo != hi {
+                if forward { hi } else { lo }
+            } else {
+                step(lo, forward)
+            };
+            input.selection = (at, at);
+        }
+        self.report_selection(id);
+    }
+
+    fn erase(&mut self, id: nsh_core::NodeId, direction: Direction) {
+        let Some(input) = self.screen.input_mut(id) else {
+            return;
+        };
+        // The selection is in UTF-16 units, the text indexed in bytes.
+        let at = |units: u32, text: &str| {
+            let mut seen = 0u32;
+            text.char_indices()
+                .find_map(|(byte, ch)| {
+                    let here = seen;
+                    seen += ch.len_utf16() as u32;
+                    (here == units).then_some(byte)
+                })
+                .unwrap_or(text.len())
+        };
+        let (lo, hi) = (
+            input.selection.0.min(input.selection.1),
+            input.selection.0.max(input.selection.1),
+        );
+        let (from, to, caret) = if lo != hi {
+            (at(lo, &input.text), at(hi, &input.text), lo)
+        } else {
+            let boundary = at(lo, &input.text);
+            let pair = match direction {
+                // The character ending at the caret, or nothing at the start.
+                Direction::Backward => input.text[..boundary]
+                    .char_indices()
+                    .next_back()
+                    .map(|(byte, ch)| (byte, boundary, lo - ch.len_utf16() as u32)),
+                // The character starting at the caret, or nothing at the end.
+                Direction::Forward => input.text[boundary..]
+                    .chars()
+                    .next()
+                    .map(|ch| (boundary, boundary + ch.len_utf8(), lo)),
+            };
+            let Some(triple) = pair else { return };
+            triple
+        };
+        input.text.replace_range(from..to, "");
+        input.selection = (caret, caret);
         input.count += 1;
         let payload = EventPayload::Text {
             text: input.text.clone(),
             count: input.count,
         };
+        self.report_selection(id);
         self.engine
             .control()
             .dispatch_event(id, EventKind::ChangeText, payload);
-        self.report_selection(id);
     }
 }
 

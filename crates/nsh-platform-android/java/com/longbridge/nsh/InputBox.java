@@ -694,8 +694,13 @@ final class InputBox extends FrameLayout implements Node {
         if (m != null) m.finish();
     }
 
-    /** Selects {@code start..end} (clamped to the text). */
-    void select(int start, int end) {
+    /**
+     * Selects {@code start..end} (clamped to the text) unless the user typed
+     * since the core wrote the selection against {@code count}: a late one
+     * would pull the caret into live typing, as a stale value would.
+     */
+    void select(int start, int end, int count) {
+        if (count < this.count) return;
         int length = edit.length();
         edit.setSelection(Math.min(start, length), Math.min(Math.max(start, end), length));
     }

@@ -462,9 +462,9 @@ impl Mounter {
                 Some(view) if view.id() != ROOT_ID && crate::keyboard::blur(surface, view) => {}
                 _ => crate::text_input::blur_all(surface),
             },
-            Command::SetSelection { start, end } => {
+            Command::SetSelection { start, end, count } => {
                 if let Some(view) = view {
-                    crate::text_input::set_selection(view, *start, *end);
+                    crate::text_input::set_selection(view, *start, *end, *count);
                 }
             }
             // Not carried out on this platform yet: the app's paste is lost,

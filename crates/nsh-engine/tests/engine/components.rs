@@ -6666,7 +6666,13 @@ fn a_base_otp_input_types_into_one_field_over_its_cells() {
         .expect("the field's config");
     assert_eq!(config.keyboard, nsh_core::KeyboardType::Number);
     assert_eq!(config.auto_fill, AutoFill::OneTimeCode);
-    assert!(config.caret_hidden);
+    // The caret stays (a transparent one: the phones' edit menu depends on
+    // the field keeping it), hidden by color like the text and selection.
+    assert!(!config.caret_hidden);
+    assert!(
+        config.caret_color.is_some_and(|c| c.is_transparent()),
+        "transparent caret, not a disabled one"
+    );
     assert!(!config.auto_correct);
     assert!(!config.secure);
     assert_eq!(

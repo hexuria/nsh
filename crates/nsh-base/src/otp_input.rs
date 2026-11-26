@@ -441,7 +441,16 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                 .bg(AdaptiveColor::TRANSPARENT)
                 .text_color(AdaptiveColor::TRANSPARENT)
                 .selection_color(transparent_black())
-                .caret(false)
+                // The platform's own caret stays, only unseen: disabling it
+                // (`caret(false)`) is for an editor that draws and manages
+                // everything itself, and on the phones it cost the field its
+                // edit menu — a long press showed no Paste, though paste is
+                // this input's own design. Transparent is invisible without
+                // disabling anything.
+                .caret_color(transparent_black())
+                // A terminal draws no caret in the field: its own cursor
+                // stands at the cell that takes the next digit.
+                .when(parts.terminal, |v| v.caret(false))
                 .keyboard_type(KeyboardType::Number)
                 .auto_fill(AutoFill::OneTimeCode)
                 .auto_correct(false)
@@ -451,13 +460,21 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                 .optional_label(props.accessibility_label)
                 .value(move || field.get())
                 .on_change(move |text: &str| changed(text))
-                .on_selection_change(move |selection: &Selection| {
-                    // The caret stays at the end: nothing is edited in the
-                    // middle.
-                    let end = utf16_len(&field.get_untracked());
-                    if (selection.start, selection.end) != (end, end) {
-                        field_ref.set_selection(end, end);
-                    }
+                .on_selection_change(move |_selection: &Selection| {
+                    // The caret is the user's own, wherever they put it:
+                    // a selection is theirs for the edit menu, and a caret
+                    // inside the text is where an arrow or a click left
+                    // it. The reconstruction reads any single contiguous
+                    // edit exactly — what the field lost, wherever it lost
+                    // it, comes out of the code and the rest close up — so
+                    // nothing is pinned to the end. Pinning was the burst
+                    // fault itself: measured against the binding, which
+                    // lags a JS turn behind what the user typed, it yanked
+                    // the caret into the text mid-burst and the next key
+                    // landed inside it; and it undid the caret moves a
+                    // selection starts with, so a cut of the first digits
+                    // cut the last. The rewrite after a correction places
+                    // the caret at the end itself, count-guarded.
                 })
                 .on_focus(move || {
                     focused.set(true);

@@ -7000,7 +7000,13 @@ class Player {
         if (el?._field) el._field.blur();
         else document.activeElement?.blur?.();
         break;
-      case "setSelection": el?._field?.setSelectionRange(args[0], args[1]); break;
+      case "setSelection": {
+        // Written against an older text than the user's edits: a late one
+        // would pull the caret into live typing, as a stale value would.
+        const field = el?._field;
+        if (field && args[2] >= field._count) field.setSelectionRange(args[0], args[1]);
+        break;
+      }
       case "insertText": {
         // As the user's typing: the browser's undo history keeps it and
         // `input` reports it. `execCommand` edits the focused field only.

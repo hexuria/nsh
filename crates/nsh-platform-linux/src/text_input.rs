@@ -1600,10 +1600,15 @@ pub(crate) fn blur_all(surface: &Rc<Surface>) {
 }
 
 /// `setSelection` (UTF-16 offsets).
-pub(crate) fn set_selection(view: &NshView, start: u32, end: u32) {
+pub(crate) fn set_selection(view: &NshView, start: u32, end: u32, count: u32) {
     let Some(input) = view.state().input.clone() else {
         return;
     };
+    // Written against an older text than the user's edits: a late selection
+    // would pull the caret into live typing, as a stale value would.
+    if count < input.count.get() {
+        return;
+    }
     let editor = input.editor.borrow().clone();
     let text = editor.text();
     editor.select(
