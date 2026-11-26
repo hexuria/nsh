@@ -35,9 +35,9 @@ describe("the Input demo", () => {
 describe("the sign-up form", () => {
   let app: App;
   beforeEach(async () => {
+    // The window as it opens, which fits a runner's screen: the steps
+    // scroll the page to the fields, and queries see the page's content.
     app = await open("../App.tsx", { clock: {} });
-    // Tall enough for the whole account section: queries see the window only.
-    await app.setViewport(390, 2400);
     await app.press("label:Input");
   });
 
@@ -74,7 +74,6 @@ describe("the search field", () => {
   let app: App;
   beforeEach(async () => {
     app = await open("../App.tsx", { clock: {} });
-    await app.setViewport(390, 2400);
     await app.press("label:Input");
   });
 
