@@ -1197,17 +1197,13 @@ fn inert_fields(asks: bool) -> impl IntoElement {
                 .child(field("covering").inset_0()),
         )
         .child(
-            view()
-                .test_id("editor")
-                .w(px(200.0))
-                .h(px(40.0))
-                .child(
-                    field("sink")
-                        .left(px(50.0))
-                        .top(px(10.0))
-                        .w(px(1.0))
-                        .h(px(1.0)),
-                ),
+            view().test_id("editor").w(px(200.0)).h(px(40.0)).child(
+                field("sink")
+                    .left(px(50.0))
+                    .top(px(10.0))
+                    .w(px(1.0))
+                    .h(px(1.0)),
+            ),
         )
         .child(text(move || format!("Focused {}", focus.get())))
 }

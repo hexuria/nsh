@@ -838,7 +838,9 @@ impl Input {
     /// menu only from a press the field receives itself) and the mobile
     /// platforms ignore it.
     pub fn secondary_press_through(self, through: impl IntoReactive<bool>) -> Self {
-        self.bind_prop(through, |through: bool| Prop::SecondaryPressThrough(through))
+        self.bind_prop(through, |through: bool| {
+            Prop::SecondaryPressThrough(through)
+        })
     }
 
     /// Shows the input accessory with this `nativeID` over the keyboard
