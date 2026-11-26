@@ -56,6 +56,9 @@ fn start_observing<C: Component<Props = ()>>() -> (Headless, Inputs) {
 /// user) finds nothing to type into.
 fn sized(input: nsh_base::OtpInputElement) -> nsh_base::OtpInputElement {
     input
+        // No wider than the cells, so a press or drag lands on them at
+        // the x it points at whatever the width of the screen is.
+        .app_class("w-45")
         .cell_style(|s| s.w(px(30.0)).h(px(40.0)))
         .group_class("flex-row")
 }
@@ -920,4 +923,109 @@ fn marked_positions(app: &Headless, styles: &Mutex<HashMap<NodeId, bool>>) -> Ve
         .collect();
     xs.sort_by(f32::total_cmp);
     xs
+}
+
+/// A desktop run: macOS, the desktop idiom, as the desktop backends run.
+fn start_desktop<C: Component<Props = ()>>() -> Headless {
+    let mut config = EngineConfig::new(Root::of::<C>());
+    config.viewport = Size::new(px(390.0), px(844.0));
+    config.environment.os = nsh_core::platform::Os::MacOs;
+    config.environment.idiom = nsh_core::platform::Idiom::Desktop;
+    let mut app = Headless::start(config).unwrap();
+    app.first_render().unwrap();
+    app
+}
+
+/// On the desktop a mouse click on a cell places the caret where it
+/// lands: the field there is hit-transparent (a hosted editor's own
+/// hit-testing could never place it — its glyphs are one continuous run
+/// with no relation to the cells), and the input answers the mouse from
+/// the cells' frames.
+#[test]
+fn a_click_on_a_cell_places_the_caret_there_on_the_desktop() {
+    // (click x in the input, caret; the cells are 30 wide in a row)
+    for (x, caret) in [
+        (5.0, 0),
+        (25.0, 1),
+        (35.0, 1),
+        (55.0, 2),
+        (65.0, 2),
+        (85.0, 3),
+    ] {
+        let mut app = start_desktop::<Uncontrolled>();
+        app.type_text("id:otp", "123").unwrap();
+        app.press_at("label:Code", Point::new(px(x), px(20.0)))
+            .unwrap();
+        app.wait(Duration::from_millis(80)).unwrap();
+        assert_eq!(
+            app.screen().input_selection("id:otp").unwrap(),
+            Some((caret, caret)),
+            "click at x {x} of three 30-wide cells"
+        );
+    }
+}
+
+/// A click's caret is where Backspace acts on the desktop: caret after
+/// the second digit, one Backspace removes the second digit, not the
+/// last.
+#[test]
+fn a_backspace_after_a_click_removes_the_digit_before_it_on_the_desktop() {
+    let mut app = start_desktop::<Uncontrolled>();
+    app.type_text("id:otp", "123").unwrap();
+    app.press_at("label:Code", Point::new(px(55.0), px(20.0)))
+        .unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    app.press_key("backspace").unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(field(&mut app, "id:otp"), "13");
+}
+
+/// A click and drag selects the digits it moves over on the desktop,
+/// from the edge it began at to the one it ends nearest.
+#[test]
+fn a_drag_selects_the_digits_it_moves_over_on_the_desktop() {
+    let mut app = start_desktop::<Uncontrolled>();
+    app.type_text("id:otp", "123").unwrap();
+    // The input is 6 cells of 30 in a row, x 0 to 180. The drag starts
+    // at its center (x 90, the edge after digit 3) and moves 60 left,
+    // ending at x 30 (the edge after digit 1).
+    app.drag("label:Code", Point::new(px(-60.0), px(0.0)))
+        .unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(
+        app.screen().input_selection("id:otp").unwrap(),
+        Some((1, 3)),
+        "a drag from x 90 to x 30 selects digits 2 and 3"
+    );
+}
+
+/// A double click selects the code on the desktop: the digits are one
+/// word, and the run is what a double click in it selects everywhere.
+#[test]
+fn a_double_click_selects_the_code_on_the_desktop() {
+    let mut app = start_desktop::<Uncontrolled>();
+    app.type_text("id:otp", "123").unwrap();
+    app.press_at("label:Code", Point::new(px(55.0), px(20.0)))
+        .unwrap();
+    app.press_at("label:Code", Point::new(px(55.0), px(20.0)))
+        .unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(
+        app.screen().input_selection("id:otp").unwrap(),
+        Some((0, 3)),
+        "a double click selects the run"
+    );
+}
+
+/// The keyboard is unchanged on the desktop: arrows move the caret,
+/// shift extends the selection, typing over it replaces exactly it.
+#[test]
+fn the_keyboard_is_unchanged_on_the_desktop() {
+    let mut app = start_desktop::<Uncontrolled>();
+    app.type_text("id:otp", "123").unwrap();
+    app.press_key("left").unwrap();
+    app.press_key("shift+left").unwrap();
+    app.type_text("id:otp", "5").unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(field(&mut app, "id:otp"), "153");
 }
