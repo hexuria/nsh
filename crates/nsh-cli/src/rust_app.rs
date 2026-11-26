@@ -5002,7 +5002,14 @@ mod tests {
         assert!(
             before.ends_with(&format!(
                 "nsh-platform-web = {{ path = {:?} }}\n",
-                checkout.join("crates/nsh-platform-web").to_string_lossy()
+                // Joined part by part, as `nsh_crate` builds it: one
+                // `join("crates/nsh-platform-web")` keeps its `/` on Windows,
+                // so the expected path read `…\crates/nsh-platform-web`
+                // there while the manifest has `…\crates\nsh-platform-web`.
+                checkout
+                    .join("crates")
+                    .join("nsh-platform-web")
+                    .to_string_lossy()
             )),
             "{before}"
         );

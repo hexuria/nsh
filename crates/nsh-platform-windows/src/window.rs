@@ -1697,8 +1697,8 @@ fn window_api(
                 // The main window stays big enough to show something.
                 None if main => {
                     info.ptMinTrackSize = POINT {
-                        x: (200.0 * scale) as i32,
-                        y: (150.0 * scale) as i32,
+                        x: (MIN_WIDTH * scale) as i32,
+                        y: (MIN_HEIGHT * scale) as i32,
                     }
                 }
                 None => {}
