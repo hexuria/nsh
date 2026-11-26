@@ -424,9 +424,18 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
     // ends in a bare caret: a long press's word selection, a double tap's,
     // and a handle drag are selections by then and keep what the platform
     // gave them. The write is count-guarded, so a key typed before it
-    // lands wins over it.
+    // lands wins over it. A long press's own selection is still on its way
+    // to the report when the touch ends, so the touch that raised one is
+    // remembered here, not left to the lagging signal.
+    let long_pressed = stored(false);
     let place_caret = move |e: &TouchEvent| {
+        if e.phase == TouchPhase::Start {
+            long_pressed.replace(false);
+        }
         if e.phase != TouchPhase::End || parts.disabled.get_untracked() {
+            return;
+        }
+        if long_pressed.get() {
             return;
         }
         if selection.get_untracked().start != selection.get_untracked().end {
@@ -449,8 +458,31 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
         field_ref.set_selection(position, position);
     };
 
+    // A long press anywhere on the input selects the code whole, as the
+    // platform's own word selection does with a run of digits. It cannot
+    // come from the field's own hit-test: the hidden glyphs sit in one
+    // small strip at the field's start, so on the phones a long press
+    // over a cell right of the strip finds no word and selects nothing
+    // (spreading the glyphs across the cells' width was the other shape
+    // — but the cells are grouped, so no uniform pitch lines them up,
+    // and the run's positions would still be the font's, not the cells').
+    // The write is the field's real selection: the edit menu and the
+    // handles are the platform's own, and it is count-guarded, so a key
+    // typed before it lands wins over it.
+    let select_run = move || {
+        if parts.disabled.get_untracked() {
+            return;
+        }
+        let len = utf16_len(&field.get_untracked());
+        if len > 0 {
+            long_pressed.replace(true);
+            field_ref.set_selection(0, len);
+        }
+    };
+
     view()
         .disabled(props.disabled)
+        .on_long_press(select_run)
         // In a terminal the field is no wider than a Cell, under none of
         // the cells: a press on them gives it the keys, as the field
         // over them does elsewhere.

@@ -820,6 +820,28 @@ fn typing_at_a_tapped_caret_inserts_there() {
     assert_eq!(field(&mut app, "id:otp"), "152");
 }
 
+/// A long press over any cell selects the code whole, as the platform's
+/// own word selection does with a run of digits. It cannot come from the
+/// field's own hit-test: the hidden glyphs sit in one small strip at the
+/// field's start, so on the phones a long press over a cell right of the
+/// strip found no word and selected nothing.
+#[test]
+fn a_long_press_over_a_cell_selects_the_run() {
+    // (the cells are 30 wide in a row: over cell 1 and over cell 2)
+    for x in [35.0, 65.0] {
+        let mut app = start::<Uncontrolled>();
+        app.type_text("id:otp", "123").unwrap();
+        app.long_press_at("label:Code", Point::new(px(x), px(20.0)))
+            .unwrap();
+        app.wait(Duration::from_millis(80)).unwrap();
+        assert_eq!(
+            app.screen().input_selection("id:otp").unwrap(),
+            Some((0, 3)),
+            "long press at x {x} selects the whole run"
+        );
+    }
+}
+
 /// A selection the platform reports is drawn on exactly the cells it
 /// covers: the middle digit alone, or every cell for the whole run.
 #[test]
