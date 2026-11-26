@@ -1695,6 +1695,30 @@ define_class!(
     }
 );
 
+/// The view in input pad `pad` that a secondary press at `at` (in the pad's
+/// superview's coordinates, as `hitTest:` takes) goes to when the input
+/// takes no pointer ([`crate::input::hidden_field_at`]): the editor's, at
+/// the nearest point inside it, as [`InputPad::forward`] moves a press
+/// beside it. The field's line is shorter than an input sized as a whole
+/// row of cells, and a right press on the pad itself would find no menu.
+pub(crate) fn editor_at(pad: &NSView, at: NSPoint) -> Option<Retained<NSView>> {
+    let pad = pad.downcast_ref::<InputPad>()?;
+    let editor = pad.subviews().lastObject()?;
+    let outer = crate::view::superview(pad)?;
+    let p = pad.convertPoint_fromView(at, Some(&outer));
+    let f = editor.frame();
+    if f.size.width < 2.0 || f.size.height < 2.0 {
+        return None;
+    }
+    let inside = NSPoint::new(
+        p.x.clamp(f.origin.x + 1.0, f.origin.x + f.size.width - 1.0),
+        p.y.clamp(f.origin.y + 1.0, f.origin.y + f.size.height - 1.0),
+    );
+    let me: &NSView = pad;
+    pad.hitTest(pad.convertPoint_toView(inside, Some(&outer)))
+        .filter(|t| &**t != me)
+}
+
 impl InputPad {
     fn create(mtm: MainThreadMarker) -> Retained<NSView> {
         let this = Self::alloc(mtm).set_ivars(Cell::new(false));

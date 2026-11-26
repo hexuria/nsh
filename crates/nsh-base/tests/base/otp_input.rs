@@ -989,13 +989,27 @@ fn marked_positions(app: &Headless, styles: &Mutex<HashMap<NodeId, bool>>) -> Ve
 
 /// A desktop run: macOS, the desktop idiom, as the desktop backends run.
 fn start_desktop<C: Component<Props = ()>>() -> Headless {
+    start_desktop_on::<C>(nsh_core::platform::Os::MacOs)
+}
+
+/// [`start_desktop`] on the desktop system `os`.
+fn start_desktop_on<C: Component<Props = ()>>(os: nsh_core::platform::Os) -> Headless {
     let mut config = EngineConfig::new(Root::of::<C>());
     config.viewport = Size::new(px(390.0), px(844.0));
-    config.environment.os = nsh_core::platform::Os::MacOs;
+    config.environment.os = os;
     config.environment.idiom = nsh_core::platform::Idiom::Desktop;
     let mut app = Headless::start(config).unwrap();
     app.first_render().unwrap();
     app
+}
+
+/// The labels of the open menu, `[]` with none open.
+fn menu_labels(app: &Headless) -> Vec<String> {
+    app.menu()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|e| e.label)
+        .collect()
 }
 
 /// On the desktop a mouse click on a cell places the caret where it
@@ -1097,18 +1111,107 @@ fn two_quick_clicks_on_different_cells_place_a_caret_on_the_desktop() {
     );
 }
 
-/// A secondary click opens the editing menu, Paste in it: the field takes
-/// no pointer on the desktop, so the input opens it.
+/// A secondary click on the code is the field's own on macOS and Windows:
+/// the field takes no pointer there (the input answers clicks), and the
+/// platforms take it as the hit all the same, so it takes the focus and
+/// opens its own edit menu, with what it can do now: on an empty code
+/// with a code on the clipboard, only Paste, which puts it in.
 #[test]
-fn a_right_click_opens_the_edit_menu_on_the_desktop() {
+fn a_right_click_opens_the_fields_own_edit_menu_on_the_desktop() {
+    use nsh_core::platform::Os;
+    for os in [Os::MacOs, Os::Windows] {
+        let mut app = start_desktop_on::<Uncontrolled>(os);
+        app.set_clipboard(Some("654321".into()));
+        app.right_click("label:Code").unwrap();
+        see(&mut app, "Focus 1 Blur 0");
+        assert_eq!(menu_labels(&app), ["Paste"], "on {os:?}");
+        app.choose_menu_item("Paste").unwrap();
+        see(&mut app, "Changes [654321]");
+        assert_eq!(field(&mut app, "id:otp"), "654321", "on {os:?}");
+    }
+}
+
+/// The field's menu offers what the field can do: Cut and Copy only with
+/// a selection and never on a masked code, Paste only with something to
+/// paste, Select All with digits.
+#[test]
+fn the_right_click_menu_offers_what_the_field_can_do_on_the_desktop() {
     let mut app = start_desktop::<Uncontrolled>();
     app.type_text("id:otp", "123").unwrap();
     app.right_click("label:Code").unwrap();
-    app.wait(Duration::from_millis(80)).unwrap();
-    // Cut, Copy, Paste and Select All: the platform's own roles, which it
-    // labels itself (the harness shows a role's label empty).
-    let menu = app.menu().expect("a menu is open");
-    assert_eq!(menu.len(), 4, "the edit menu's four roles: {menu:?}");
+    assert_eq!(
+        menu_labels(&app),
+        ["Select All"],
+        "no selection, nothing to paste"
+    );
+    app.close_menu().unwrap();
+    app.select("id:otp", 0, 2).unwrap();
+    app.right_click("label:Code").unwrap();
+    assert_eq!(menu_labels(&app), ["Cut", "Copy", "Select All"]);
+    app.close_menu().unwrap();
+
+    let mut app = start_desktop::<States>();
+    app.type_text("id:masked", "34").unwrap();
+    app.select("id:masked", 0, 2).unwrap();
+    app.right_click("label:Masked").unwrap();
+    assert_eq!(
+        menu_labels(&app),
+        ["Select All"],
+        "a masked code is not copied"
+    );
+}
+
+/// A disabled code opens no menu on a secondary click, and takes nothing
+/// from one.
+#[test]
+fn a_disabled_code_opens_no_menu_on_a_right_click_on_the_desktop() {
+    let mut app = start_desktop::<States>();
+    app.set_clipboard(Some("9876".into()));
+    app.right_click("label:Disabled").unwrap();
+    assert!(app.menu().is_none(), "{:?}", app.menu());
+    assert_eq!(field(&mut app, "label:Disabled"), "12");
+}
+
+/// The code's field, and the pointer events each view's props last gave.
+type FieldPointer = (Option<NodeId>, HashMap<NodeId, PointerEvents>);
+
+/// On Linux the field keeps the mouse (a GTK field's edit menu opens only
+/// from a press it receives itself): it is not hit-transparent there, as
+/// it is on macOS and Windows.
+#[test]
+fn the_field_keeps_the_pointer_on_linux() {
+    use nsh_core::platform::Os;
+    for (os, takes) in [(Os::Linux, true), (Os::MacOs, false), (Os::Windows, false)] {
+        let mut config = EngineConfig::new(Root::of::<Uncontrolled>());
+        config.viewport = Size::new(px(390.0), px(844.0));
+        config.environment.os = os;
+        config.environment.idiom = nsh_core::platform::Idiom::Desktop;
+        let mut app = Headless::start(config).unwrap();
+        // The code's field, and the pointer events its props last gave.
+        let seen: Arc<Mutex<FieldPointer>> = Arc::default();
+        let into = seen.clone();
+        app.observe(move |_, batch| {
+            let mut seen = into.lock().unwrap();
+            for item in &batch.items {
+                match item {
+                    MountItem::Input { id, config }
+                        if config.auto_fill == AutoFill::OneTimeCode =>
+                    {
+                        seen.0 = Some(*id);
+                    }
+                    MountItem::ViewProps { id, props } => {
+                        seen.1.insert(*id, props.pointer_events);
+                    }
+                    _ => {}
+                }
+            }
+        });
+        app.first_render().unwrap();
+        let seen = seen.lock().unwrap();
+        let field = seen.0.expect("the code's field");
+        let pointer = seen.1.get(&field).copied().unwrap_or(PointerEvents::Auto);
+        assert_eq!(pointer != PointerEvents::None, takes, "on {os:?}");
+    }
 }
 
 /// The keyboard is unchanged on the desktop: arrows move the caret,

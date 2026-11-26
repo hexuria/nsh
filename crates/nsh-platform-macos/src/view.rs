@@ -1424,7 +1424,24 @@ impl ViewObj {
         }
         let outer = superview(self);
         let p = self.convertPoint_fromView(point, outer.as_deref());
-        let Some(native) = crate::input::native_at(&root, p.x as f32, p.y as f32) else {
+        let (x, y) = (p.x as f32, p.y as f32);
+        let Some(native) = crate::input::native_at(&root, x, y) else {
+            // A secondary press over a text field that takes no pointer
+            // (`pointerEvents: "none"`: the one-time code's, under the cells
+            // that answer the mouse) is the field's all the same, unless a
+            // view on the way listens to `onContextMenu`
+            // ([`crate::input::hidden_field_at`]): handed to the field's
+            // editor, as one the pointer reaches gets it, AppKit focuses
+            // the field and shows its own edit menu (Paste, its validated
+            // items), the menu the keyboard reaches there too. Without it
+            // the press found no editor and showed nothing.
+            if secondary_pressing(self.mtm())
+                && let Some(pad) = crate::input::hidden_field_at(&root, x, y)
+                && let Some(holder) = superview(&pad)
+            {
+                let q = holder.convertPoint_fromView(point, outer.as_deref());
+                return crate::text_input::editor_at(&pad, q).unwrap_or_else(me);
+            }
             return me();
         };
         // A web view that does not scroll leaves wheels to the app's
@@ -1680,6 +1697,25 @@ pub(crate) fn pressing(mtm: MainThreadMarker) -> bool {
             )
         },
     )
+}
+
+/// Whether the event AppKit handles (or the test agent hands the window)
+/// is a secondary press: the right button's, or a Control-click, macOS's
+/// secondary click.
+fn secondary_pressing(mtm: MainThreadMarker) -> bool {
+    use objc2_app_kit::{NSApplication, NSEventModifierFlags};
+    let secondary = |e: &NSEvent| match e.r#type() {
+        NSEventType::RightMouseDown => true,
+        NSEventType::LeftMouseDown => e.modifierFlags().contains(NSEventModifierFlags::Control),
+        _ => false,
+    };
+    SCRIPTED
+        .with_borrow(|e| e.as_deref().map(secondary))
+        .unwrap_or_else(|| {
+            NSApplication::sharedApplication(mtm)
+                .currentEvent()
+                .is_some_and(|e| secondary(&e))
+        })
 }
 
 /// Whether the event AppKit handles is a mouse wheel or trackpad scroll.

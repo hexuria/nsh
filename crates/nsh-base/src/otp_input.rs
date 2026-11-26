@@ -38,11 +38,7 @@ use std::time::Duration;
 
 use nsh_core::{
     AutoFill, TouchEvent, TouchPhase,
-    desktop::MenuRole,
-    element::{
-        Style, TextPartStyle,
-        desktop::{MenuItem as DesktopMenuItem, popup_menu_at},
-    },
+    element::{Style, TextPartStyle},
     platform::Os,
     prelude::*,
 };
@@ -299,8 +295,9 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
     });
 
     // On the desktop (a hosted native editor owns the mouse there; see
-    // below) the input answers clicks itself.
-    let desktop = !crate::terminal::is_terminal() && os().is_desktop();
+    // below) the input answers clicks itself, but on Linux: there the
+    // field keeps the mouse, so a secondary click keeps its own edit menu.
+    let desktop = !crate::terminal::is_terminal() && os().is_desktop() && os() != Os::Linux;
     let parts = Cells {
         length: props.length,
         masked: props.masked,
@@ -534,6 +531,25 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
     // there either, so the finger always goes down on the input's own view
     // and the touch's location is in the cells' own coordinates, whatever
     // cell it was over.
+    //
+    // A secondary click never reaches the touches (the platforms send it
+    // as a context menu), and is the field's own all the same: macOS and
+    // Windows take a field that takes no pointer, under the view the click
+    // lands on, as the hit when nothing on the way listens to
+    // `onContextMenu` (`hidden_field_at` in nsh-platform-macos'
+    // `input.rs`, `hidden_field` in nsh-platform-windows'), so it is
+    // focused and shows the platform's own edit menu: its Undo and Delete,
+    // each item enabled as the field can (no Paste on an empty clipboard,
+    // no Cut or Copy without a selection or while masked), the menu the
+    // keyboard (Shift+F10, the Menu key) opens in it too. The input adds no
+    // menu of its own.
+    //
+    // Not on Linux: a GTK text widget's edit menu opens only from a press
+    // it receives itself (programmatically it opens at the caret, which
+    // here is in the field's hidden glyph run, away from the click), so
+    // there the field keeps the mouse, its edit menu with it, as before
+    // the input answered clicks; and with it the old fault of the clicked
+    // caret (a click on a digit puts the caret where the glyph run maps it).
     let anchor: Signal<Option<u32>> = signal(None);
     // The last click: when, and where (x in the input).
     let last_click: Signal<(f64, f32)> = signal((f64::NEG_INFINITY, 0.0));
@@ -606,18 +622,6 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
             })
             .on_responder_release(move |_: &ResponderEvent| anchor.set(None))
             .on_responder_terminate(move |_: &ResponderEvent| anchor.set(None))
-            // The field takes no pointer here, so a secondary click (it
-            // never reaches the touches: the platforms send it as a context
-            // menu) would find no editor to open its own menu: the input
-            // opens the editing menu itself, its items the platform's own
-            // roles acting on the focused field.
-            .on_context_menu(move |e: &ContextMenuEvent| {
-                if parts.disabled.get_untracked() {
-                    return;
-                }
-                field_ref.focus();
-                drop(popup_menu_at(edit_menu(), e.page_position));
-            })
         })
         .child(cells)
         .child(
@@ -645,17 +649,10 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                 // disabling anything.
                 .caret_color(transparent_black())
                 // A terminal draws no caret in the field: its own cursor
-                // stands at the cell that takes the next digit. Linux
-                // joins it on the desktop: there a targetable field keeps
-                // its own mouse no matter how the core's hit testing sees
-                // it (the widget takes the click natively and clamps the
-                // caret to the end, over the computed one), while an
-                // invisible field — no caret drawn, transparent text —
-                // leaves the pointer to what is under it, which is the
-                // input answering clicks itself (text_input.rs in
-                // nsh-platform-linux). The caret is transparent either
-                // way; hiding it only moves the pointer.
-                .when(parts.terminal || os() == Os::Linux, |v| v.caret(false))
+                // stands at the cell that takes the next digit. (Linux
+                // keeps its caret, and with it the mouse: see the desktop
+                // clicks above.)
+                .when(parts.terminal, |v| v.caret(false))
                 .keyboard_type(KeyboardType::Number)
                 .auto_fill(AutoFill::OneTimeCode)
                 .auto_correct(false)
@@ -854,19 +851,6 @@ fn is_double_click(last: (f64, f32), click: (f64, f32)) -> bool {
 /// began.
 fn drag_selection(from: u32, to: u32) -> (u32, u32) {
     (from.min(to), from.max(to))
-}
-
-/// The editing menu a secondary click opens on the desktop.
-fn edit_menu() -> Vec<DesktopMenuItem> {
-    [
-        MenuRole::Cut,
-        MenuRole::Copy,
-        MenuRole::Paste,
-        MenuRole::SelectAll,
-    ]
-    .into_iter()
-    .map(DesktopMenuItem::role)
-    .collect()
 }
 
 /// How long a touch is held before it is a long press, which belongs to the

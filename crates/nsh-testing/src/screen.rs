@@ -3136,6 +3136,80 @@ impl Screen {
         self.up_to(id, |v| v.events.contains(EventKind::ContextMenu))
     }
 
+    /// The input a secondary click at `at` (in the root) on `target` is
+    /// for although it takes no pointer, as the macOS and Windows hosts
+    /// find it (their `hidden_field_at` / `hidden_field`): the view a
+    /// pointer there reaches holds an input under `at` that it, or a view
+    /// between them, keeps from the pointer (`pointerEvents: none`), and
+    /// neither it nor a view between them listens to `onContextMenu` or
+    /// is disabled. Only an input that is `target` or in it.
+    pub(crate) fn hidden_field_at(&self, target: NodeId, at: Point<Points>) -> Option<NodeId> {
+        let hit = self.hit_pointer(at, self.window_of(target));
+        let attached: HashSet<NodeId> = self.attached().into_iter().collect();
+        let field = self.hidden_field_in(hit, at, false, &attached)?;
+        (field == target || self.is_inside(field, target)).then_some(field)
+    }
+
+    /// [`Self::hidden_field_at`] in `id` and what it holds, topmost first:
+    /// `through` once a view on the way takes no pointer.
+    fn hidden_field_in(
+        &self,
+        id: NodeId,
+        at: Point<Points>,
+        through: bool,
+        attached: &HashSet<NodeId>,
+    ) -> Option<NodeId> {
+        let view = self.nodes.get(&id)?;
+        if view.hidden || view.disabled || view.events.contains(EventKind::ContextMenu) {
+            return None;
+        }
+        let through = through || view.pointer_events == PointerEvents::None;
+        if view.kind == Some(ViewKind::Input) {
+            // An input the pointer reaches is the view hit already.
+            let under = self.bounds_in_root(id).is_some_and(|b| b.contains(&at));
+            return (through && under).then_some(id);
+        }
+        self.children
+            .get(&id)?
+            .iter()
+            .rev()
+            .filter(|c| attached.contains(c) && self.kind(**c) != Some(ViewKind::Modal))
+            .find_map(|&c| self.hidden_field_in(c, at, through, attached))
+    }
+
+    /// What input `id`'s own edit menu offers now, as the platforms enable
+    /// its items: Cut and Copy with a selection in a field that does not
+    /// mask its text (Cut only in an editable one), Paste in an editable
+    /// one (shown with something to paste), Select All with text.
+    pub(crate) fn field_edit_actions(&self, id: NodeId) -> Vec<nsh_core::EditAction> {
+        use nsh_core::EditAction;
+        let Some(input) = self.input(id) else {
+            return Vec::new();
+        };
+        let (start, end) = input.selection;
+        let selected = start != end;
+        let (editable, secure) = (input.config.editable, input.config.secure);
+        let mut actions = Vec::new();
+        if selected && !secure && editable {
+            actions.push(EditAction::Cut);
+        }
+        if selected && !secure {
+            actions.push(EditAction::Copy);
+        }
+        if editable {
+            actions.push(EditAction::Paste);
+        }
+        if !input.text.is_empty() {
+            actions.push(EditAction::SelectAll);
+        }
+        actions
+    }
+
+    /// Input `id` opened its own edit menu, offering `actions`.
+    pub(crate) fn edit_menu_opened(&mut self, id: NodeId, actions: Vec<nsh_core::EditAction>) {
+        self.edit_menu = Some((id, actions));
+    }
+
     /// The views that hear a mouse button released on `id`: it and every
     /// view around it listening to `onMouseUp`, inside out, as the
     /// platforms walk them.

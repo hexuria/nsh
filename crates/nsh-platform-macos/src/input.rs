@@ -3681,6 +3681,89 @@ pub(crate) fn native_at(root: &NshView, x: f32, y: f32) -> Option<Retained<objc2
         .map(|n| n.view.clone())
 }
 
+/// The hosted view (an input's pad) of a text field under `(x, y)` (root
+/// coordinates) that takes no pointer, when a secondary click there is
+/// the field's: nsh's picking lands on an app view around it (the field,
+/// or a view around it inside the picked one, is `pointerEvents: "none"`,
+/// as the one-time code's field is under the cells that answer the mouse
+/// themselves), and neither that view nor one between them listens to
+/// `onContextMenu` or is disabled. A field the pointer reaches shows its
+/// own edit menu on a secondary click; one that takes no pointer showed
+/// none, so the root's `hitTest:` hands the press to this one's editor
+/// (`view.rs`), and the field is the hit as if the pointer reached it. An
+/// app listening on the way hears the click instead, as it would over
+/// any view of its own.
+pub(crate) fn hidden_field_at(
+    root: &NshView,
+    x: f32,
+    y: f32,
+) -> Option<Retained<objc2_app_kit::NSView>> {
+    let hit = pick(root, x, y)?;
+    if hit.native {
+        return None;
+    }
+    let under = |field: &NshView| {
+        let local = field.ns().convertPoint_fromView(
+            objc2_foundation::NSPoint::new(x as f64, y as f64),
+            Some(root.ns()),
+        );
+        let s = field.state();
+        s.natives
+            .iter()
+            .rev()
+            .find(|n| native_contains(n, (local.x as f32, local.y as f32)))
+            .map(|n| n.view.clone())
+    };
+    hidden_field_in(&hit.view, false, &under)
+}
+
+/// [`hidden_field_at`] in `view` and what it holds, topmost first:
+/// `through` once a view on the way takes no pointer.
+fn hidden_field_in(
+    view: &NshView,
+    through: bool,
+    under: &dyn Fn(&NshView) -> Option<Retained<objc2_app_kit::NSView>>,
+) -> Option<Retained<objc2_app_kit::NSView>> {
+    let (field, through) = {
+        let s = view.state();
+        if s.style.hidden
+            || s.live.as_ref().is_some_and(|l| l.dying())
+            || s.events.contains(EventKind::ContextMenu)
+            || s.props.accessibility.state.disabled
+        {
+            return None;
+        }
+        (
+            s.kind == ViewKind::Input,
+            through || s.props.pointer_events == PointerEvents::None,
+        )
+    };
+    if view.ns().isHidden() {
+        return None;
+    }
+    if field {
+        // A field the pointer reaches is the picked one already.
+        return through.then(|| under(view)).flatten();
+    }
+    let container = view.container_view();
+    let subviews: Vec<_> = view.ns().subviews().iter().collect();
+    for sub in subviews.into_iter().rev() {
+        let children: Vec<_> = if container.as_deref() == Some(&*sub) {
+            sub.subviews().iter().collect()
+        } else {
+            vec![sub]
+        };
+        for child in children.into_iter().rev() {
+            if let Some(child) = NshView::from_ns(&child)
+                && let Some(field) = hidden_field_in(&child, through, under)
+            {
+                return Some(field);
+            }
+        }
+    }
+    None
+}
+
 /// The closest file-drop listener under the pointer, within its modal root.
 pub(crate) fn file_drop_target(surface: &Surface, x: f32, y: f32) -> Option<NshView> {
     let mut view = pick(&event_root(surface), x, y)?.view;

@@ -974,6 +974,18 @@ fn context_menu(surface: &Rc<Surface>, x: f32, y: f32, modifiers: Modifiers) {
     let menu_area = menu_area(&hit.view);
     let app_menu = menu_area.is_some();
     surface.chrome.context_area.take();
+    // A field that takes no pointer under the view picked is the hit
+    // ([`hidden_field`]): the same menu as a field the pointer reaches,
+    // and as the Menu key's in it.
+    if let Some(field) = hit
+        .item
+        .is_none()
+        .then(|| hidden_field(&hit.view, x, y))
+        .flatten()
+    {
+        crate::text_input::context_menu(surface, &field, None);
+        return;
+    }
     let mut view = Some(hit.view);
     while let Some(v) = view {
         let (id, listens, input, selectable, area) = {
@@ -1569,6 +1581,72 @@ fn pick_in(view: &NshView, x: f32, y: f32, items: bool) -> Option<Hit> {
         })
     });
     found.or_else(own)
+}
+
+/// The text field under `(x, y)` (root coordinates) in `hit`, the view
+/// picked there, that takes no pointer, when a secondary click there is
+/// the field's: the field, or a view around it inside `hit`, is
+/// `pointerEvents: "none"` (the one-time code's field is, under the cells
+/// that answer the mouse themselves), and neither `hit` nor a view
+/// between them listens to `onContextMenu` or is disabled. A field the
+/// pointer reaches shows its own edit menu on a secondary click; one that
+/// takes no pointer is the hit as well, so it is focused and shows that
+/// same menu (RichEdit's commands, each enabled as the field can) rather
+/// than nothing. An app listening on the way hears the click instead, as
+/// it would over any view of its own.
+fn hidden_field(hit: &NshView, x: f32, y: f32) -> Option<NshView> {
+    let (lx, ly) = local(hit, x, y);
+    hidden_field_in(hit, lx, ly, false)
+}
+
+/// [`hidden_field`] in `view` at `(x, y)` (its coordinates), topmost
+/// first: `through` once a view on the way takes no pointer.
+fn hidden_field_in(view: &NshView, x: f32, y: f32, through: bool) -> Option<NshView> {
+    let s = view.state();
+    if s.style.hidden
+        || s.concealed
+        || s.live.as_ref().is_some_and(|l| l.dying())
+        || s.events.contains(EventKind::ContextMenu)
+        || s.props.accessibility.state.disabled
+    {
+        return None;
+    }
+    let through = through || s.props.pointer_events == PointerEvents::None;
+    let HitArea {
+        in_slop, children, ..
+    } = input::hit_area(
+        point(Points(x), Points(y)),
+        s.frame.size,
+        s.props.hit_slop,
+        s.overflow,
+        s.clips(),
+        laid_out(s.kind, s.id),
+    );
+    if s.kind == ViewKind::Input {
+        // A field the pointer reaches is the picked one already.
+        return (through && in_slop).then(|| view.clone());
+    }
+    if !children {
+        return None;
+    }
+    drop(s);
+    view.with_children(|kids| {
+        let s = view.state();
+        kids.iter().rev().find_map(|child| {
+            let (cx, cy) = {
+                let c = child.state();
+                let (ox, oy) = s.child_origin(c.frame, c.shift);
+                match c.transform() {
+                    None => (x - ox, y - oy),
+                    Some(t) => {
+                        let local = Mat4::mul(&t, &Mat4::new().translate(ox, oy));
+                        local.unproject(x, y)?
+                    }
+                }
+            };
+            hidden_field_in(child, cx, cy, through)
+        })
+    })
 }
 
 /// `view` and its ancestors, innermost first.
@@ -3100,6 +3178,41 @@ mod tests {
         b.state_mut().concealed = true;
         assert_eq!(at(&root, 50.0, 50.0), Some(ROOT_ID));
         assert_eq!(at(&root, 250.0, 50.0), Some(ROOT_ID));
+    }
+
+    /// A secondary click over a field that takes no pointer (the one-time
+    /// code's, under the cells that answer the mouse) is the field's: the
+    /// view picked there is around it, and nothing on the way listens to
+    /// `onContextMenu` or is disabled. A field the pointer reaches is the
+    /// picked view itself.
+    #[test]
+    fn a_secondary_click_finds_a_field_that_takes_no_pointer() {
+        let root = root();
+        let code = view(&root, 2, ViewKind::View, rect(20.0, 20.0, 180.0, 40.0));
+        let cells = view(&code, 4, ViewKind::View, rect(0.0, 0.0, 180.0, 40.0));
+        cells.state_mut().props.pointer_events = PointerEvents::None;
+        let field = view(&code, 6, ViewKind::Input, rect(0.0, 0.0, 180.0, 40.0));
+        field.state_mut().props.pointer_events = PointerEvents::None;
+        let found = |x: f32, y: f32| {
+            let hit = pick(&root, x, y, true)?;
+            hidden_field(&hit.view, x, y).map(|f| f.id())
+        };
+        assert_eq!(at(&root, 100.0, 30.0), Some(2));
+        assert_eq!(found(100.0, 30.0), Some(6));
+        // Outside the field: none.
+        assert_eq!(found(300.0, 300.0), None);
+        // The app listening on the way hears the click instead.
+        code.state_mut().events.set(EventKind::ContextMenu, true);
+        assert_eq!(found(100.0, 30.0), None);
+        code.state_mut().events.set(EventKind::ContextMenu, false);
+        // A disabled input opens no menu.
+        code.state_mut().props.accessibility.state.disabled = true;
+        assert_eq!(found(100.0, 30.0), None);
+        code.state_mut().props.accessibility.state.disabled = false;
+        // A field the pointer reaches is the hit, not a hidden one.
+        field.state_mut().props.pointer_events = PointerEvents::Auto;
+        assert_eq!(at(&root, 100.0, 30.0), Some(6));
+        assert_eq!(found(100.0, 30.0), None);
     }
 
     #[test]
