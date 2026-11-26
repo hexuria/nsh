@@ -425,11 +425,32 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
     // and a handle drag are selections by then and keep what the platform
     // gave them. The write is count-guarded, so a key typed before it
     // lands wins over it.
+    //
+    // No write when it would change nothing, and none for a long press. A
+    // selection write dismisses the edit menu on iOS: the menu a long press
+    // or a tap on the caret brings up is how Paste is reached, and an empty
+    // field (the usual place to paste a code) always ends a touch with its
+    // caret at 0 already. Writing it anyway took Paste away on iPhone and
+    // iPad (the menu closed at once, or a hardware Cmd+V after the click
+    // landed nowhere). A long press is the platform's: its menu, its
+    // loupe, its handle.
+    let pressed_at = stored(None::<f64>);
     let place_caret = move |e: &TouchEvent| {
+        if e.phase == TouchPhase::Start {
+            pressed_at.replace(Some(e.timestamp));
+            return;
+        }
         if e.phase != TouchPhase::End || parts.disabled.get_untracked() {
             return;
         }
-        if selection.get_untracked().start != selection.get_untracked().end {
+        let held = pressed_at
+            .replace(None)
+            .map_or(0.0, |start| (e.timestamp - start).max(0.0));
+        let reported = selection.get_untracked();
+        if reported.start != reported.end {
+            return;
+        }
+        if !corrects_caret(field.with_untracked(String::is_empty), held) {
             return;
         }
         let Some(point) = e.points.iter().find(|p| p.changed).or(e.points.first()) else {
@@ -446,6 +467,9 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
         }) else {
             return;
         };
+        if position == reported.start {
+            return;
+        }
         field_ref.set_selection(position, position);
     };
 
@@ -666,6 +690,18 @@ fn group_count(length: usize, requested: usize) -> usize {
     requested.max(1).min(length.max(1))
 }
 
+/// How long a touch is held before it is a long press, which belongs to the
+/// platform (its edit menu, loupe and handle): the shortest long-press
+/// delay of the phones (iOS 0.5 s, Android 0.4 s).
+const LONG_PRESS_MS: f64 = 400.0;
+
+/// Whether a tap that ended in a bare caret gets the cells' caret: not in
+/// an empty field, whose only caret is 0 already (writing it closes the
+/// edit menu on iOS, where Paste is), and not after a long press.
+fn corrects_caret(field_empty: bool, held_ms: f64) -> bool {
+    !field_empty && held_ms < LONG_PRESS_MS
+}
+
 /// The caret position nearest to `x` (in the input's coordinates): position
 /// `p` sits at the left edge of cell `p` (the right edge of the last cell
 /// for `length`), the cells' frames in their groups and the groups' in the
@@ -753,7 +789,20 @@ pub(crate) fn utf16_len(text: &str) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{diff, digit, echoed, edit, group_count};
+    use super::{corrects_caret, diff, digit, echoed, edit, group_count};
+
+    #[test]
+    fn only_a_short_tap_on_a_field_with_digits_corrects_the_caret() {
+        // A tap on digits: the cells place the caret.
+        assert!(corrects_caret(false, 0.0));
+        assert!(corrects_caret(false, 150.0));
+        // An empty field's caret is 0 already: the write would only close
+        // the edit menu (Paste) on iOS.
+        assert!(!corrects_caret(true, 0.0));
+        // A long press is the platform's: its menu, loupe and handle.
+        assert!(!corrects_caret(false, 400.0));
+        assert!(!corrects_caret(false, 900.0));
+    }
 
     #[test]
     fn a_reported_code_coming_back_late_is_an_echo() {
