@@ -38,7 +38,11 @@ use std::time::Duration;
 
 use nsh_core::{
     AutoFill, TouchEvent, TouchPhase,
-    element::{Style, TextPartStyle},
+    desktop::MenuRole,
+    element::{
+        Style, TextPartStyle,
+        desktop::{MenuItem as DesktopMenuItem, popup_menu_at},
+    },
     platform::Os,
     prelude::*,
 };
@@ -443,6 +447,7 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
     // touch ends, so the touch that raised one is remembered here too, not
     // left to the lagging signal.
     let pressed_at = stored(None::<f64>);
+    let long_press = long_press_ms(os());
     let long_pressed = stored(false);
     let place_caret = move |e: &TouchEvent| {
         if e.phase == TouchPhase::Start {
@@ -453,9 +458,12 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
         if e.phase != TouchPhase::End || parts.disabled.get_untracked() {
             return;
         }
+        // No Start seen (the touch began elsewhere, or the platform sent
+        // only its end): fail closed, as a long press, so no write can close
+        // an edit menu the platform opened.
         let held = pressed_at
             .replace(None)
-            .map_or(0.0, |start| (e.timestamp - start).max(0.0));
+            .map_or(f64::INFINITY, |start| (e.timestamp - start).max(0.0));
         if long_pressed.get() {
             return;
         }
@@ -463,7 +471,7 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
         if reported.start != reported.end {
             return;
         }
-        if !corrects_caret(field.with_untracked(String::is_empty), held) {
+        if !corrects_caret(field.with_untracked(String::is_empty), held, long_press) {
             return;
         }
         let Some(point) = e.points.iter().find(|p| p.changed).or(e.points.first()) else {
@@ -527,7 +535,8 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
     // and the touch's location is in the cells' own coordinates, whatever
     // cell it was over.
     let anchor: Signal<Option<u32>> = signal(None);
-    let last_click: Signal<f64> = signal(f64::NEG_INFINITY);
+    // The last click: when, and where (x in the input).
+    let last_click: Signal<(f64, f32)> = signal((f64::NEG_INFINITY, 0.0));
     let caret_for = move |x: f32| {
         let length = parts.length.get_untracked() as usize;
         if length == 0 {
@@ -566,17 +575,18 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                 field_ref.focus();
                 let x = e.location.x.0;
                 let now = e.timestamp;
-                // Two clicks within the platforms' double-click interval
-                // select the code: the digits are one word, and the run is
-                // what a double click in it selects everywhere.
-                if now - last_click.get_untracked() < 500.0 {
-                    last_click.set(f64::NEG_INFINITY);
+                // Two clicks within the platforms' double-click interval, at
+                // the same place, select the code: the digits are one word,
+                // and the run is what a double click in it selects
+                // everywhere. Clicks on different cells are two carets.
+                if is_double_click(last_click.get_untracked(), (now, x)) {
+                    last_click.set((f64::NEG_INFINITY, 0.0));
                     anchor.set(None);
                     let end = utf16_len(&field.get_untracked());
                     field_ref.set_selection(0, end);
                     return;
                 }
-                last_click.set(now);
+                last_click.set((now, x));
                 if let Some(position) = caret_for(x) {
                     anchor.set(Some(position));
                     field_ref.set_selection(position, position);
@@ -587,14 +597,27 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                     return;
                 };
                 let x = e.location.x.0;
-                if let Some(to) = caret_for(x)
-                    && to != from
-                {
-                    field_ref.set_selection(from.min(to), from.max(to));
+                // Back at the anchor the selection collapses to a caret
+                // there, as a drag does everywhere.
+                if let Some(to) = caret_for(x) {
+                    let (start, end) = drag_selection(from, to);
+                    field_ref.set_selection(start, end);
                 }
             })
             .on_responder_release(move |_: &ResponderEvent| anchor.set(None))
             .on_responder_terminate(move |_: &ResponderEvent| anchor.set(None))
+            // The field takes no pointer here, so a secondary click (it
+            // never reaches the touches: the platforms send it as a context
+            // menu) would find no editor to open its own menu: the input
+            // opens the editing menu itself, its items the platform's own
+            // roles acting on the focused field.
+            .on_context_menu(move |e: &ContextMenuEvent| {
+                if parts.disabled.get_untracked() {
+                    return;
+                }
+                field_ref.focus();
+                drop(popup_menu_at(edit_menu(), e.page_position));
+            })
         })
         .child(cells)
         .child(
@@ -814,16 +837,51 @@ fn group_count(length: usize, requested: usize) -> usize {
     requested.max(1).min(length.max(1))
 }
 
+/// How far apart (in points) two clicks may land and still be one double
+/// click: the platforms allow a few points of movement.
+const DOUBLE_CLICK_SLOP: f32 = 4.0;
+/// The platforms' double-click interval, in milliseconds.
+const DOUBLE_CLICK_MS: f64 = 500.0;
+
+/// Whether a click at `(time, x)` after one at `last` is a double click:
+/// soon enough, and at the same place.
+fn is_double_click(last: (f64, f32), click: (f64, f32)) -> bool {
+    click.0 - last.0 < DOUBLE_CLICK_MS && (click.1 - last.1).abs() <= DOUBLE_CLICK_SLOP
+}
+
+/// The selection a drag from the caret position `from` to `to` makes: the
+/// digits between them, or a bare caret when the drag is back where it
+/// began.
+fn drag_selection(from: u32, to: u32) -> (u32, u32) {
+    (from.min(to), from.max(to))
+}
+
+/// The editing menu a secondary click opens on the desktop.
+fn edit_menu() -> Vec<DesktopMenuItem> {
+    [
+        MenuRole::Cut,
+        MenuRole::Copy,
+        MenuRole::Paste,
+        MenuRole::SelectAll,
+    ]
+    .into_iter()
+    .map(DesktopMenuItem::role)
+    .collect()
+}
+
 /// How long a touch is held before it is a long press, which belongs to the
-/// platform (its edit menu, loupe and handle): the shortest long-press
-/// delay of the phones (iOS 0.5 s, Android 0.4 s).
-const LONG_PRESS_MS: f64 = 400.0;
+/// platform (its edit menu, loupe and handle): each platform's own delay
+/// (iOS 0.5 s, Android 0.4 s), so a press is a tap here exactly when it is
+/// a tap there.
+fn long_press_ms(os: Os) -> f64 {
+    if os == Os::Ios { 500.0 } else { 400.0 }
+}
 
 /// Whether a tap that ended in a bare caret gets the cells' caret: not in
 /// an empty field, whose only caret is 0 already (writing it closes the
 /// edit menu on iOS, where Paste is), and not after a long press.
-fn corrects_caret(field_empty: bool, held_ms: f64) -> bool {
-    !field_empty && held_ms < LONG_PRESS_MS
+fn corrects_caret(field_empty: bool, held_ms: f64, long_press_ms: f64) -> bool {
+    !field_empty && held_ms < long_press_ms
 }
 
 /// The caret position nearest to `x` (in the input's coordinates): position
@@ -913,19 +971,52 @@ pub(crate) fn utf16_len(text: &str) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{corrects_caret, diff, digit, echoed, edit, group_count};
+    use nsh_core::platform::Os;
+
+    use super::{
+        corrects_caret, diff, digit, drag_selection, echoed, edit, group_count, is_double_click,
+        long_press_ms,
+    };
 
     #[test]
     fn only_a_short_tap_on_a_field_with_digits_corrects_the_caret() {
+        let android = long_press_ms(Os::Android);
         // A tap on digits: the cells place the caret.
-        assert!(corrects_caret(false, 0.0));
-        assert!(corrects_caret(false, 150.0));
+        assert!(corrects_caret(false, 0.0, android));
+        assert!(corrects_caret(false, 150.0, android));
         // An empty field's caret is 0 already: the write would only close
         // the edit menu (Paste) on iOS.
-        assert!(!corrects_caret(true, 0.0));
+        assert!(!corrects_caret(true, 0.0, android));
         // A long press is the platform's: its menu, loupe and handle.
-        assert!(!corrects_caret(false, 400.0));
-        assert!(!corrects_caret(false, 900.0));
+        assert!(!corrects_caret(false, 400.0, android));
+        assert!(!corrects_caret(false, 900.0, android));
+        // No Start seen: held is infinite, a long press.
+        assert!(!corrects_caret(false, f64::INFINITY, android));
+    }
+
+    #[test]
+    fn a_press_is_long_at_each_platforms_own_delay() {
+        // iOS starts its long press at 0.5 s: 450 ms is still a tap there,
+        // and a long press on Android.
+        assert!(corrects_caret(false, 450.0, long_press_ms(Os::Ios)));
+        assert!(!corrects_caret(false, 500.0, long_press_ms(Os::Ios)));
+        assert!(!corrects_caret(false, 450.0, long_press_ms(Os::Android)));
+    }
+
+    #[test]
+    fn a_drag_back_to_where_it_began_is_a_caret_there() {
+        assert_eq!(drag_selection(1, 3), (1, 3));
+        assert_eq!(drag_selection(3, 1), (1, 3));
+        assert_eq!(drag_selection(1, 1), (1, 1));
+    }
+
+    #[test]
+    fn a_double_click_is_two_clicks_soon_and_at_the_same_place() {
+        assert!(is_double_click((1000.0, 35.0), (1200.0, 37.0)));
+        // Different cells: two carets.
+        assert!(!is_double_click((1000.0, 5.0), (1200.0, 85.0)));
+        // Too late.
+        assert!(!is_double_click((1000.0, 35.0), (1600.0, 35.0)));
     }
 
     #[test]

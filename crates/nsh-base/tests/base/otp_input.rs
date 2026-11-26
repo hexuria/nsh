@@ -1079,6 +1079,38 @@ fn a_double_click_selects_the_code_on_the_desktop() {
     );
 }
 
+/// Two quick clicks on different cells are two carets, not a double
+/// click: the second places the caret where it lands.
+#[test]
+fn two_quick_clicks_on_different_cells_place_a_caret_on_the_desktop() {
+    let mut app = start_desktop::<Uncontrolled>();
+    app.type_text("id:otp", "123").unwrap();
+    app.press_at("label:Code", Point::new(px(5.0), px(20.0)))
+        .unwrap();
+    app.press_at("label:Code", Point::new(px(85.0), px(20.0)))
+        .unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(
+        app.screen().input_selection("id:otp").unwrap(),
+        Some((3, 3)),
+        "a click on digit 1 then one on digit 3 leaves the caret after digit 3"
+    );
+}
+
+/// A secondary click opens the editing menu, Paste in it: the field takes
+/// no pointer on the desktop, so the input opens it.
+#[test]
+fn a_right_click_opens_the_edit_menu_on_the_desktop() {
+    let mut app = start_desktop::<Uncontrolled>();
+    app.type_text("id:otp", "123").unwrap();
+    app.right_click("label:Code").unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    // Cut, Copy, Paste and Select All: the platform's own roles, which it
+    // labels itself (the harness shows a role's label empty).
+    let menu = app.menu().expect("a menu is open");
+    assert_eq!(menu.len(), 4, "the edit menu's four roles: {menu:?}");
+}
+
 /// The keyboard is unchanged on the desktop: arrows move the caret,
 /// shift extends the selection, typing over it replaces exactly it.
 #[test]

@@ -1935,7 +1935,7 @@ impl Headless {
         // listen to touches (an overlay's `onPressOutside` among them).
         let path = self.screen.touch_path(id);
         if !path.is_empty() {
-            self.send_touch(id, nsh_core::TouchPhase::Start, path.clone(), at);
+            self.send_touch(id, nsh_core::TouchPhase::Start, path.clone(), at, false);
         }
         // A text field that listens to presses (a combobox's) takes the
         // focus as a tap's does, then hears the press.
@@ -1950,7 +1950,7 @@ impl Headless {
             self.send(id, kind, payload.clone());
         }
         if !path.is_empty() {
-            self.send_touch(id, nsh_core::TouchPhase::End, path, at);
+            self.send_touch(id, nsh_core::TouchPhase::End, path, at, false);
         }
         self.done()
     }
@@ -1984,14 +1984,14 @@ impl Headless {
         self.activate_window_of(id);
         let path = self.screen.touch_path(id);
         if !path.is_empty() {
-            self.send_touch(id, nsh_core::TouchPhase::Start, path.clone(), page);
+            self.send_touch(id, nsh_core::TouchPhase::Start, path.clone(), page, false);
         }
         let payload = self.press_payload(id, Some(at));
         for kind in [EventKind::PressDown, EventKind::PressUp, EventKind::Press] {
             self.send(id, kind, payload.clone());
         }
         if !path.is_empty() {
-            self.send_touch(id, nsh_core::TouchPhase::End, path, page);
+            self.send_touch(id, nsh_core::TouchPhase::End, path, page, false);
         }
         self.done()
     }
@@ -2056,7 +2056,7 @@ impl Headless {
         self.activate_window_of(id);
         let path = self.screen.touch_path(id);
         if !path.is_empty() {
-            self.send_touch(id, nsh_core::TouchPhase::Start, path.clone(), None);
+            self.send_touch(id, nsh_core::TouchPhase::Start, path.clone(), None, true);
         }
         let inside = self.screen.press_point(&parsed, id);
         let payload = self.press_payload(id, inside);
@@ -2065,7 +2065,7 @@ impl Headless {
         self.send(id, EventKind::LongPress, payload.clone());
         self.send(id, EventKind::PressUp, payload);
         if !path.is_empty() {
-            self.send_touch(id, nsh_core::TouchPhase::End, path, None);
+            self.send_touch(id, nsh_core::TouchPhase::End, path, None, true);
         }
         self.done()
     }
@@ -2096,7 +2096,7 @@ impl Headless {
         self.activate_window_of(id);
         let path = self.screen.touch_path(id);
         if !path.is_empty() {
-            self.send_touch(id, nsh_core::TouchPhase::Start, path.clone(), page);
+            self.send_touch(id, nsh_core::TouchPhase::Start, path.clone(), page, true);
         }
         let payload = self.press_payload(id, Some(at));
         self.send(id, EventKind::PressDown, payload.clone());
@@ -2104,7 +2104,7 @@ impl Headless {
         self.send(id, EventKind::LongPress, payload.clone());
         self.send(id, EventKind::PressUp, payload);
         if !path.is_empty() {
-            self.send_touch(id, nsh_core::TouchPhase::End, path, page);
+            self.send_touch(id, nsh_core::TouchPhase::End, path, page, true);
         }
         self.done()
     }
@@ -2341,22 +2341,30 @@ impl Headless {
 
     /// A finger going down on (or lifting from) `target`, reported on the
     /// root with the views around it that listen to touches.
+    /// `timed`: the touch carries the app clock's time (a long press, whose
+    /// end comes its delay after its start); else 0, as every other step's
+    /// touches always have, so gestures that read the time (velocity) are
+    /// unchanged.
     fn send_touch(
         &self,
         target: NodeId,
         phase: nsh_core::TouchPhase,
         path: Vec<NodeId>,
         at: Option<Point<Points>>,
+        timed: bool,
     ) {
         let location = at.and_then(|p| self.screen.bounds_in_root(target).map(|b| p - b.origin));
         let touch = nsh_core::TouchEvent {
             phase,
-            timestamp: self
-                .clock
-                .now()
-                .saturating_duration_since(self.touch_epoch)
-                .as_secs_f64()
-                * 1000.0,
+            timestamp: if timed {
+                self.clock
+                    .now()
+                    .saturating_duration_since(self.touch_epoch)
+                    .as_secs_f64()
+                    * 1000.0
+            } else {
+                0.0
+            },
             points: vec![nsh_core::TouchPoint {
                 id: 0,
                 target,
