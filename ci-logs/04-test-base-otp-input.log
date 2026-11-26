@@ -1,0 +1,68 @@
+command: cargo test -p nsh-base --test base otp_input
+cwd: C:\Users\Administrator\builds\nsh-win46-969a2118\repo
+CARGO_TARGET_DIR: C:\Users\Administrator\builds\nsh-win46-969a2118\target
+RUSTC_WRAPPER: <empty>
+
+   Compiling nsh-core v0.6.1 (C:\Users\Administrator\builds\nsh-win46-969a2118\repo\crates\nsh-core)
+   Compiling nsh-engine v0.6.1 (C:\Users\Administrator\builds\nsh-win46-969a2118\repo\crates\nsh-engine)
+   Compiling nsh-base v0.6.1 (C:\Users\Administrator\builds\nsh-win46-969a2118\repo\crates\nsh-base)
+   Compiling nsh-testing v0.6.1 (C:\Users\Administrator\builds\nsh-win46-969a2118\repo\crates\nsh-testing)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4m 52s
+     Running tests\base\main.rs (C:\Users\Administrator\builds\nsh-win46-969a2118\target\debug\build\nsh-base/45b1fce682799931\out\base-45b1fce682799931.exe)
+
+running 49 tests
+test otp_input::a_caret_inside_the_text_is_the_users_own ... ok
+test otp_input::a_burst_of_keys_keeps_its_order ... ok
+test otp_input::a_bare_backspace_removes_the_digit_before_the_caret ... ok
+test otp_input::a_bare_backspace_after_arrows_removes_the_digit_before_the_caret ... ok
+test otp_input::a_backspace_after_a_click_removes_the_digit_before_it_on_the_desktop ... ok
+test otp_input::a_disabled_input_takes_no_input ... ok
+test otp_input::a_backspace_at_a_tapped_caret_removes_the_digit_before_it ... ok
+test otp_input::a_disabled_code_opens_no_menu_on_a_right_click_on_the_desktop ... ok
+test otp_input::a_default_value_is_the_first_code ... ok
+test otp_input::a_composition_mid_entry_drops_no_key ... ok
+test otp_input::a_double_click_selects_the_code_on_the_desktop ... ok
+test otp_input::a_drag_selects_the_digits_it_moves_over_on_the_desktop ... ok
+test otp_input::a_key_during_the_rewrite_is_not_dropped ... ok
+test otp_input::a_late_controlled_type_over_replaces_exactly_it ... ok
+test otp_input::a_long_press_writes_nothing_on_ios ... ok
+test otp_input::a_reported_selection_is_drawn_on_the_right_cells ... ok
+test otp_input::a_pasted_code_replaces_the_code_and_shorter_text_is_appended ... ok
+test otp_input::a_click_on_a_cell_places_the_caret_there_on_the_desktop ... ok
+test otp_input::a_long_press_over_a_cell_selects_the_run ... ok
+test otp_input::a_right_click_passes_through_a_one_point_sink_on_the_desktop ... ok
+test otp_input::a_right_click_passes_through_a_pointer_transparent_input_on_the_desktop ... ok
+test otp_input::a_tap_on_an_empty_field_writes_no_caret ... ok
+test otp_input::a_right_click_opens_the_fields_own_edit_menu_on_the_desktop ... ok
+test otp_input::a_users_selection_is_not_pinned_away ... ok
+test otp_input::a_selection_forward_delete_removes_exactly_it ... ok
+test otp_input::full_width_digits_are_taken_as_ascii_digits ... ok
+test otp_input::backspace_removes_the_last_digit ... ok
+test otp_input::filled_cells_take_their_data_filled_classes ... ok
+test otp_input::masked_cells_show_bullets_and_the_field_is_secure ... ok
+test otp_input::a_controlled_selection_cut_removes_exactly_it ... ok
+test otp_input::the_caret_blinks_without_mount_items ... ok
+test otp_input::other_characters_are_dropped_and_the_field_keeps_the_code ... ok
+test otp_input::a_late_controlled_selection_cut_removes_exactly_it ... ok
+test otp_input::keys_typed_before_the_apps_code_comes_back_build_on_each_other ... ok
+test otp_input::the_field_keeps_the_pointer_on_linux ... ok
+test otp_input::the_focus_is_reported_as_it_comes_and_goes ... ok
+test otp_input::the_highlight_is_on_the_selected_cell ... ok
+test otp_input::the_apps_code_is_shown_and_only_its_changes_reported ... ok
+test otp_input::the_length_caps_the_code_and_completes_it_once ... ok
+test otp_input::the_keyboard_is_unchanged_on_the_desktop ... ok
+test otp_input::typing_digits_fills_the_cells_and_reports_each_change ... ok
+test otp_input::a_tap_on_a_cell_places_the_caret_there ... ok
+test otp_input::two_quick_clicks_on_different_cells_place_a_caret_on_the_desktop ... ok
+test otp_input::typing_at_a_tapped_caret_inserts_there ... ok
+test otp_input::the_right_click_menu_offers_what_the_field_can_do_on_the_desktop ... ok
+test otp_input::typing_over_an_arrowed_selection_replaces_exactly_it ... ok
+test otp_input::a_selection_cut_removes_exactly_it ... ok
+test otp_input::an_arrowed_selection_cuts_exactly_it ... ok
+test otp_input::typing_over_a_selection_replaces_exactly_it ... ok
+
+test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 1000 filtered out; finished in 11.25s
+
+
+EXIT_CODE=0
+ELAPSED_SECONDS=303.7

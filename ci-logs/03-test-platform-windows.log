@@ -1,0 +1,384 @@
+command: cargo test -p nsh-platform-windows
+cwd: C:\Users\Administrator\builds\nsh-win46-969a2118\repo
+CARGO_TARGET_DIR: C:\Users\Administrator\builds\nsh-win46-969a2118\target
+RUSTC_WRAPPER: <empty>
+
+warning: constant `MIN_WIDTH` is never used
+    --> crates\nsh-platform-windows\src\window.rs:2211:18
+     |
+2211 | pub(crate) const MIN_WIDTH: f32 = 200.0;
+     |                  ^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `MIN_HEIGHT` is never used
+    --> crates\nsh-platform-windows\src\window.rs:2213:18
+     |
+2213 | pub(crate) const MIN_HEIGHT: f32 = 150.0;
+     |                  ^^^^^^^^^^
+
+   Compiling nsh-platform-windows v0.6.1 (C:\Users\Administrator\builds\nsh-win46-969a2118\repo\crates\nsh-platform-windows)
+warning: `nsh-platform-windows` (lib) generated 2 warnings
+warning: `nsh-platform-windows` (lib test) generated 2 warnings (2 duplicates)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 10s
+     Running unittests src\lib.rs (C:\Users\Administrator\builds\nsh-win46-969a2118\target\debug\build\nsh-platform-windows/f9d5e363c7aac0d0\out\nsh_platform_windows-f9d5e363c7aac0d0.exe)
+
+running 343 tests
+test access::tests::elements ... ok
+test access::tests::a_scroll_views_content_is_read_in_screen_order ... ok
+test access::tests::a_hidden_style_hides_the_subtree ... ok
+test access::tests::names ... ok
+test access::tests::spec_changes ... ok
+test access::tests::controls ... ok
+test access::tests::help_and_ranges ... ok
+test access::tests::structural_roles_and_toggle_buttons ... ok
+test access::uia::tests::areas ... ok
+test access::uia::tests::control_types ... ok
+test access::uia::tests::aria_properties_name_current_and_invalid ... ok
+test access::uia::tests::scrolling ... ok
+test app::tests::only_a_top_level_window_reports_a_tray ... ok
+test audio::tests::extensions_come_from_names_and_media_types ... ok
+test app::tests::opaque_window_keeps_its_frame ... ok
+test app::tests::an_app_view_accepts_an_error_handler ... ok
+test canvas::offscreen::tests::an_image_is_encoded_as_png ... ok
+test canvas::offscreen::tests::an_image_over_the_device_limit_is_too_large ... ok
+test app::tests::transparent_window_is_borderless_and_composed ... ok
+test app::tests::a_composed_window_takes_a_backdrop_that_comes_later ... ok
+test canvas::offscreen::tests::premultiplied_pixels_become_straight ... ok
+test canvas::offscreen::tests::running_out_of_memory_is_too_large ... ok
+test app::tests::only_the_standalone_apps_view_has_a_login_item ... ok
+test canvas::tests::a_damage_area_stays_within_the_canvas ... ok
+test canvas::offscreen::tests::the_gpu_finishes_without_being_waited_for ... ok
+test canvas::offscreen::tests::animated_values_paint_at_zero ... ok
+test canvas::offscreen::tests::a_drawing_paints_y_down_at_its_scale ... ok
+test canvas::offscreen::tests::a_drawing_is_encoded_as_png ... ok
+test canvas::offscreen::tests::an_image_rasterized_at_a_scale_is_drawn_in_its_own_units ... ok
+test canvas::tests::an_image_without_a_size_is_its_pixels_over_its_file_density ... ok
+test canvas::tests::arc_to_rounds_a_right_angle ... ok
+test canvas::tests::arcs_are_quarter_turn_cubics_on_the_circle ... ok
+test canvas::tests::candidate_damage_matches_full_scans ... ok
+test canvas::tests::composite_operations_map ... ok
+test canvas::tests::gradient_stops_convert ... ok
+test canvas::tests::dashes_are_in_line_widths ... ok
+test canvas::tests::hard_stops_stay_hard ... ok
+test canvas::tests::image_with_transparent_fill_is_not ... ok
+test canvas::tests::image_with_zero_alpha_is_skipped ... ok
+test canvas::tests::paths_follow_canvas_rules ... ok
+test canvas::tests::quads_become_cubics ... ok
+test canvas::tests::radial_gradients_map_to_one_ellipse ... ok
+test canvas::tests::set_args_matches_full_scans_on_the_production_wrapper ... ok
+test canvas::tests::reappearance_after_alpha_becomes_nonzero ... ok
+test canvas::tests::tails_that_combine_with_the_head_record_whole ... ok
+test app::tests::a_hidden_title_bar_over_a_backdrop_is_bare_while_zoomed ... ok
+test canvas::tests::transforms_compose_like_canvas ... ok
+test chrome::tests::a_bar_action_cannot_open_a_popup_for_an_old_context_request ... ok
+test chrome::tests::a_context_request_belongs_to_its_surface ... ok
+test chrome::tests::a_role_item_reads_the_translated_label ... ok
+test chrome::tests::an_accessibility_press_discards_an_unanswered_context_request ... ok
+test chrome::tests::an_unopened_context_menu_cannot_take_over_bar_roles ... ok
+test chrome::tests::drag_rect_and_start_origin ... ok
+test chrome::tests::modifiers_keep_the_context_request_but_another_key_discards_it ... ok
+test chrome::tests::only_the_requested_popup_selects_its_context_area ... ok
+test chrome::tests::quit_requests_ask_the_app_only_while_it_listens ... ok
+test chrome::tests::window_press_delivers_click_only_when_same_view_stays_draggable ... ok
+test compose::tests::a_backdrop_that_cannot_be_made_is_not_tried_again ... ok
+test compose::tests::a_backdrop_that_cannot_be_placed_is_given_up ... ok
+test compose::tests::backdrops_move_the_target_up_and_back ... ok
+test compose::tests::maps_and_intersects_rects ... ok
+test compose::tests::places_bounds_at_the_translation ... ok
+test decor::cache::tests::a_nested_pass_shares_the_frame ... ok
+test decor::cache::tests::a_pass_keeps_the_bitmaps_it_used ... ok
+test decor::cache::tests::an_emergency_eviction_still_bounds_the_cache ... ok
+test decor::cache::tests::an_insertion_evicts_another_pass_before_the_current_one ... ok
+test decor::cache::tests::the_next_pass_and_a_new_device_clear_as_they_did ... ok
+test decor::gradient::tests::conic_angles_turn_clockwise_from_the_top ... ok
+test decor::gradient::tests::conic_tiles_cover_the_turn ... ok
+test decor::gradient::tests::corner_angles_follow_the_box ... ok
+test decor::gradient::tests::linear_lines ... ok
+test decor::gradient::tests::mixing_is_premultiplied ... ok
+test decor::gradient::tests::radial_sizes ... ok
+test decor::gradient::tests::samples_interpolate ... ok
+test decor::gradient::tests::stops_fit_the_range ... ok
+test decor::layer::tests::blend_modes_map ... ok
+test decor::layer::tests::color_matrices_transpose ... ok
+test decor::layer::tests::identity_filters_change_nothing ... ok
+test decor::layer::tests::outsets_cover_blurs_and_shadows ... ok
+test decor::layer::tests::transforms_scale_effects ... ok
+test decor::tests::a_dashed_corner_without_one_border_splits_as_between_equal_sides ... ok
+test decor::tests::a_multi_fill_clip_forgets_its_geometry ... ok
+test decor::tests::a_shape_makes_its_geometry_once ... ok
+test decor::tests::a_uniform_shape_never_asks_for_its_geometry ... ok
+test decor::tests::back_faces ... ok
+test decor::tests::corners_fit_the_box ... ok
+test decor::tests::fills_choose_the_cheapest_shape ... ok
+test decor::tests::grown_corners ... ok
+test decor::tests::padding_box_corners ... ok
+test decor::tests::regions_snap_outwards ... ok
+test decor::tests::shadow_keys ... ok
+test decor::tests::side_quads_split_at_the_corners ... ok
+test geom::tests::operations_apply_like_css_lists ... ok
+test geom::tests::rotate_x_without_perspective_squashes_affinely ... ok
+test geom::tests::unproject_inverts_map_with_perspective ... ok
+test global_shortcut::tests::keys_map_to_virtual_keys ... ok
+test global_shortcut::tests::modifiers_never_repeat ... ok
+test canvas::tests::text_op_zero_alpha_skips_layout ... ok
+test canvas::tests::invisible_source_over_paints_are_omitted ... ok
+test image::tests::decodes_with_wic ... ok
+test image::tests::effect_transform_accounts_for_target_dpi ... ok
+test image::tests::fits_images ... ok
+test image::tests::a_recording_keeps_each_pictures_tint ... ok
+test canvas::tests::shadows_with_zero_global_alpha_make_no_pixels ... ok
+test image::tests::decodes_animations ... ok
+test canvas::tests::a_split_drawing_draws_what_the_whole_one_does ... ok
+test canvas::tests::clear_rect_and_shadows_keep_their_effects ... ok
+test canvas::tests::conic_gradient_stroke_is_painted_even_under_animated_color_slots ... ok
+test image::tests::plays_animations ... ok
+test image::tests::premultiplies ... ok
+test image::tests::scales_to_the_size_shown ... ok
+test image::tests::reads_densities ... ok
+test image::tests::resolves_windows_paths ... ok
+test image::tests::sniffs_animated_formats ... ok
+test image::tests::stops_after_its_plays ... ok
+test image::tests::times_frames ... ok
+test image::tests::tints_through_alpha ... ok
+test image::tests::svg_size_is_in_points ... ok
+test input::tests::a_secondary_click_finds_a_field_that_takes_no_pointer ... ok
+test image::tests::svg_tints_through_alpha ... ok
+test input::tests::a_right_click_captures_only_the_selectable_areas_own_request ... ok
+test input::tests::a_removed_view_leaves_the_hover_without_a_leave ... ok
+test input::tests::a_secondary_click_passes_through_a_field_that_does_not_ask ... ok
+test input::tests::a_click_on_an_input_presses_only_the_input ... ok
+test input::tests::a_selectable_views_listener_takes_its_texts_menu ... ok
+test input::tests::a_tall_scroll_views_bar_stays_in_view ... ok
+test input::tests::ctrl_wheel_zooms_by_notches ... ok
+test input::tests::cursors ... ok
+test input::tests::drags_report_the_first_button_held ... ok
+test input::tests::drag_view_picks_the_innermost_view_in_a_drag_region ... ok
+test input::tests::hidden_and_concealed_views_are_not_hit ... ok
+test input::tests::hit_slop_extends_the_view ... ok
+test input::tests::hosted_items_are_above_children ... ok
+test input::tests::local_points_go_through_the_chain ... ok
+test input::tests::mouse_events_are_local_to_the_view ... ok
+test input::tests::overflow_hidden_clips_and_overflow_areas_extend ... ok
+test input::tests::picks_the_innermost_topmost_view ... ok
+test input::tests::pointer_events ... ok
+test input::tests::scroll_offsets_and_mirrored_lists ... ok
+test input::tests::transforms_move_the_hit_area ... ok
+test keyboard::tests::a_capture_consumes_the_press_and_a_listener_cannot ... ok
+test keyboard::tests::a_modal_restores_the_custom_focus_it_took ... ok
+test keyboard::tests::keypad_keys_are_the_navigation_keys_with_num_lock_off ... ok
+test keyboard::tests::a_portaled_views_keys_follow_its_logical_ancestors ... ok
+test keyboard::tests::capture_walks_enabled_ancestors_by_their_shortcuts ... ok
+test keyboard::tests::focus_and_tab_walk_the_focus_stops ... ok
+test keyboard::tests::the_capture_uses_the_keymaps_shortcut_key ... ok
+test keyboard::tests::the_code_is_the_scan_codes_place_on_any_layout ... ok
+test keyboard::tests::the_menu_key_and_shift_f10_open_a_context_menu ... ok
+test keyboard::tests::named_keys_follow_dom_spellings ... ok
+test keyboard::tests::return_and_space_press_the_focused_control ... ok
+test keyboard::tests::the_event_reports_the_transition ... ok
+test keymap::tests::virtual_keys ... ok
+test keyboard::tests::the_logical_key_prefers_the_sources_actual_character ... ok
+test linking::tests::names_are_sanitized ... ok
+test keyboard::tests::the_menu_key_opens_the_focused_views_context_menu ... ok
+test keyboard::tests::translations_do_not_store_a_dead_key ... ok
+test linking::tests::urls_of_the_apps_schemes_match ... ok
+test login_item::tests::a_value_is_this_copys_when_it_starts_this_executable ... ok
+test login_item::tests::an_empty_app_id_names_no_value ... ok
+test login_item::tests::commands_are_quoted_and_held_to_the_run_keys_limit ... ok
+test login_item::tests::paths_that_are_not_unicode_are_never_written_or_matched ... ok
+test login_item::tests::statuses_follow_the_value_and_the_users_mark ... ok
+test linking::tests::files_of_the_apps_types_are_file_urls ... ok
+test native::tests::intersects_rects ... ok
+test native::tests::locates_sources ... ok
+test native::tests::makes_file_urls ... ok
+test login_item::tests::values_of_other_types_read_expanded_or_not_at_all ... ok
+test native::tests::registers_components ... ok
+test native::tests::wheel_counts_notches ... ok
+test native::video::tests::fits_pictures ... ok
+test login_item::tests::the_value_is_written_marked_and_removed_in_the_registry ... ok
+test native::video::tests::formats_times ... ok
+test native::video::tests::lays_out_the_scrubber ... ok
+test native::video::tests::makes_payloads ... ok
+test native::video::tests::words_media_errors ... ok
+test native::web::tests::a_file_page_reads_its_own_folder_and_nothing_wider ... ok
+test native::web::tests::cancellation_terminal_is_reported_once ... ok
+test native::web::tests::a_web_view_opens_only_files_in_the_folder_it_was_given ... ok
+test native::web::tests::describes_download_interruptions ... ok
+test native::web::tests::escapes_js_strings ... ok
+test native::web::tests::keeps_resumable_interruptions_open ... ok
+test native::web::tests::makes_navigation_payloads ... ok
+test native::web::tests::maps_buttons_to_mouse_events ... ok
+test native::web::tests::matches_base_documents ... ok
+test native::web::tests::names_downloads_from_the_url_when_the_server_suggests_nothing ... ok
+test native::web::tests::names_profile_folders ... ok
+test native::web::tests::sanitizes_download_file_names ... ok
+test native::web::tests::styles_scrolling ... ok
+test native::web::tests::sanitizes_reserved_device_names_but_not_ordinary_stems ... ok
+test native::web::tests::words_web_errors ... ok
+test native::web::tests::wraps_injected_scripts ... ok
+test navigation::tests::back_keys ... ok
+test navigation::tests::going_back_asks_the_newest_modal_first ... ok
+test navigation::tests::going_back_pops_the_innermost_stack ... ok
+test navigation::tests::header_views_stay_above_the_content ... ok
+test notifications::tests::a_press_gets_any_id_back ... ok
+test notifications::tests::a_silent_toast_plays_no_sound ... ok
+test notifications::tests::each_app_has_a_stable_class ... ok
+test notifications::tests::large_counts_are_capped ... ok
+test notifications::tests::tags_stay_within_the_limit ... ok
+test navigation::tests::less_motion_leaves_the_shader_out ... ok
+test navigation::tests::a_deleted_page_or_dialog_lets_go_of_its_shader ... ok
+test navigation::tests::a_page_shader_without_a_device_keeps_the_pages_own_motion ... ok
+test notifications::tests::the_badge_is_white_text_on_a_red_disc ... ok
+test navigation::tests::a_change_that_ends_early_takes_its_overlay_with_it ... ok
+test notifications::tests::the_toast_escapes_text_and_omits_an_empty_body ... ok
+test presence::tests::a_display_turned_off_hides_the_screen_and_a_dimmed_one_does_not ... ok
+test presence::tests::a_locked_session_hides_the_screen_until_it_is_unlocked ... ok
+test presence::tests::a_session_without_a_display_hides_the_screen_until_it_connects ... ok
+test presence::tests::a_switched_away_session_stays_hidden_until_connected_and_unlocked ... ok
+test presence::tests::every_surface_follows_a_change_another_window_already_applied ... ok
+test presence::tests::other_session_events_change_nothing ... ok
+test render::tests::a_box_of_one_color_fades_its_color ... ok
+test notifications::tests::the_toast_loads_in_the_system_parser ... ok
+test render::tests::a_layer_covers_the_bounds_and_the_shadow ... ok
+test render::tests::a_layer_covers_what_the_children_draw ... ok
+test render::tests::a_layer_is_unbounded_when_the_area_is_not_known ... ok
+test render::tests::a_partial_frame_draws_a_backdrop_reader_whole ... ok
+test render::tests::a_dashed_border_on_one_side_draws_only_that_side ... ok
+test image::tests::svg_decodes_at_the_size_shown ... ok
+test render::tests::a_partial_frame_draws_a_child_without_repainting_its_parent ... ok
+test render::tests::a_partial_frame_draws_what_a_whole_one_does ... ok
+test render::tests::a_partial_frame_keeps_an_overflowing_child_over_a_changed_sibling ... ok
+test render::tests::a_partial_frame_keeps_hosted_items_above_the_children ... ok
+test notifications::tests::the_badge_icon_is_made_without_a_window ... ok
+test render::tests::a_partial_frame_of_a_transparent_window_replaces_its_areas ... ok
+test render::tests::a_reader_the_merged_areas_meet_is_drawn_whole ... ok
+test render::tests::a_partial_frame_repaints_a_parent_that_meets_the_damage ... ok
+test render::tests::a_shader_effect_paints_its_overflow ... ok
+test render::tests::a_partial_frame_repaints_a_parent_whose_shadow_meets_the_damage ... ok
+test render::tests::a_subtree_left_out_forgets_where_it_was_painted ... ok
+test render::tests::a_partial_frame_keeps_clips_opacity_and_transforms ... ok
+test render::tests::a_subtree_of_no_size_is_left_out ... ok
+test render::tests::a_see_through_windows_pass_finds_its_backdrop_views ... ok
+test render::tests::a_subtree_torn_down_from_its_top_is_drawn_again_where_it_was ... ok
+test render::tests::a_tinted_image_fills_its_frame_at_any_scale ... ok
+test render::tests::changes_outside_the_window_leave_no_pixels ... ok
+test render::tests::merged_areas_cost_no_more_than_apart ... ok
+test render::tests::a_uniform_background_fill_makes_no_geometry ... ok
+test render::tests::an_animated_canvas_draws_only_its_changed_area ... ok
+test render::tests::several_areas_clear_to_a_transparent_background ... ok
+test audio::tests::a_sound_decodes_on_the_decoding_thread ... ok
+test scroll::tests::can_scroll_follows_edges_and_mirroring ... ok
+test scroll::tests::pick_finds_scrolled_children ... ok
+test scroll::tests::scroll_keys ... ok
+test session::tests::session_messages_map_to_steps ... ok
+test render::tests::views_out_of_sight_are_not_drawn ... ok
+test shader::tests::a_backdrop_reader_reads_its_box_and_overflow ... ok
+test shader::tests::a_deleted_screen_effect_leaves_the_root ... ok
+test shader::tests::a_new_start_picture_replaces_the_last_one ... ok
+test shader::tests::a_screen_effect_goes_with_the_views ... ok
+test shader::tests::a_transition_sent_back_to_reading_back_shows_its_start_until_its_next_frame ... ok
+test shader::tests::a_shader_that_cannot_draw_shows_the_children ... ok
+test shader::tests::an_effect_reads_its_children_back_only_after_a_change ... ok
+test shell::tests::a_frameless_border_has_edges_and_corners ... ok
+test shell::tests::a_hidden_title_bar_over_a_backdrop_goes_bare_when_zoomed ... ok
+test shader::tests::deleting_a_replaced_screen_effect_keeps_the_new_one ... ok
+test shell::tests::attributes_change_the_styles ... ok
+test shell::tests::backdrops_map_to_the_system_materials ... ok
+test shell::tests::close_reasons_follow_what_came_first ... ok
+test shell::tests::controls_and_edges_hit_test_as_the_systems ... ok
+test shell::tests::kinds_have_their_styles ... ok
+test shell::tests::progress_maps_to_the_taskbar_states ... ok
+test shell::tests::restyling_keeps_the_windows_own_bits ... ok
+test shell::tests::shells_merge_diffs ... ok
+test shell::tests::size_limits_are_outer_pixels ... ok
+test shell::tests::system_commands_follow_the_attributes ... ok
+test shell::tests::a_hidden_window_takes_and_leaves_the_topmost_levels ... ok
+test surface::tests::an_empty_client_area_keeps_the_apps_size ... ok
+test surface::tests::cursor_style_updates_without_mouse_motion ... ignored, requires an interactive Windows desktop; moves and restores the mouse
+test shader::tests::new_uniforms_draw_only_with_their_frame ... ok
+test system::tests::a_screen_the_user_cannot_see_puts_the_app_in_the_background ... ok
+test system::tests::accent_palette ... ok
+test system::tests::alert_buttons_wrap ... ok
+test system::tests::alert_layout ... ok
+test system::tests::an_ending_session_puts_the_app_in_the_background ... ok
+test system::tests::answers ... ok
+test system::tests::bitmaps_become_bmp_files ... ok
+test system::tests::colors ... ok
+test system::tests::dialog_focus ... ok
+test system::tests::locales ... ok
+test system::tests::os_version_is_windows_10_or_later ... ok
+test system::tests::reading_layouts ... ok
+test system::tests::sheet_layout ... ok
+test system::tests::text_scales ... ok
+test surface::tests::a_window_command_draws_the_animated_values_set_before_it ... ok
+test text::tests::a_family_list_falls_back_to_its_other_families ... ok
+test surface::tests::window_commands_see_the_animated_values_set_before_them ... ok
+test text::tests::attachments_sit_by_vertical_align ... ok
+test text::tests::cut_offsets ... ok
+test text::tests::directions ... ok
+test text::tests::alignment ... ok
+test text::tests::carets_and_highlights ... ok
+test text::tests::empty_text_has_one_line ... ok
+test text::tests::extending_by_units ... ok
+test text::tests::families ... ok
+test text::tests::font_variants_apply ... ok
+test text::tests::hard_breaks_keep_the_caret_before_them ... ok
+test text::tests::head_and_middle_ellipses ... ok
+test text::tests::hit_testing_through_the_engine ... ok
+test richedit::tests::notes_the_field_took_are_not_handed_again ... ok
+test text::tests::letter_spacing_widens ... ok
+test richedit::tests::a_gone_editor_hands_nothing_on ... ok
+test text::tests::line_heights ... ok
+test text::tests::lines_report_metrics ... ok
+test text::tests::emoji_have_color_layers ... ok
+test text::tests::max_lines_and_attachments ... ok
+test text::tests::span_backgrounds_box_each_line ... ok
+test text::tests::spans_by_offset ... ok
+test text::tests::word_and_paragraph_units ... ok
+test text::tests::the_first_baseline_is_the_first_lines ... ok
+test text::tests::wrapping_widths ... ok
+test text_input::tests::alignment ... ok
+test text_input::tests::bits ... ok
+test text_input::tests::colors ... ok
+test text_input::tests::mouse_positions ... ok
+test text_input::tests::families ... ok
+test text_input::tests::returns ... ok
+test text::tests::registered_fonts_lay_out ... ok
+test text_input::tests::stop_and_destroy_forget_the_focus ... ok
+test transition::tests::extra_applies_before_the_style_transform ... ok
+test tray::tests::unpremultiplies ... ok
+test text::tests::fallback_fonts_keep_the_line_height ... ok
+test text::tests::layout_matches_measure ... ok
+test window::tests::a_binding_consuming_an_untranslated_key_keeps_an_unrelated_character ... ok
+test richedit::tests::notes_left_untaken_reach_the_field_from_the_loop ... ok
+test window::tests::a_window_of_another_class_has_no_window_data ... ok
+test window::tests::held_buttons_number_the_buttons_as_presses_do ... ok
+test window_state::screens::tests::a_window_on_a_denser_monitor_keeps_its_points ... ok
+test window_state::screens::tests::bounds_round_trip_at_fractional_scales_and_negative_positions ... ok
+test window_state::screens::tests::monitors_stacked_beside_a_denser_primary_stay_apart ... ok
+test window_state::screens::tests::three_monitors_at_any_scales_stay_apart_and_round_trip ... ok
+test window_state::screens::tests::work_areas_are_relative_to_their_monitor ... ok
+test text_input::tests::multiline_scrollbars_have_native_overflow_ranges ... ok
+test window_state::tests::bounds_change_by_the_fields_given ... ok
+test window::tests::an_embedded_window_hears_its_root_window ... ok
+test window::tests::a_captured_key_is_never_translated ... ok
+test window::tests::a_captured_key_keeps_queued_messages_in_place ... ok
+test window_state::tests::a_hidden_window_stays_hidden_in_the_mode_asked_for ... ok
+test window::tests::a_paint_asked_for_while_drawing_comes ... ok
+test render::tests::a_partial_frame_applies_backdrop_readers_with_off_damage_parent ... ok
+test image::tests::large_animations_shrink_to_fit_and_keep_playing ... ok
+
+test result: ok. 342 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 9.91s
+
+   Doc-tests nsh_platform_windows
+
+running 2 tests
+test crates\nsh-platform-windows\src\app.rs - app::AppView (line 267) - compile ... ok
+test crates\nsh-platform-windows\src\native.rs - native::NativeComponent (line 86) - compile ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 8.58s; merged doctests compilation took 7.02s
+
+EXIT_CODE=0
+ELAPSED_SECONDS=94.7
