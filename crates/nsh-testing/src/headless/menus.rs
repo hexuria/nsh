@@ -17,9 +17,12 @@ impl Headless {
     /// the middle of the view `selector` names, on a desktop (`open`'s
     /// `platform`): the view, or the nearest around it listening, hears
     /// `onContextMenu`; its handler shows a menu (`Menu.popup`) or its own
-    /// UI. An input that takes no pointer under the view the click lands
-    /// on is the hit instead (but on Linux): it takes the focus and opens
-    /// its own edit menu. A phone has no mouse: there it fails.
+    /// UI. An input that takes no pointer and asks for the secondary press
+    /// (`Input::secondary_press_through`), under the view the click lands
+    /// on, is the hit instead (but on Linux): it takes the focus and opens
+    /// its own edit menu. One that does not ask (a hidden text sink) is as
+    /// transparent to the click as to any. A phone has no mouse: there it
+    /// fails.
     pub fn right_click(&mut self, selector: &str) -> Result<(), String> {
         let parsed = Selector::parse(selector)?;
         self.step(format!("rightClick({selector})"));
@@ -38,8 +41,9 @@ impl Headless {
             .ok_or_else(|| format!("`{selector}` is not on screen"))?
             .center();
         self.activate_window_of(target);
-        // An input that takes no pointer under the view the click lands on
-        // is the hit, as the macOS and Windows hosts take it
+        // An input that takes no pointer and asks for the press, under the
+        // view the click lands on, is the hit, as the macOS and Windows
+        // hosts take it
         // ([`crate::screen::Screen::hidden_field_at`]; Linux leaves such a
         // field to GTK): it takes the focus and opens its own edit menu.
         let hidden = (self.environment.os != Os::Linux)

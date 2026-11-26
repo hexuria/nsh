@@ -3407,6 +3407,14 @@ pub enum Prop {
     /// An input's caret (Rust components; TS sets the `caretColor` style
     /// key or `caret-*`).
     CaretColor(Option<Color>),
+    /// An input takes a secondary press (a right click, a Control-click)
+    /// on the desktops although the pointer does not reach it
+    /// (`pointerEvents: none` on it or a view around it), and opens its own
+    /// edit menu ([`crate::ViewProps::secondary_press_through`]). Set by
+    /// components (`Input::secondary_press_through`), never by JS; an
+    /// element no longer setting it goes back to false.
+    #[prop(reset = Prop::SecondaryPressThrough(false))]
+    SecondaryPressThrough(bool),
     /// `autoComplete` (iOS: also `textContentType`): what an input holds, for
     /// autofill (React Native's values, e.g. "username", "current-password",
     /// "new-password", "one-time-code", "email", "tel", "postal-code", "cc-number",

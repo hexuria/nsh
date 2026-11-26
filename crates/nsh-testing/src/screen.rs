@@ -394,6 +394,9 @@ struct View {
     text_content: Bounds<Points>,
     /// Which touches it and its subtree receive (`pointerEvents`).
     pointer_events: PointerEvents,
+    /// An input that takes a secondary press although the pointer does
+    /// not reach it (`ViewProps::secondary_press_through`).
+    secondary_press_through: bool,
     /// Its children are read in screen order along this axis (a list in
     /// its parent's viewport, `ViewProps::screen_order`).
     screen_order: Option<nsh_core::geometry::Axis>,
@@ -885,6 +888,7 @@ impl Screen {
                 view.selectable_view = props.selectable_view;
                 view.pan_activation = props.pan_activation;
                 view.pointer_events = props.pointer_events;
+                view.secondary_press_through = props.secondary_press_through;
                 view.screen_order = props.screen_order;
             }
             MountItem::Keymap(keymap) => self.keymap = Some(keymap.clone()),
@@ -3138,11 +3142,31 @@ impl Screen {
 
     /// The input a secondary click at `at` (in the root) on `target` is
     /// for although it takes no pointer, as the macOS and Windows hosts
-    /// find it (their `hidden_field_at` / `hidden_field`): the view a
-    /// pointer there reaches holds an input under `at` that it, or a view
-    /// between them, keeps from the pointer (`pointerEvents: none`), and
-    /// neither it nor a view between them listens to `onContextMenu` or
-    /// is disabled. Only an input that is `target` or in it.
+    /// find it (their `hidden_field_at` / `hidden_field`): the input asks
+    /// for it (`ViewProps::secondary_press_through`), the view a pointer
+    /// there reaches holds it under `at`, it or a view between them keeps
+    /// it from the pointer (`pointerEvents: none`), and neither it nor a
+    /// view between them listens to `onContextMenu` or is disabled. Only an
+    /// input that is `target` or in it.
+    ///
+    /// A model of the hosts' walk, not a copy, and coarser than they are.
+    /// It keeps what decides whether a field is found at all: the opt-in,
+    /// pointer transparency on the way, hidden and disabled views, a
+    /// listener on the way, dialogs (left to their own hit testing), and
+    /// views that clip (`overflow: hidden`, scroll views) cutting the field
+    /// off where it does not show, as the hosts' `hit_area` does. It does
+    /// not model where inside the field the hosts aim: it takes the
+    /// input's box as the field (`bounds_in_root`), with no hit slop
+    /// (Windows' walk counts it) and not the hosted editor's own frame
+    /// (macOS hands the press to the pad's editor at the nearest point
+    /// inside it, `text_input::editor_at`); nor overflow areas of
+    /// unclipped views, transforms beyond what `bounds_in_root` places, a
+    /// press landing on a hosted view (no hidden field then on either
+    /// host), or the native menu itself, whose items
+    /// [`Self::field_edit_actions`] stands in for. The `target` restriction
+    /// is the harness's own (a step names a view; the hosts have only the
+    /// point), and Linux, where the field keeps the mouse, is left out by
+    /// the caller (`Headless::right_click`).
     pub(crate) fn hidden_field_at(&self, target: NodeId, at: Point<Points>) -> Option<NodeId> {
         let hit = self.hit_pointer(at, self.window_of(target));
         let attached: HashSet<NodeId> = self.attached().into_iter().collect();
@@ -3164,10 +3188,16 @@ impl Screen {
             return None;
         }
         let through = through || view.pointer_events == PointerEvents::None;
+        let inside = self.bounds_in_root(id).is_some_and(|b| b.contains(&at));
         if view.kind == Some(ViewKind::Input) {
-            // An input the pointer reaches is the view hit already.
-            let under = self.bounds_in_root(id).is_some_and(|b| b.contains(&at));
-            return (through && under).then_some(id);
+            // An input the pointer reaches is the view hit already, and
+            // one that does not ask for the press stays transparent to it.
+            return (through && inside && view.secondary_press_through).then_some(id);
+        }
+        // A view that clips is looked into only where the point is inside
+        // it, as `hit_in` does (the root and the windows hold the screen).
+        if !inside && id != ROOT && !self.is_window(id) && (view.clips || view.scroll.is_some()) {
+            return None;
         }
         self.children
             .get(&id)?

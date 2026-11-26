@@ -821,6 +821,26 @@ impl Input {
         self.bind_prop(caret, |caret: bool| Prop::Caret(caret))
     }
 
+    /// Takes a secondary press (a right click, or a Control-click on
+    /// macOS) on the desktops although the pointer does not reach it
+    /// (`pointerEvents: none` on it, or on a view around it inside the
+    /// view the press lands on): it is focused and opens its own edit menu
+    /// (its Paste, its validated items), as an input the pointer reaches
+    /// does, unless the view the press lands on or one between them listens
+    /// to `onContextMenu` or is disabled
+    /// ([`crate::ViewProps::secondary_press_through`]). Off by default.
+    ///
+    /// For a component that draws its own text over a field it keeps from
+    /// the pointer and answers the mouse itself (`OtpInput`'s cells): a
+    /// text sink of a component with a menu of its own, or an input made
+    /// inert, leaves it off, and a right click there stays the
+    /// component's. macOS and Windows; Linux (where GTK opens a field's
+    /// menu only from a press the field receives itself) and the mobile
+    /// platforms ignore it.
+    pub fn secondary_press_through(self, through: impl IntoReactive<bool>) -> Self {
+        self.bind_prop(through, |through: bool| Prop::SecondaryPressThrough(through))
+    }
+
     /// Shows the input accessory with this `nativeID` over the keyboard
     /// ([`input_accessory_view`]; iOS).
     pub fn input_accessory(self, native_id: impl IntoReactive<String>) -> Self {

@@ -1428,8 +1428,9 @@ impl ViewObj {
         let Some(native) = crate::input::native_at(&root, x, y) else {
             // A secondary press over a text field that takes no pointer
             // (`pointerEvents: "none"`: the one-time code's, under the cells
-            // that answer the mouse) is the field's all the same, unless a
-            // view on the way listens to `onContextMenu`
+            // that answer the mouse) and asks for it
+            // (`secondary_press_through`) is the field's all the same,
+            // unless a view on the way listens to `onContextMenu`
             // ([`crate::input::hidden_field_at`]): handed to the field's
             // editor, as one the pointer reaches gets it, AppKit focuses
             // the field and shows its own edit menu (Paste, its validated

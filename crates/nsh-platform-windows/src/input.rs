@@ -1585,15 +1585,19 @@ fn pick_in(view: &NshView, x: f32, y: f32, items: bool) -> Option<Hit> {
 
 /// The text field under `(x, y)` (root coordinates) in `hit`, the view
 /// picked there, that takes no pointer, when a secondary click there is
-/// the field's: the field, or a view around it inside `hit`, is
-/// `pointerEvents: "none"` (the one-time code's field is, under the cells
-/// that answer the mouse themselves), and neither `hit` nor a view
-/// between them listens to `onContextMenu` or is disabled. A field the
-/// pointer reaches shows its own edit menu on a secondary click; one that
-/// takes no pointer is the hit as well, so it is focused and shows that
-/// same menu (RichEdit's commands, each enabled as the field can) rather
-/// than nothing. An app listening on the way hears the click instead, as
-/// it would over any view of its own.
+/// the field's: the field asks for it
+/// ([`nsh_core::ViewProps::secondary_press_through`]), the field, or a
+/// view around it inside `hit`, is `pointerEvents: "none"` (the one-time
+/// code's field is, under the cells that answer the mouse themselves),
+/// and neither `hit` nor a view between them listens to `onContextMenu`
+/// or is disabled. A field the pointer reaches shows its own edit menu on
+/// a secondary click; one that takes no pointer and asks is the hit as
+/// well, so it is focused and shows that same menu (RichEdit's commands,
+/// each enabled as the field can) rather than nothing. An app listening
+/// on the way hears the click instead, as it would over any view of its
+/// own. A field that does not ask (an editor's or a terminal's hidden
+/// text sink, an input an app made inert) is as transparent to this
+/// press as to any other: the component or the app around it has it.
 fn hidden_field(hit: &NshView, x: f32, y: f32) -> Option<NshView> {
     let (lx, ly) = local(hit, x, y);
     hidden_field_in(hit, lx, ly, false)
@@ -1623,8 +1627,9 @@ fn hidden_field_in(view: &NshView, x: f32, y: f32, through: bool) -> Option<NshV
         laid_out(s.kind, s.id),
     );
     if s.kind == ViewKind::Input {
-        // A field the pointer reaches is the picked one already.
-        return (through && in_slop).then(|| view.clone());
+        // A field the pointer reaches is the picked one already, and one
+        // that does not ask for the press stays transparent to it.
+        return (through && in_slop && s.props.secondary_press_through).then(|| view.clone());
     }
     if !children {
         return None;
@@ -3180,11 +3185,11 @@ mod tests {
         assert_eq!(at(&root, 250.0, 50.0), Some(ROOT_ID));
     }
 
-    /// A secondary click over a field that takes no pointer (the one-time
-    /// code's, under the cells that answer the mouse) is the field's: the
-    /// view picked there is around it, and nothing on the way listens to
-    /// `onContextMenu` or is disabled. A field the pointer reaches is the
-    /// picked view itself.
+    /// A secondary click over a field that takes no pointer and asks for
+    /// it (`secondary_press_through`: the one-time code's, under the cells
+    /// that answer the mouse) is the field's: the view picked there is
+    /// around it, and nothing on the way listens to `onContextMenu` or is
+    /// disabled. A field the pointer reaches is the picked view itself.
     #[test]
     fn a_secondary_click_finds_a_field_that_takes_no_pointer() {
         let root = root();
@@ -3193,6 +3198,7 @@ mod tests {
         cells.state_mut().props.pointer_events = PointerEvents::None;
         let field = view(&code, 6, ViewKind::Input, rect(0.0, 0.0, 180.0, 40.0));
         field.state_mut().props.pointer_events = PointerEvents::None;
+        field.state_mut().props.secondary_press_through = true;
         let found = |x: f32, y: f32| {
             let hit = pick(&root, x, y, true)?;
             hidden_field(&hit.view, x, y).map(|f| f.id())
@@ -3213,6 +3219,44 @@ mod tests {
         field.state_mut().props.pointer_events = PointerEvents::Auto;
         assert_eq!(at(&root, 100.0, 30.0), Some(6));
         assert_eq!(found(100.0, 30.0), None);
+    }
+
+    /// A field that takes no pointer and does not ask for the secondary
+    /// press (an editor's or a terminal's hidden text sink, an input an
+    /// app made inert) is as transparent to it as to any press: the
+    /// component around it keeps it, whether the field covers the view or
+    /// is a one-point sink at the caret. Nor is an asking field found where
+    /// a view around it clips it away (scrolled out of its scroll view).
+    #[test]
+    fn a_secondary_click_passes_through_a_field_that_does_not_ask() {
+        let root = root();
+        let editor = view(&root, 2, ViewKind::View, rect(20.0, 20.0, 300.0, 200.0));
+        let field = view(&editor, 4, ViewKind::Input, rect(0.0, 0.0, 300.0, 200.0));
+        field.state_mut().props.pointer_events = PointerEvents::None;
+        let sink = view(&editor, 6, ViewKind::Input, rect(40.0, 60.0, 1.0, 1.0));
+        sink.state_mut().props.pointer_events = PointerEvents::None;
+        let found = |x: f32, y: f32| {
+            let hit = pick(&root, x, y, true)?;
+            hidden_field(&hit.view, x, y).map(|f| f.id())
+        };
+        assert_eq!(at(&root, 100.0, 100.0), Some(2));
+        // Neither the covering field nor the sink asks: none.
+        assert_eq!(found(100.0, 100.0), None);
+        assert_eq!(found(60.5, 80.5), None);
+        // The sink asking is found on its point, the other still not.
+        sink.state_mut().props.secondary_press_through = true;
+        assert_eq!(found(60.5, 80.5), Some(6));
+        assert_eq!(found(100.0, 100.0), None);
+        sink.state_mut().props.secondary_press_through = false;
+        // An asking field a clipping view around it cuts off: none where
+        // it is cut, found where it shows.
+        let clip = view(&root, 8, ViewKind::View, rect(20.0, 260.0, 100.0, 40.0));
+        clip.state_mut().style.overflow_hidden = true;
+        let below = view(&clip, 10, ViewKind::Input, rect(0.0, 20.0, 100.0, 60.0));
+        below.state_mut().props.pointer_events = PointerEvents::None;
+        below.state_mut().props.secondary_press_through = true;
+        assert_eq!(found(70.0, 290.0), Some(10));
+        assert_eq!(found(70.0, 310.0), None);
     }
 
     #[test]

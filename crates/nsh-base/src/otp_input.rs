@@ -533,8 +533,9 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
     // cell it was over.
     //
     // A secondary click never reaches the touches (the platforms send it
-    // as a context menu), and is the field's own all the same: macOS and
-    // Windows take a field that takes no pointer, under the view the click
+    // as a context menu), and is the field's own all the same: the field
+    // opts in (`secondary_press_through`, below), and macOS and Windows
+    // take such a field that takes no pointer, under the view the click
     // lands on, as the hit when nothing on the way listens to
     // `onContextMenu` (`hidden_field_at` in nsh-platform-macos'
     // `input.rs`, `hidden_field` in nsh-platform-windows'), so it is
@@ -692,8 +693,18 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                 // On the desktop the mouse never reaches the field: the
                 // input answers it (see above). Hit testing is the
                 // mouse's only road to a field; the keyboard, the clipboard
-                // and the focus it is given are unaffected.
-                .when(desktop, |v| v.pointer_events(PointerEvents::None)),
+                // and the focus it is given are unaffected. A secondary
+                // click is the exception, and the field opts in to it
+                // (`secondary_press_through`: the hosts hand it only to
+                // inputs that ask, so the hidden text sinks of an editor
+                // or a terminal never take it). It is set with the
+                // transparency and only there, as it means nothing for a
+                // field the pointer reaches, and Linux, where the field
+                // keeps the mouse, ignores it anyway.
+                .when(desktop, |v| {
+                    v.secondary_press_through(true)
+                        .pointer_events(PointerEvents::None)
+                }),
         )
 }
 

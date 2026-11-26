@@ -454,6 +454,23 @@ pub struct ViewProps {
     pub screen_order: Option<crate::geometry::Axis>,
     /// Which touches the view and its subtree receive.
     pub pointer_events: PointerEvents,
+    /// An input takes a secondary press (the right button's, or a
+    /// Control-click on macOS) although the pointer does not reach it: it,
+    /// or a view around it inside the view the press lands on, is
+    /// [`PointerEvents::None`]. The macOS and Windows hosts then make it
+    /// the hit of that press when neither the view the press lands on nor
+    /// one between them listens to `onContextMenu` or is disabled: it is
+    /// focused and opens its own edit menu, as an input the pointer
+    /// reaches does. For a component that draws its own text over a field
+    /// it keeps from the pointer (`OtpInput`'s cells over its hidden
+    /// field), so the field's Paste is a right click away. Off by default,
+    /// and opt-in on purpose: most pointer-transparent inputs are text
+    /// sinks of a component that answers the mouse itself (an editor's, a
+    /// terminal's) or inputs an app made inert, and a right click over
+    /// them is the component's or the app's, never the sink's. Only inputs
+    /// read it; Linux and the mobile platforms ignore it. Set with
+    /// `Input::secondary_press_through` (Rust only).
+    pub secondary_press_through: bool,
     /// Extends the touch area beyond the view's bounds.
     pub hit_slop: EdgeInsets,
     /// Milliseconds before a press becomes a long press (platform default

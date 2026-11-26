@@ -3683,16 +3683,20 @@ pub(crate) fn native_at(root: &NshView, x: f32, y: f32) -> Option<Retained<objc2
 
 /// The hosted view (an input's pad) of a text field under `(x, y)` (root
 /// coordinates) that takes no pointer, when a secondary click there is
-/// the field's: nsh's picking lands on an app view around it (the field,
-/// or a view around it inside the picked one, is `pointerEvents: "none"`,
-/// as the one-time code's field is under the cells that answer the mouse
-/// themselves), and neither that view nor one between them listens to
-/// `onContextMenu` or is disabled. A field the pointer reaches shows its
-/// own edit menu on a secondary click; one that takes no pointer showed
-/// none, so the root's `hitTest:` hands the press to this one's editor
-/// (`view.rs`), and the field is the hit as if the pointer reached it. An
-/// app listening on the way hears the click instead, as it would over
-/// any view of its own.
+/// the field's: the field asks for it
+/// ([`nsh_core::ViewProps::secondary_press_through`]), nsh's picking lands
+/// on an app view around it (the field, or a view around it inside the
+/// picked one, is `pointerEvents: "none"`, as the one-time code's field is
+/// under the cells that answer the mouse themselves), and neither that
+/// view nor one between them listens to `onContextMenu` or is disabled. A
+/// field the pointer reaches shows its own edit menu on a secondary click;
+/// one that takes no pointer showed none, so the root's `hitTest:` hands
+/// the press to this one's editor (`view.rs`), and the field is the hit as
+/// if the pointer reached it. An app listening on the way hears the click
+/// instead, as it would over any view of its own. A field that does not
+/// ask (an editor's or a terminal's hidden text sink, an input an app made
+/// inert) is as transparent to this press as to any other: the component
+/// or the app around it has it.
 pub(crate) fn hidden_field_at(
     root: &NshView,
     x: f32,
@@ -3702,29 +3706,28 @@ pub(crate) fn hidden_field_at(
     if hit.native {
         return None;
     }
-    let under = |field: &NshView| {
-        let local = field.ns().convertPoint_fromView(
-            objc2_foundation::NSPoint::new(x as f64, y as f64),
-            Some(root.ns()),
-        );
-        let s = field.state();
-        s.natives
-            .iter()
-            .rev()
-            .find(|n| native_contains(n, (local.x as f32, local.y as f32)))
-            .map(|n| n.view.clone())
-    };
-    hidden_field_in(&hit.view, false, &under)
+    // In the picked view's coordinates, as `native_at` takes them; from
+    // there down as `pick_in` carries the point.
+    let local = hit.view.ns().convertPoint_fromView(
+        objc2_foundation::NSPoint::new(x as f64, y as f64),
+        Some(root.ns()),
+    );
+    hidden_field_in(&hit.view, (local.x as f32, local.y as f32), false)
 }
 
-/// [`hidden_field_at`] in `view` and what it holds, topmost first:
-/// `through` once a view on the way takes no pointer.
+/// [`hidden_field_at`] in `view` at `p` (its coordinates) and what it
+/// holds, topmost first: `through` once a view on the way takes no
+/// pointer. It walks as [`pick_in`] does, point and clips included: a
+/// view that clips its children (`overflow: hidden`, a scroll view) is
+/// looked into only where the point is inside it, so a field scrolled out
+/// of its scroll view, or cut off by a clipping card, is not found where
+/// it does not show.
 fn hidden_field_in(
     view: &NshView,
+    p: (f32, f32),
     through: bool,
-    under: &dyn Fn(&NshView) -> Option<Retained<objc2_app_kit::NSView>>,
 ) -> Option<Retained<objc2_app_kit::NSView>> {
-    let (field, through) = {
+    let (field, through, children) = {
         let s = view.state();
         if s.style.hidden
             || s.live.as_ref().is_some_and(|l| l.dying())
@@ -3733,29 +3736,56 @@ fn hidden_field_in(
         {
             return None;
         }
+        let HitArea { children, .. } = input::hit_area(
+            point(Points(p.0), Points(p.1)),
+            s.frame.size,
+            s.props.hit_slop,
+            s.overflow,
+            s.clips(),
+            laid_out(s.kind, s.id),
+        );
         (
-            s.kind == ViewKind::Input,
+            (s.kind == ViewKind::Input).then_some(s.props.secondary_press_through),
             through || s.props.pointer_events == PointerEvents::None,
+            children,
         )
     };
     if view.ns().isHidden() {
         return None;
     }
-    if field {
-        // A field the pointer reaches is the picked one already.
-        return through.then(|| under(view)).flatten();
+    if let Some(asks) = field {
+        // A field the pointer reaches is the picked one already, and one
+        // that does not ask for the press stays transparent to it. The
+        // press goes to the pad under the point, which is in the field's
+        // box.
+        if !(through && asks) {
+            return None;
+        }
+        let s = view.state();
+        return s
+            .natives
+            .iter()
+            .rev()
+            .find(|n| native_contains(n, p))
+            .map(|n| n.view.clone());
     }
+    if !children {
+        return None;
+    }
+    // Children in their AppKit order, topmost first, those in the
+    // container (a scroll view's content) at its offset and zoom.
     let container = view.container_view();
     let subviews: Vec<_> = view.ns().subviews().iter().collect();
     for sub in subviews.into_iter().rev() {
-        let children: Vec<_> = if container.as_deref() == Some(&*sub) {
-            sub.subviews().iter().collect()
+        let (kids, at): (Vec<_>, _) = if container.as_deref() == Some(&*sub) {
+            (sub.subviews().iter().collect(), into_container(view, p))
         } else {
-            vec![sub]
+            (vec![sub], p)
         };
-        for child in children.into_iter().rev() {
+        for child in kids.into_iter().rev() {
             if let Some(child) = NshView::from_ns(&child)
-                && let Some(field) = hidden_field_in(&child, through, under)
+                && let Some(cp) = into_child(&child, at)
+                && let Some(field) = hidden_field_in(&child, cp, through)
             {
                 return Some(field);
             }

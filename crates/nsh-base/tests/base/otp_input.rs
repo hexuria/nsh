@@ -1172,12 +1172,111 @@ fn a_disabled_code_opens_no_menu_on_a_right_click_on_the_desktop() {
     assert_eq!(field(&mut app, "label:Disabled"), "12");
 }
 
-/// The code's field, and the pointer events each view's props last gave.
-type FieldPointer = (Option<NodeId>, HashMap<NodeId, PointerEvents>);
+/// Inputs an app keeps from the pointer (`pointerEvents: none`), in views
+/// that do not listen to `onContextMenu`: one covering its view (`cover`),
+/// as an input made inert is, and a one-point text sink (`sink`, in
+/// `editor`), as an editor or a terminal keeps at its caret. They ask for
+/// the secondary press (`secondary_press_through`) when `asks`, as the
+/// code's field does. "Focused N" counts the times either took the focus.
+fn inert_fields(asks: bool) -> impl IntoElement {
+    let focus = signal(0u32);
+    let field = move |id: &'static str| {
+        input()
+            .test_id(id)
+            .absolute()
+            .pointer_events(PointerEvents::None)
+            .when(asks, |v| v.secondary_press_through(true))
+            .on_focus(move || focus.update(|f| *f += 1))
+    };
+    view()
+        .child(
+            view()
+                .test_id("cover")
+                .w(px(200.0))
+                .h(px(40.0))
+                .child(field("covering").inset_0()),
+        )
+        .child(
+            view()
+                .test_id("editor")
+                .w(px(200.0))
+                .h(px(40.0))
+                .child(
+                    field("sink")
+                        .left(px(50.0))
+                        .top(px(10.0))
+                        .w(px(1.0))
+                        .h(px(1.0)),
+                ),
+        )
+        .child(text(move || format!("Focused {}", focus.get())))
+}
+
+/// [`inert_fields`], not asking for the secondary press.
+#[component]
+fn Inert() -> impl IntoElement {
+    inert_fields(false)
+}
+
+/// [`inert_fields`], asking for the secondary press.
+#[component]
+fn InertAsking() -> impl IntoElement {
+    inert_fields(true)
+}
+
+/// A right click on `target` of [`inert_fields`] on macOS and Windows:
+/// without the opt-in it passes through the input (no focus, no menu,
+/// with a code on the clipboard to offer), and with it the same click on
+/// the same input focuses it and opens its own edit menu, so the click
+/// does land on the input and the opt-in alone decides.
+fn right_click_inert(target: &str) {
+    use nsh_core::platform::Os;
+    for os in [Os::MacOs, Os::Windows] {
+        let mut app = start_desktop_on::<Inert>(os);
+        app.set_clipboard(Some("42".into()));
+        app.right_click(target).unwrap();
+        app.wait(Duration::from_millis(80)).unwrap();
+        assert!(
+            app.menu().is_none(),
+            "no menu on {target} on {os:?}: {:?}",
+            app.menu()
+        );
+        see(&mut app, "Focused 0");
+
+        let mut app = start_desktop_on::<InertAsking>(os);
+        app.set_clipboard(Some("42".into()));
+        app.right_click(target).unwrap();
+        see(&mut app, "Focused 1");
+        assert_eq!(menu_labels(&app), ["Paste"], "{target} on {os:?}");
+    }
+}
+
+/// A right click over an input an app keeps from the pointer, which does
+/// not ask for the secondary press, is not the input's: it is not
+/// focused and opens no edit menu. Only an input that asks (the code's
+/// field) takes it.
+#[test]
+fn a_right_click_passes_through_a_pointer_transparent_input_on_the_desktop() {
+    right_click_inert("id:cover");
+}
+
+/// A right click on a one-point text sink that takes no pointer and does
+/// not ask for the secondary press (an editor's, a terminal's) is not the
+/// sink's: it is not focused and opens no edit menu, so the component
+/// around it keeps the click.
+#[test]
+fn a_right_click_passes_through_a_one_point_sink_on_the_desktop() {
+    right_click_inert("id:sink");
+}
+
+/// The code's field, and the pointer events each view's props last gave
+/// with whether they ask for the secondary press.
+type FieldPointer = (Option<NodeId>, HashMap<NodeId, (PointerEvents, bool)>);
 
 /// On Linux the field keeps the mouse (a GTK field's edit menu opens only
 /// from a press it receives itself): it is not hit-transparent there, as
-/// it is on macOS and Windows.
+/// it is on macOS and Windows, where it asks for the secondary press
+/// (`secondary_press_through`) with the transparency.
 #[test]
 fn the_field_keeps_the_pointer_on_linux() {
     use nsh_core::platform::Os;
@@ -1200,7 +1299,8 @@ fn the_field_keeps_the_pointer_on_linux() {
                         seen.0 = Some(*id);
                     }
                     MountItem::ViewProps { id, props } => {
-                        seen.1.insert(*id, props.pointer_events);
+                        let asks = props.secondary_press_through;
+                        seen.1.insert(*id, (props.pointer_events, asks));
                     }
                     _ => {}
                 }
@@ -1209,8 +1309,13 @@ fn the_field_keeps_the_pointer_on_linux() {
         app.first_render().unwrap();
         let seen = seen.lock().unwrap();
         let field = seen.0.expect("the code's field");
-        let pointer = seen.1.get(&field).copied().unwrap_or(PointerEvents::Auto);
+        let (pointer, asks) = seen
+            .1
+            .get(&field)
+            .copied()
+            .unwrap_or((PointerEvents::Auto, false));
         assert_eq!(pointer != PointerEvents::None, takes, "on {os:?}");
+        assert_eq!(asks, !takes, "on {os:?}");
     }
 }
 
