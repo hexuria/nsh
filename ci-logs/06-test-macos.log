@@ -1,0 +1,314 @@
+   Compiling serde_core v1.0.229
+   Compiling futures-core v0.3.34
+   Compiling tokio v1.53.3
+   Compiling rustls v0.23.45
+   Compiling futures-util v0.3.34
+   Compiling http-body v1.1.0
+   Compiling tower-service v0.3.3
+   Compiling tower-layer v0.3.3
+   Compiling atomic-waker v1.1.2
+   Compiling sync_wrapper v1.0.2
+   Compiling tungstenite v0.29.0
+   Compiling mime v0.3.17
+   Compiling matchit v0.8.4
+   Compiling http-body-util v0.1.5
+   Compiling dunce v1.0.5
+   Compiling axum-core v0.5.6
+   Compiling serde v1.0.229
+   Compiling serde_json v1.0.154
+   Compiling serde-saphyr v1.3.0
+   Compiling toml_datetime v0.6.11
+   Compiling serde_spanned v0.6.9
+   Compiling triomphe v0.1.17
+   Compiling ratex-types v0.1.15
+   Compiling string_cache v0.8.9
+   Compiling bincode v1.3.3
+   Compiling toml_edit v0.22.27
+   Compiling markup5ever v0.12.1
+   Compiling rust-i18n-support v4.2.4
+   Compiling nsh-updater v0.6.1 (/Users/devin/probe/nsh46/crates/nsh-updater)
+   Compiling ratex-lexer v0.1.15
+   Compiling ratex-font v0.1.15
+   Compiling syntect v5.3.0
+   Compiling ratex-parser v0.1.15
+   Compiling oxc_sourcemap v9.0.0
+   Compiling html5ever v0.27.0
+   Compiling xml5ever v0.18.1
+   Compiling tungstenite v0.28.0
+   Compiling rustls-platform-verifier v0.7.1
+   Compiling markup5ever_rcdom v0.3.0
+   Compiling tokio-rustls v0.26.6
+   Compiling quickjs-jit-stdlib v0.14.2
+   Compiling tokio-tungstenite v0.28.0
+   Compiling hyper v1.12.0
+   Compiling toml v0.8.23
+   Compiling two-face v0.4.5
+   Compiling tokio-tungstenite v0.29.0
+   Compiling tower v0.5.3
+   Compiling hyper-util v0.1.21
+   Compiling axum v0.8.9
+   Compiling rust-i18n-macro v4.2.4
+   Compiling ratex-layout v0.1.15
+   Compiling rust-i18n v4.2.4
+   Compiling nsh-core v0.6.1 (/Users/devin/probe/nsh46/crates/nsh-core)
+   Compiling nsh-js v0.6.1 (/Users/devin/probe/nsh46/crates/nsh-js)
+   Compiling nsh-package v0.6.1 (/Users/devin/probe/nsh46/crates/nsh-package)
+   Compiling nsh-base v0.6.1 (/Users/devin/probe/nsh46/crates/nsh-base)
+   Compiling nsh-dev v0.6.1 (/Users/devin/probe/nsh46/crates/nsh-dev)
+   Compiling nsh-engine v0.6.1 (/Users/devin/probe/nsh46/crates/nsh-engine)
+   Compiling nsh-platform-apple v0.6.1 (/Users/devin/probe/nsh46/crates/nsh-platform-apple)
+   Compiling nsh-platform-macos v0.6.1 (/Users/devin/probe/nsh46/crates/nsh-platform-macos)
+warning: unused import: `sync::Arc`
+    --> crates/nsh-platform-macos/src/text.rs:3617:31
+     |
+3617 |         use std::{cell::Cell, sync::Arc};
+     |                               ^^^^^^^^^
+     |
+     = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `nsh-platform-macos` (lib test) generated 1 warning (run `cargo fix --lib -p nsh-platform-macos --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 47.68s
+     Running unittests src/lib.rs (/Users/devin/probe/nsh46-target/debug/build/nsh-platform-macos/38b58b99667ca3cf/out/nsh_platform_macos-38b58b99667ca3cf)
+
+running 201 tests
+test access::tests::a_hidden_change_reaches_appkit_without_a_role_change ... ok
+test access::tests::a_checkbox_value_compared_by_kind_not_contents ... ok
+test access::tests::roles ... ok
+test access::tests::an_alert_the_app_announced_in_the_same_batch_is_not_read_twice ... ok
+test access::tests::a_hidden_style_hides_the_subtree ... ok
+test access::tests::structural_roles_and_toggle_buttons ... ok
+test access::tests::controls_fold_their_content ... ok
+test access::tests::an_alert_is_an_assertive_live_region_read_as_it_appears ... ok
+test access::text_spans::tests::selecting_a_label_skips_the_attachment_and_snaps_surrogates ... ok
+test animation::tests::a_fade_restyles_without_drawing_again ... ok
+test animation::tests::a_text_color_draws_again ... ok
+test app::tests::the_secondary_display_skips_the_primary_and_its_mirrors ... ok
+test access::tests::labels_and_values ... ok
+test blur::tests::spreads_a_point_and_keeps_flat_areas ... ok
+test app::tests::launch_activates_unless_options_turn_it_off ... ok
+test app::tests::the_activation_policy_is_the_apps_unless_it_runs_in_the_background ... ok
+test access::text_spans::tests::hover_only_spans_do_not_hide_an_outer_link ... ok
+test access::text_spans::tests::a_link_stays_one_element_across_an_inline_reveal_anchor ... ok
+test access::text_spans::tests::a_plain_word_stays_whole_across_a_zero_width_anchor ... ok
+test access::text_spans::tests::hidden_runs_and_attachment_placeholders_are_omitted_from_names ... ok
+test access::text_spans::tests::nested_links_read_once_in_utf16_document_order ... ok
+test canvas::offscreen::tests::a_bitmap_past_the_systems_limits_is_too_large ... ok
+test canvas::tests::layer_split_rejects_unsafe_suffixes ... ok
+test chrome::tests::incomplete_toolbar_geometry_falls_back_to_the_native_title_bar ... ok
+test chrome::tests::only_a_toolbar_without_a_title_bar_view_waits_for_the_layout ... ok
+test chrome::tests::frames_are_placed_by_their_top_left_corner ... ok
+test chrome::tests::screen_ys_flip_at_the_primary_screens_height ... ok
+test canvas::tests::a_canvas_painting_often_draws_asynchronously ... ok
+test chrome::tests::toolbar_area_uses_native_geometry_including_its_origin ... ok
+test chrome::tests::window_buttons_go_where_the_app_put_them ... ok
+test chrome::tests::roles_read_the_translated_labels ... ok
+test chrome::tests::shortcuts_are_key_equivalents ... ok
+test decor::tests::partial_square_borders_emit_no_segments_on_zero_width_sides ... ok
+test decor::tests::clipping_leaves_the_mask_that_hides_the_children ... ok
+test canvas::tests::partial_redraw_waits_for_a_whole_paint ... ok
+test canvas::tests::a_shadow_falls_by_its_offset_in_the_views_points_in_any_context ... ok
+test canvas::tests::content_bounds_crops_sparse_drawings_and_omits_empty_ones ... ok
+test canvas::offscreen::tests::a_drawing_paints_y_down_at_its_scale ... ok
+test file_drop::tests::registration_lasts_until_the_final_destination_is_removed ... ok
+test decor::tests::open_u_rounded_borders_emit_no_segments_across_the_open_side ... ok
+test fps::tests::readings_of_an_empty_snapshot ... ok
+test fps::tests::readings_show_what_the_app_holds ... ok
+test fps::tests::the_collapsed_pill_says_the_frame_rate ... ok
+test fps::tests::the_pill_is_colored_by_the_frame_budget ... ok
+test global_shortcut::tests::modifiers_are_carbons ... ok
+2026-11-26 04:14:21.703 nsh_platform_macos-38b58b99667ca3cf[4667:40526] CFURLCreateFilePathURL failed because it was passed a URL which has no scheme
+test file_drop::tests::file_urls_are_local_and_absolute ... ok
+test global_shortcut::tests::named_keys_have_their_codes ... ok
+test canvas::offscreen::tests::an_image_is_encoded_as_png ... ok
+test image::tests::bench_rgba_page ... ignored, 2560x3313 pixel-buffer timing and memory benchmark
+test canvas::tests::an_image_draws_its_pixels_over_its_file_density ... ok
+test canvas::tests::the_static_part_is_drawn_from_its_layer ... ok
+test image::tests::reads_densities ... ok
+test decor::tests::rounded_unequal_sides_keep_their_patterns ... ok
+test file_drop::tests::finder_references_expose_the_filename_before_drop ... ok
+test decor::tests::single_side_patterns_have_gaps_and_solid_restores_the_fill ... ok
+test file_drop::tests::file_reference_urls_become_the_paths_urls ... ok
+test input::tap_feedback_tests::cancellation_reduced_motion_and_test_drivers_release_immediately ... ok
+test input::tap_feedback_tests::short_presses_only_hold_the_remaining_visual_time ... ok
+test input::tests::batches_do_not_push_the_repick_on ... ok
+test input::tests::candidates_take_their_axis ... ok
+test image::tests::backing_storage_counts_stride_pages_and_display_copies ... ok
+test input::tests::cursors ... ok
+test input::tests::frames_resize_by_their_edge_within_their_limits ... ok
+test input::tests::inline_context_menu_ignores_hover_only_nested_spans ... ok
+test input::tests::the_cursor_is_set_only_when_it_changes ... ok
+test image::tests::svg_info_reports_points ... ok
+test input::tests::typing_keys_follow_the_us_layout ... ok
+test input::tests::unprojects_transforms ... ok
+test image::tests::svg_is_a_canvas_image ... ok
+test image::tests::svg_tints_through_alpha ... ok
+test keymap::tests::a_hosted_surface_first_takes_every_key_while_its_text_input_is_focused ... ok
+test keymap::tests::a_hosted_surface_first_takes_the_keys_it_binds ... ok
+test keymap::tests::a_hosted_surface_last_leaves_them_to_its_host ... ok
+test keymap::tests::by_default_neither_side_leaves_a_key ... ok
+test keymap::tests::function_keys ... ok
+test login_item::tests::a_failed_call_is_done_when_the_status_is_what_it_asked ... ok
+test image::tests::svg_decodes_at_the_size_shown ... ok
+test login_item::tests::statuses_map_and_a_bundle_never_registered_is_disabled ... ok
+test native::tests::a_file_url_reads_its_own_folder_and_nothing_wider ... ok
+test native::tests::locates_sources ... ok
+test native::tests::quotes_js_strings ... ok
+test native::tests::registers_components ... ok
+test native::tests::a_web_view_opens_only_files_in_the_folder_it_was_given ... ok
+test pace::tests::a_layout_animation_keeps_the_batch_whole ... ok
+test pace::tests::a_small_batch_is_applied_whole ... ok
+test native::tests::a_blob_navigation_follows_the_origin_it_embeds ... ok
+test input::tests::shortcut_keys_on_any_layout ... ok
+test image::tests::a_multi_size_icon_is_one_still_image ... ok
+test scroll::tests::a_disabled_scroll_view_does_not_move ... ok
+test scroll::tests::a_long_scroll_commits_only_when_it_ends ... ok
+test scroll::tests::a_running_animation_holds_a_commit_only_briefly ... ok
+test pace::tests::a_row_another_view_names_does_not_wait ... ok
+test scroll::tests::a_scroll_view_whose_content_fits_does_not_move ... ok
+test scroll::tests::an_overflowing_scroll_view_moves ... ok
+test scroll::tests::resampling_moves_evenly_between_events ... ok
+test scroll::tests::only_the_indicators_fade_is_cosmetic ... ok
+test scroll::tests::wheels_move_zoomed_content_both_ways_and_other_views_along_their_axis ... ok
+test scroll::tests::scroll_keys ... ok
+test pace::tests::a_big_row_waits_parents_first ... ok
+test scroll::tests::zooms_stay_within_their_limits_unless_fingers_stretch_them ... ok
+test pace::tests::a_tree_whose_parent_went_is_dropped ... ok
+test image::tests::opaque_rgba_keeps_source_alive_and_renders_without_premultiplication ... ok
+test pace::tests::what_shows_comes_at_once_the_rest_a_view_at_a_time ... ok
+test shader::tests::a_page_overlay_pictures_its_live_side_only_while_it_settles_or_changes ... ok
+test image::tests::rgba_with_transparency_still_premultiplies_every_channel ... ok
+test shader::tests::equal_pictures_hash_equal ... ok
+test shader::tests::a_backdrop_leaves_out_the_reader_and_what_draws_over_it ... ok
+test shader::tests::a_backdrop_is_marked_only_by_what_draws_under_it_where_it_reads ... ok
+test shader::tests::pictures_of_one_size_draw_into_the_same_canvas ... ok
+test shader::tests::rectangles_meet_only_where_they_overlap ... ok
+test shader::tests::sublayers_composite_by_z_then_order ... ok
+test shader::tests::what_draws_before_a_reader_is_what_core_says_draws_before_it ... ok
+test shader::tests::a_backdrop_leaves_out_the_trees_that_draw_nothing_where_it_reads ... ok
+test canvas::tests::split_surfaces_preserve_sparkline_pixels ... ok
+test sight::tests::a_pass_resolves_each_ancestor_once ... ok
+test sight::tests::a_row_shows_through_the_scroll_offset ... ok
+test sight::tests::a_text_in_a_mirrored_cell_shows ... ok
+test shader::tests::while_the_device_opens_nothing_hides_its_children ... ok
+test sight::tests::a_text_in_a_pinned_sticky_header_shows ... ok
+test sight::tests::a_text_overflowing_an_ancestor_that_does_not_clip_shows ... ok
+test sight::tests::moves_count ... ok
+test sight::tests::hidden_views_hide_what_is_under_them ... ok
+test sight::tests::rotation_keeps_visible_content_and_distant_content_deferred ... ok
+test sight::tests::the_top_alone_shows_when_in_a_window ... ok
+test sight::tests::nested_clips_and_offsets_agree_with_the_reference ... ok
+test sight::tests::transformed_views_and_their_children_keep_culling ... ok
+test sight::tests::zoomed_content_shows_as_far_as_the_zoom_reaches ... ok
+test system::tests::alerts_on_their_own_show_one_at_a_time_oldest_first ... ok
+test surface::tests::frame_rate_ranges_ask_for_the_rate_within_the_screens ... ok
+test system::tests::an_alert_answers_the_dialogs_index_of_its_button ... ok
+test shader::tests::a_culled_backdrop_has_the_pixels_of_the_whole_tree ... ok
+test canvas::tests::a_text_is_set_once_per_font ... ok
+test system::tests::no_formatted_content ... ok
+test system::tests::html_as_browsers_copy_it ... ok
+test system::tests::web_archive_main_resource ... ok
+test text::first_baseline::is_where_the_first_line_is_drawn_and_grows_with_the_font ... ok
+test shader::tests::without_a_device_nothing_hides_its_children ... ok
+test text::hit_regressions::head_ellipsis_does_not_highlight_omitted_characters ... ok
+test text::hit_regressions::selected_lines_touch_across_the_line_height ... ok
+test text::hit_regressions::short_box_keeps_first_line_at_its_normal_position ... ok
+test text::hit_regressions::short_box_still_truncates_and_zero_height_stays_empty ... ok
+test text::hit_regressions::truncated_lines_keep_visible_suffix_offsets ... ok
+test shader::tests::only_a_shader_that_reads_its_children_pictures_them_again ... ok
+test text::raster::tests::a_batch_paints_its_framed_texts_as_core_animation_draws_them ... ok
+test text::selection_menu::look_up_quotes_the_start_of_the_selection_where_the_language_puts_it ... ok
+test global_shortcut::tests::a_character_finds_its_key_on_the_layout ... ok
+test text::selection_menu::the_selection_menu_titles_are_appkits_own ... ok
+test text::tests::a_layout_draws_the_colors_of_the_text_it_is_drawn_with ... ok
+test text::tests::an_attachment_stands_on_the_line_by_its_own_baseline ... ok
+test text::tests::attachments_sit_by_vertical_align ... ok
+test text::tests::attachments_taller_than_the_line_height_grow_their_line ... ok
+test text::tests::drawing_in_a_shorter_or_narrower_layer_marks_the_text_cut ... ok
+test system::tests::rtf_as_html_with_inline_styles ... ok
+test text::tests::middle_attachments_center_on_the_text_and_keep_the_line_pitch ... ok
+test text::tests::recolored_words_damage_only_their_lines ... ok
+test text_input::tests::a_line_height_above_the_fonts_goes_around_the_text ... ok
+test text_input::tests::a_line_height_below_the_fonts_clips_the_lines ... ok
+test text_input::tests::input_text_accepts_an_edit_with_unpaired_surrogates ... ok
+test text_input::tests::input_text_preserves_unicode_and_replaces_incomplete_surrogates ... ok
+test text_input::tests::keys ... ok
+test text_input::tests::no_line_height_leaves_the_fonts_lines ... ok
+test text_input::tests::single_line_placeholder_matches_native_editor_metrics ... ok
+test text_input::tests::utf16_length ... ok
+test view::tests::a_default_scroll_state_is_unzoomed ... ok
+test view::tests::a_row_within_a_viewport_of_the_list_is_near ... ok
+test view::tests::content_density_respects_the_pixel_bound_wherever_made ... ok
+test view::tests::content_rasters_step_with_the_scale ... ok
+test view::tests::scripted_wheels_are_the_event_handled ... ok
+test view::tests::scroll_offsets_snap_to_backing_pixels_consistently_across_commit ... ok
+test view::tests::the_shown_part_of_a_row_half_scrolled_out_is_what_the_list_shows ... ok
+test visual::tests::a_masked_shadow_keeps_its_stand_in_inside_the_box ... ok
+test visual::tests::an_explicit_backdrop_wins_then_glass_then_the_blur ... ok
+test window::tests::a_window_opens_where_the_app_asks ... ok
+test window::tests::a_window_without_a_position_opens_where_its_kind_does ... ok
+test window::tests::backdrops_map_to_materials_and_back ... ok
+test window::tests::close_reasons_follow_what_the_user_did ... ok
+test window::tests::collection_behaviors_follow_the_level_and_the_workspaces ... ok
+test window::tests::focus_takes_the_keyboard_where_show_asks_for_it ... ok
+test window::tests::levels_rise_from_normal_to_above_the_dock ... ok
+test window::tests::panels_are_sheets_of_windows_in_sight_else_shown_alone ... ok
+test window::tests::style_masks_follow_the_frame_and_the_buttons ... ok
+test window::tests::the_display_link_follows_a_window_that_shows ... ok
+test text::hit_regressions::bidi_ranges_follow_visual_runs ... ok
+test window_state::tests::a_full_screen_window_leaves_full_screen_before_it_hides ... ok
+test window_state::tests::a_screens_notch_is_read_in_screen_coordinates ... ok
+test window_state::tests::a_window_hidden_on_its_way_into_full_screen_leaves_once_in ... ok
+test window_state::tests::a_window_hidden_while_the_user_leaves_full_screen_hides_after ... ok
+test window_state::tests::a_window_hides_at_once_out_of_full_screen ... ok
+test window_state::tests::centered_frames_keep_their_top_on_the_area ... ok
+test window_state::tests::screen_rectangles_flip_to_the_primary_screens_top ... ok
+test window_state::tests::showing_again_drops_a_hide_that_waits ... ok
+test text::hit_regressions::box_slightly_shorter_than_measured_keeps_its_line ... ok
+test text::hit_regressions::a_left_to_right_range_is_one_rectangle_per_line ... ok
+test text::tests::a_family_list_sets_text_in_its_first_installed_family ... ok
+test text::tests::measurement_preserves_a_leading_bom ... ok
+test text::hit_regressions::widths_that_hold_the_widest_line_measure_the_same ... ok
+test shader::tests::an_effect_hides_its_children_and_a_transition_while_it_runs ... ok
+test shader::tests::only_what_changes_with_time_or_takes_pictures_needs_the_frame_clock ... ok
+test shader::tests::a_picture_draws_a_shader_frame_shown_on_a_surface ... ok
+IOServiceMatchingfailed for: AppleM2ScalerParavirtDriver
+test picker::tests::a_large_png_stays_a_png ... ok
+test picker::tests::heic_becomes_a_scaled_jpeg ... ok
+
+test result: ok. 200 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 2.25s
+
+     Running tests/accessibility.rs (/Users/devin/probe/nsh46-target/debug/build/nsh-platform-macos/fa96b0a0c103099e/out/accessibility-fa96b0a0c103099e)
+window backing scale: 1
+AXFrame scaled-row: [43.999996185302734, 241.00000143051147, 96.00000381469727, 24.000000953674316], expected [44.0, 241.0, 96.0, 24.0]
+AXFrame nested-row: [65.59999704360962, 173.7999987602234, 24.000000953674316, 21.600000858306885], expected [65.60000000000001, 173.8, 24.0, 21.599999999999998]
+AXFrame rotated-row: [140.0, 265.0000023841858, 36.000001430511475, 12.000000476837158], expected [140.0, 265.0, 36.0, 12.0]
+AXFrame scaled-row: [75.99999904632568, 229.00000035762787, 64.00000095367432, 16.00000023841858], expected [76.0, 229.0, 64.0, 16.0]
+AXFrame nested-row: [90.3999992609024, 184.19999969005585, 16.00000023841858, 14.400000214576721], expected [90.4, 184.2, 16.0, 14.4]
+AXFrame rotated-row: [140.0, 245.00000059604645, 24.00000035762787, 8.00000011920929], expected [140.0, 245.0, 24.0, 8.0]
+AXFrame scaled-row: [60.0, 235.0, 80.0, 20.0], expected [60.0, 235.0, 80.0, 20.0]
+AXFrame nested-row: [78.0, 179.0, 20.0, 18.0], expected [78.0, 179.0, 20.0, 18.0]
+AXFrame rotated-row: [140.0, 255.0, 30.0, 10.0], expected [140.0, 255.0, 30.0, 10.0]
+input accessibility: text fields and editable combobox relations ok
+accessibility: ok
+table accessibility: roles, axes, headers, ranges, names, press and updates ok
+     Running tests/background.rs (/Users/devin/probe/nsh46-target/debug/build/nsh-platform-macos/9968eeed47b25c87/out/background-9968eeed47b25c87)
+background: ok
+     Running tests/draw_on_show.rs (/Users/devin/probe/nsh46-target/debug/build/nsh-platform-macos/7066dd72c3fad204/out/draw_on_show-7066dd72c3fad204)
+draw_on_show: window: ok
+draw_on_show: unhide: ok
+draw_on_show: scaled: ok
+draw_on_show: animated: ok
+draw_on_show: sharp: ok
+draw_on_show: nested: ok
+draw_on_show: canvas: ok
+     Running tests/native/main.rs (/Users/devin/probe/nsh46-target/debug/build/nsh-platform-macos/6da22471ca5e7aa6/out/native-6da22471ca5e7aa6)
+Native AppKit checks skipped; run with --ignored in a desktop session.
+   Doc-tests nsh_platform_macos
+
+running 2 tests
+test crates/nsh-platform-macos/src/app.rs - app::AppView (line 336) - compile ... ok
+test crates/nsh-platform-macos/src/native.rs - native::NativeComponent (line 87) - compile ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.65s; merged doctests compilation took 0.64s

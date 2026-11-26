@@ -1,0 +1,36 @@
+Diff in /Users/devin/probe/nsh46/crates/nsh-base/tests/base/otp_input.rs:1197:
+                 .child(field("covering").inset_0()),
+         )
+         .child(
+-            view()
+-                .test_id("editor")
+-                .w(px(200.0))
+-                .h(px(40.0))
+-                .child(
+-                    field("sink")
+-                        .left(px(50.0))
+-                        .top(px(10.0))
+-                        .w(px(1.0))
+-                        .h(px(1.0)),
+-                ),
++            view().test_id("editor").w(px(200.0)).h(px(40.0)).child(
++                field("sink")
++                    .left(px(50.0))
++                    .top(px(10.0))
++                    .w(px(1.0))
++                    .h(px(1.0)),
++            ),
+         )
+         .child(text(move || format!("Focused {}", focus.get())))
+ }
+Diff in /Users/devin/probe/nsh46/crates/nsh-core/src/element/host.rs:838:
+     /// menu only from a press the field receives itself) and the mobile
+     /// platforms ignore it.
+     pub fn secondary_press_through(self, through: impl IntoReactive<bool>) -> Self {
+-        self.bind_prop(through, |through: bool| Prop::SecondaryPressThrough(through))
++        self.bind_prop(through, |through: bool| {
++            Prop::SecondaryPressThrough(through)
++        })
+     }
+ 
+     /// Shows the input accessory with this `nativeID` over the keyboard

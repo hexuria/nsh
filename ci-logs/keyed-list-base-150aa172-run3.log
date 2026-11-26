@@ -1,0 +1,23 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.15s
+     Running unittests src/lib.rs (/Users/devin/probe/nsh46-target/debug/build/nsh-core/d3e40093ab771dcd/out/nsh_core-d3e40093ab771dcd)
+
+running 1 test
+test core::tests::components::keyed_list_cell_whose_row_goes_can_read_first ... FAILED
+
+failures:
+
+---- core::tests::components::keyed_list_cell_whose_row_goes_can_read_first stdout ----
+
+thread 'core::tests::components::keyed_list_cell_whose_row_goes_can_read_first' (66844) panicked at crates/nsh-core/src/core/tests.rs:16684:9:
+assertion `left == right` failed
+  left: []
+ right: ["r0", "r2"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    core::tests::components::keyed_list_cell_whose_row_goes_can_read_first
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1729 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p nsh-core --lib`
