@@ -2612,7 +2612,9 @@ pub enum Command {
     ///
     /// Platforms do not carry this one out: the core follows every one
     /// with a [`Command::SetSelectionAt`] for the same view, which they do.
-    /// It stays in the mount stream for what only watches it.
+    /// It stays in the mount stream for what only watches it. Code that
+    /// writes mount items itself, not through the core, must send the pair
+    /// too, or no platform moves the selection.
     SetSelection {
         /// Start.
         start: u32,

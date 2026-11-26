@@ -3808,6 +3808,44 @@ mod tests {
         );
     }
 
+    #[test]
+    fn only_the_counted_selection_moves_the_caret() {
+        // The core sends a selection as a plain SetSelection followed by a
+        // SetSelectionAt with the input's edit count. Hosts act on the
+        // second only, so a stale one (the user edited since) must leave the
+        // caret where it is even though the plain one names a new place.
+        let mut screen = Screen::default();
+        screen.apply(&batch(vec![create(2, ViewKind::Input), insert(1, 2)]));
+        let input = screen.input_mut(2).unwrap();
+        input.text = "abcdef".into();
+        input.count = 3;
+        input.selection = (6, 6);
+        let selection = |start, end, count| {
+            batch(vec![
+                MountItem::Command {
+                    id: 2,
+                    command: Command::SetSelection { start, end },
+                },
+                MountItem::Command {
+                    id: 2,
+                    command: Command::SetSelectionAt { start, end, count },
+                },
+            ])
+        };
+        screen.apply(&selection(1, 1, 2));
+        assert_eq!(
+            screen.input_mut(2).unwrap().selection,
+            (6, 6),
+            "stale: stays"
+        );
+        screen.apply(&selection(1, 4, 3));
+        assert_eq!(
+            screen.input_mut(2).unwrap().selection,
+            (1, 4),
+            "current: moves"
+        );
+    }
+
     fn batch(items: Vec<MountItem>) -> MountBatch {
         MountBatch { items }
     }
