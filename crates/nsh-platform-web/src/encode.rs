@@ -1471,7 +1471,9 @@ fn encode_command(out: &mut Out, id: u32, command: &Command) {
                 .bool(*animated)
                 .end();
         }
-        Command::SetSelection { start, end, count } => {
+        // Carried out from the `SetSelectionAt` the core sends after it.
+        Command::SetSelection { .. } => {}
+        Command::SetSelectionAt { start, end, count } => {
             out.item("cmd")
                 .num(id)
                 .str("setSelection")

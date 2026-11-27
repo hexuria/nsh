@@ -298,9 +298,14 @@ impl Mounter {
                         field.content = content;
                     }
                 }
+                // Carried out from the `SetSelectionAt` the core sends after it.
+                MountItem::Command {
+                    command: Command::SetSelection { .. },
+                    ..
+                } => {}
                 MountItem::Command {
                     id,
-                    command: Command::SetSelection { start, end, count },
+                    command: Command::SetSelectionAt { start, end, count },
                 } => {
                     if let Some(field) = self.get_mut(id).and_then(|v| v.field.as_mut()) {
                         field.select(start, end, count);

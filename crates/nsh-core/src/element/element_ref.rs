@@ -239,11 +239,7 @@ impl ElementRef {
 
     /// Selects `start..end` of an input (UTF-16 units; a caret when equal).
     pub fn set_selection(&self, start: u32, end: u32) {
-        self.send(Command::SetSelection {
-            start,
-            end,
-            count: 0,
-        });
+        self.send(Command::SetSelection { start, end });
     }
 
     /// Inserts `text` into an input in place of its selection, as the
