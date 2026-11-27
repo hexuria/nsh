@@ -39,6 +39,7 @@ use std::time::Duration;
 use nsh_core::{
     AutoFill, TouchEvent, TouchPhase,
     element::{Style, TextPartStyle},
+    platform::Os,
     prelude::*,
 };
 
@@ -293,6 +294,10 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
         });
     });
 
+    // On the desktop (a hosted native editor owns the mouse there; see
+    // below) the input answers clicks itself, but on Linux: there the
+    // field keeps the mouse, so a secondary click keeps its own edit menu.
+    let desktop = !crate::terminal::is_terminal() && os().is_desktop() && os() != Os::Linux;
     let parts = Cells {
         length: props.length,
         masked: props.masked,
@@ -405,6 +410,7 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                 // The field tells screen readers the code.
                 view()
                     .on_layout(move |b: &Bounds<Points>| put(group_frames, g, *b))
+                    .when(desktop, |v| v.pointer_events(PointerEvents::None))
                     .accessibility_elements_hidden(true)
                     .project_disabled(parts.disabled)
                     .app_class(group_class)
@@ -425,11 +431,44 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
     // and a handle drag are selections by then and keep what the platform
     // gave them. The write is count-guarded, so a key typed before it
     // lands wins over it.
+    //
+    // No write when it would change nothing, and none for a long press. A
+    // selection write dismisses the edit menu on iOS: the menu a long press
+    // or a tap on the caret brings up is how Paste is reached, and an empty
+    // field (the usual place to paste a code) always ends a touch with its
+    // caret at 0 already. Writing it anyway took Paste away on iPhone and
+    // iPad (the menu closed at once, or a hardware Cmd+V after the click
+    // landed nowhere). A long press is the platform's: its menu, its
+    // loupe, its handle; on Android the run's selection below. A long
+    // press's own selection is still on its way to the report when the
+    // touch ends, so the touch that raised one is remembered here too, not
+    // left to the lagging signal.
+    let pressed_at = stored(None::<f64>);
+    let long_press = long_press_ms(os());
+    let long_pressed = stored(false);
     let place_caret = move |e: &TouchEvent| {
+        if e.phase == TouchPhase::Start {
+            pressed_at.replace(Some(e.timestamp));
+            long_pressed.replace(false);
+            return;
+        }
         if e.phase != TouchPhase::End || parts.disabled.get_untracked() {
             return;
         }
-        if selection.get_untracked().start != selection.get_untracked().end {
+        // No Start seen (the touch began elsewhere, or the platform sent
+        // only its end): fail closed, as a long press, so no write can close
+        // an edit menu the platform opened.
+        let held = pressed_at
+            .replace(None)
+            .map_or(f64::INFINITY, |start| (e.timestamp - start).max(0.0));
+        if long_pressed.get() {
+            return;
+        }
+        let reported = selection.get_untracked();
+        if reported.start != reported.end {
+            return;
+        }
+        if !corrects_caret(field.with_untracked(String::is_empty), held, long_press) {
             return;
         }
         let Some(point) = e.points.iter().find(|p| p.changed).or(e.points.first()) else {
@@ -446,11 +485,88 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
         }) else {
             return;
         };
+        if position == reported.start {
+            return;
+        }
         field_ref.set_selection(position, position);
     };
 
+    // A long press anywhere on the input selects the code whole, as the
+    // platform's own word selection does with a run of digits. It cannot
+    // come from the field's own hit-test: the hidden glyphs sit in one
+    // small strip at the field's start, so on the phones a long press
+    // over a cell right of the strip finds no word and selects nothing
+    // (spreading the glyphs across the cells' width was the other shape
+    // — but the cells are grouped, so no uniform pitch lines them up,
+    // and the run's positions would still be the font's, not the cells').
+    // The write is the field's real selection: the edit menu and the
+    // handles are the platform's own, and it is count-guarded, so a key
+    // typed before it lands wins over it. Android only: on iOS a selection
+    // write closes the edit menu the long press opens (Paste with it), and
+    // iOS's own long press keeps its loupe and menu; an empty field has
+    // nothing to select, so Paste stays the platform's there too.
+    let android = os() == Os::Android;
+    let select_run = move || {
+        if parts.disabled.get_untracked() {
+            return;
+        }
+        let len = utf16_len(&field.get_untracked());
+        if len > 0 {
+            long_pressed.replace(true);
+            field_ref.set_selection(0, len);
+        }
+    };
+
+    // On the desktop the field is a hosted native editor (an AppKit text
+    // field, a windowless RichEdit, a gtk::Text) that hit-testing hands the
+    // click to whole: the core never hears it, so neither does `place_caret`
+    // above, and the editor's own placement maps the click through the same
+    // unrelated glyph run — a click on digit 5 puts the caret at the end.
+    // There the field is hit-transparent (`pointerEvents: "none"`: it keeps
+    // the keyboard once focused, hit testing being the mouse's only road to
+    // it) and the input answers the mouse itself, with the same computed
+    // caret: a bare click places the caret on the nearest digit edge, a
+    // drag selects from where it began, a double click selects the code
+    // (one word, as the platforms select it). The cells take no pointer
+    // there either, so the finger always goes down on the input's own view
+    // and the touch's location is in the cells' own coordinates, whatever
+    // cell it was over.
+    //
+    // A secondary click never reaches the touches (the platforms send it
+    // as a context menu), and is the field's own all the same: the field
+    // opts in (`secondary_press_through`, below), and macOS and Windows
+    // take such a field that takes no pointer, under the view the click
+    // lands on, as the hit when nothing on the way listens to
+    // `onContextMenu` (`hidden_field_at` in nsh-platform-macos'
+    // `input.rs`, `hidden_field` in nsh-platform-windows'), so it is
+    // focused and shows the platform's own edit menu: its Undo and Delete,
+    // each item enabled as the field can (no Paste on an empty clipboard,
+    // no Cut or Copy without a selection or while masked), the menu the
+    // keyboard (Shift+F10, the Menu key) opens in it too. The input adds no
+    // menu of its own.
+    //
+    // Not on Linux: a GTK text widget's edit menu opens only from a press
+    // it receives itself (programmatically it opens at the caret, which
+    // here is in the field's hidden glyph run, away from the click), so
+    // there the field keeps the mouse, its edit menu with it, as before
+    // the input answered clicks; and with it the old fault of the clicked
+    // caret (a click on a digit puts the caret where the glyph run maps it).
+    let anchor: Signal<Option<u32>> = signal(None);
+    // The last click: when, and where (x in the input).
+    let last_click: Signal<(f64, f32)> = signal((f64::NEG_INFINITY, 0.0));
+    let caret_for = move |x: f32| {
+        let length = parts.length.get_untracked() as usize;
+        if length == 0 {
+            return None;
+        }
+        let per_group = per_group.get_untracked();
+        parts.frames.with_untracked(|cells| {
+            group_frames.with_untracked(|groups| caret_at(x, length, per_group, cells, groups))
+        })
+    };
     view()
         .disabled(props.disabled)
+        .when(android, |v| v.on_long_press(select_run))
         // In a terminal the field is no wider than a Cell, under none of
         // the cells: a press on them gives it the keys, as the field
         // over them does elsewhere.
@@ -461,7 +577,53 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                 }
             })
         })
-        .when(!parts.terminal, |v| v.on_touch(place_caret))
+        .when(!parts.terminal && !desktop, |v| v.on_touch(place_caret))
+        .when(desktop, |v| {
+            v.claim_touches(TouchClaim::on_start().ask(move |request: &ClaimRequest| {
+                if !parts.disabled.get_untracked() {
+                    request.claim();
+                }
+            }))
+            .keep_touches(true)
+            .on_responder_grant(move |e: &ResponderEvent| {
+                if parts.disabled.get_untracked() {
+                    return;
+                }
+                field_ref.focus();
+                let x = e.location.x.0;
+                let now = e.timestamp;
+                // Two clicks within the platforms' double-click interval, at
+                // the same place, select the code: the digits are one word,
+                // and the run is what a double click in it selects
+                // everywhere. Clicks on different cells are two carets.
+                if is_double_click(last_click.get_untracked(), (now, x)) {
+                    last_click.set((f64::NEG_INFINITY, 0.0));
+                    anchor.set(None);
+                    let end = utf16_len(&field.get_untracked());
+                    field_ref.set_selection(0, end);
+                    return;
+                }
+                last_click.set((now, x));
+                if let Some(position) = caret_for(x) {
+                    anchor.set(Some(position));
+                    field_ref.set_selection(position, position);
+                }
+            })
+            .on_responder_move(move |e: &ResponderEvent| {
+                let Some(from) = anchor.get_untracked() else {
+                    return;
+                };
+                let x = e.location.x.0;
+                // Back at the anchor the selection collapses to a caret
+                // there, as a drag does everywhere.
+                if let Some(to) = caret_for(x) {
+                    let (start, end) = drag_selection(from, to);
+                    field_ref.set_selection(start, end);
+                }
+            })
+            .on_responder_release(move |_: &ResponderEvent| anchor.set(None))
+            .on_responder_terminate(move |_: &ResponderEvent| anchor.set(None))
+        })
         .child(cells)
         .child(
             input()
@@ -488,7 +650,9 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                 // disabling anything.
                 .caret_color(transparent_black())
                 // A terminal draws no caret in the field: its own cursor
-                // stands at the cell that takes the next digit.
+                // stands at the cell that takes the next digit. (Linux
+                // keeps its caret, and with it the mouse: see the desktop
+                // clicks above.)
                 .when(parts.terminal, |v| v.caret(false))
                 .keyboard_type(KeyboardType::Number)
                 .auto_fill(AutoFill::OneTimeCode)
@@ -525,6 +689,21 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
                     focused.set(false);
                     blink.stop();
                     cx.emit(OtpInputEvent::Blur);
+                })
+                // On the desktop the mouse never reaches the field: the
+                // input answers it (see above). Hit testing is the
+                // mouse's only road to a field; the keyboard, the clipboard
+                // and the focus it is given are unaffected. A secondary
+                // click is the exception, and the field opts in to it
+                // (`secondary_press_through`: the hosts hand it only to
+                // inputs that ask, so the hidden text sinks of an editor
+                // or a terminal never take it). It is set with the
+                // transparency and only there, as it means nothing for a
+                // field the pointer reaches, and Linux, where the field
+                // keeps the mouse, ignores it anyway.
+                .when(desktop, |v| {
+                    v.secondary_press_through(true)
+                        .pointer_events(PointerEvents::None)
                 }),
         )
 }
@@ -666,6 +845,40 @@ fn group_count(length: usize, requested: usize) -> usize {
     requested.max(1).min(length.max(1))
 }
 
+/// How far apart (in points) two clicks may land and still be one double
+/// click: the platforms allow a few points of movement.
+const DOUBLE_CLICK_SLOP: f32 = 4.0;
+/// The platforms' double-click interval, in milliseconds.
+const DOUBLE_CLICK_MS: f64 = 500.0;
+
+/// Whether a click at `(time, x)` after one at `last` is a double click:
+/// soon enough, and at the same place.
+fn is_double_click(last: (f64, f32), click: (f64, f32)) -> bool {
+    click.0 - last.0 < DOUBLE_CLICK_MS && (click.1 - last.1).abs() <= DOUBLE_CLICK_SLOP
+}
+
+/// The selection a drag from the caret position `from` to `to` makes: the
+/// digits between them, or a bare caret when the drag is back where it
+/// began.
+fn drag_selection(from: u32, to: u32) -> (u32, u32) {
+    (from.min(to), from.max(to))
+}
+
+/// How long a touch is held before it is a long press, which belongs to the
+/// platform (its edit menu, loupe and handle): each platform's own delay
+/// (iOS 0.5 s, Android 0.4 s), so a press is a tap here exactly when it is
+/// a tap there.
+fn long_press_ms(os: Os) -> f64 {
+    if os == Os::Ios { 500.0 } else { 400.0 }
+}
+
+/// Whether a tap that ended in a bare caret gets the cells' caret: not in
+/// an empty field, whose only caret is 0 already (writing it closes the
+/// edit menu on iOS, where Paste is), and not after a long press.
+fn corrects_caret(field_empty: bool, held_ms: f64, long_press_ms: f64) -> bool {
+    !field_empty && held_ms < long_press_ms
+}
+
 /// The caret position nearest to `x` (in the input's coordinates): position
 /// `p` sits at the left edge of cell `p` (the right edge of the last cell
 /// for `length`), the cells' frames in their groups and the groups' in the
@@ -753,7 +966,53 @@ pub(crate) fn utf16_len(text: &str) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{diff, digit, echoed, edit, group_count};
+    use nsh_core::platform::Os;
+
+    use super::{
+        corrects_caret, diff, digit, drag_selection, echoed, edit, group_count, is_double_click,
+        long_press_ms,
+    };
+
+    #[test]
+    fn only_a_short_tap_on_a_field_with_digits_corrects_the_caret() {
+        let android = long_press_ms(Os::Android);
+        // A tap on digits: the cells place the caret.
+        assert!(corrects_caret(false, 0.0, android));
+        assert!(corrects_caret(false, 150.0, android));
+        // An empty field's caret is 0 already: the write would only close
+        // the edit menu (Paste) on iOS.
+        assert!(!corrects_caret(true, 0.0, android));
+        // A long press is the platform's: its menu, loupe and handle.
+        assert!(!corrects_caret(false, 400.0, android));
+        assert!(!corrects_caret(false, 900.0, android));
+        // No Start seen: held is infinite, a long press.
+        assert!(!corrects_caret(false, f64::INFINITY, android));
+    }
+
+    #[test]
+    fn a_press_is_long_at_each_platforms_own_delay() {
+        // iOS starts its long press at 0.5 s: 450 ms is still a tap there,
+        // and a long press on Android.
+        assert!(corrects_caret(false, 450.0, long_press_ms(Os::Ios)));
+        assert!(!corrects_caret(false, 500.0, long_press_ms(Os::Ios)));
+        assert!(!corrects_caret(false, 450.0, long_press_ms(Os::Android)));
+    }
+
+    #[test]
+    fn a_drag_back_to_where_it_began_is_a_caret_there() {
+        assert_eq!(drag_selection(1, 3), (1, 3));
+        assert_eq!(drag_selection(3, 1), (1, 3));
+        assert_eq!(drag_selection(1, 1), (1, 1));
+    }
+
+    #[test]
+    fn a_double_click_is_two_clicks_soon_and_at_the_same_place() {
+        assert!(is_double_click((1000.0, 35.0), (1200.0, 37.0)));
+        // Different cells: two carets.
+        assert!(!is_double_click((1000.0, 5.0), (1200.0, 85.0)));
+        // Too late.
+        assert!(!is_double_click((1000.0, 35.0), (1600.0, 35.0)));
+    }
 
     #[test]
     fn a_reported_code_coming_back_late_is_an_echo() {

@@ -25,6 +25,16 @@ fn start<C: Component<Props = ()>>() -> Headless {
     start_observing::<C>().0
 }
 
+/// [`start`] on a given system, as that platform's backend runs.
+fn start_on<C: Component<Props = ()>>(os: nsh_core::platform::Os) -> Headless {
+    let mut config = EngineConfig::new(Root::of::<C>());
+    config.viewport = Size::new(px(390.0), px(844.0));
+    config.environment.os = os;
+    let mut app = Headless::start(config).unwrap();
+    app.first_render().unwrap();
+    app
+}
+
 /// [`start`], with the inputs made: whether each is secure, and whether
 /// it is a one-time code's field.
 fn start_observing<C: Component<Props = ()>>() -> (Headless, Inputs) {
@@ -56,6 +66,9 @@ fn start_observing<C: Component<Props = ()>>() -> (Headless, Inputs) {
 /// user) finds nothing to type into.
 fn sized(input: nsh_base::OtpInputElement) -> nsh_base::OtpInputElement {
     input
+        // No wider than the cells, so a press or drag lands on them at
+        // the x it points at whatever the width of the screen is.
+        .app_class("w-45")
         .cell_style(|s| s.w(px(30.0)).h(px(40.0)))
         .group_class("flex-row")
 }
@@ -820,6 +833,58 @@ fn typing_at_a_tapped_caret_inserts_there() {
     assert_eq!(field(&mut app, "id:otp"), "152");
 }
 
+/// A long press over any cell selects the code whole, as the platform's
+/// own word selection does with a run of digits. It cannot come from the
+/// field's own hit-test: the hidden glyphs sit in one small strip at the
+/// field's start, so on the phones a long press over a cell right of the
+/// strip found no word and selected nothing.
+#[test]
+fn a_long_press_over_a_cell_selects_the_run() {
+    // (the cells are 30 wide in a row: over cell 1 and over cell 2)
+    for x in [35.0, 65.0] {
+        let mut app = start_on::<Uncontrolled>(nsh_core::platform::Os::Android);
+        app.type_text("id:otp", "123").unwrap();
+        app.long_press_at("label:Code", Point::new(px(x), px(20.0)))
+            .unwrap();
+        app.wait(Duration::from_millis(80)).unwrap();
+        assert_eq!(
+            app.screen().input_selection("id:otp").unwrap(),
+            Some((0, 3)),
+            "long press at x {x} selects the whole run"
+        );
+    }
+}
+
+/// On iOS a long press writes nothing: a selection write closes the edit
+/// menu the long press opens, and Paste with it. The platform's own long
+/// press (its loupe, its menu) stands.
+#[test]
+fn a_long_press_writes_nothing_on_ios() {
+    let mut app = start_on::<Uncontrolled>(nsh_core::platform::Os::Ios);
+    app.type_text("id:otp", "123").unwrap();
+    let before = app.screen().input_selection("id:otp").unwrap();
+    app.long_press_at("label:Code", Point::new(px(35.0), px(20.0)))
+        .unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(app.screen().input_selection("id:otp").unwrap(), before);
+}
+
+/// A tap on an empty field writes no caret: its only caret is 0 already,
+/// and on iOS the write would close the edit menu where Paste is.
+#[test]
+fn a_tap_on_an_empty_field_writes_no_caret() {
+    let mut app = start_on::<Uncontrolled>(nsh_core::platform::Os::Ios);
+    // Over cell 2: a written caret would be 2, past the empty text.
+    app.press_at("label:Code", Point::new(px(65.0), px(20.0)))
+        .unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    let selection = app.screen().input_selection("id:otp").unwrap();
+    assert!(
+        matches!(selection, None | Some((0, 0))),
+        "no caret written into an empty field: {selection:?}"
+    );
+}
+
 /// A selection the platform reports is drawn on exactly the cells it
 /// covers: the middle digit alone, or every cell for the whole run.
 #[test]
@@ -920,4 +985,345 @@ fn marked_positions(app: &Headless, styles: &Mutex<HashMap<NodeId, bool>>) -> Ve
         .collect();
     xs.sort_by(f32::total_cmp);
     xs
+}
+
+/// A desktop run: macOS, the desktop idiom, as the desktop backends run.
+fn start_desktop<C: Component<Props = ()>>() -> Headless {
+    start_desktop_on::<C>(nsh_core::platform::Os::MacOs)
+}
+
+/// [`start_desktop`] on the desktop system `os`.
+fn start_desktop_on<C: Component<Props = ()>>(os: nsh_core::platform::Os) -> Headless {
+    let mut config = EngineConfig::new(Root::of::<C>());
+    config.viewport = Size::new(px(390.0), px(844.0));
+    config.environment.os = os;
+    config.environment.idiom = nsh_core::platform::Idiom::Desktop;
+    let mut app = Headless::start(config).unwrap();
+    app.first_render().unwrap();
+    app
+}
+
+/// The labels of the open menu, `[]` with none open.
+fn menu_labels(app: &Headless) -> Vec<String> {
+    app.menu()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|e| e.label)
+        .collect()
+}
+
+/// On the desktop a mouse click on a cell places the caret where it
+/// lands: the field there is hit-transparent (a hosted editor's own
+/// hit-testing could never place it — its glyphs are one continuous run
+/// with no relation to the cells), and the input answers the mouse from
+/// the cells' frames.
+#[test]
+fn a_click_on_a_cell_places_the_caret_there_on_the_desktop() {
+    // (click x in the input, caret; the cells are 30 wide in a row)
+    for (x, caret) in [
+        (5.0, 0),
+        (25.0, 1),
+        (35.0, 1),
+        (55.0, 2),
+        (65.0, 2),
+        (85.0, 3),
+    ] {
+        let mut app = start_desktop::<Uncontrolled>();
+        app.type_text("id:otp", "123").unwrap();
+        app.press_at("label:Code", Point::new(px(x), px(20.0)))
+            .unwrap();
+        app.wait(Duration::from_millis(80)).unwrap();
+        assert_eq!(
+            app.screen().input_selection("id:otp").unwrap(),
+            Some((caret, caret)),
+            "click at x {x} of three 30-wide cells"
+        );
+    }
+}
+
+/// A click's caret is where Backspace acts on the desktop: caret after
+/// the second digit, one Backspace removes the second digit, not the
+/// last.
+#[test]
+fn a_backspace_after_a_click_removes_the_digit_before_it_on_the_desktop() {
+    let mut app = start_desktop::<Uncontrolled>();
+    app.type_text("id:otp", "123").unwrap();
+    app.press_at("label:Code", Point::new(px(55.0), px(20.0)))
+        .unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    app.press_key("backspace").unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(field(&mut app, "id:otp"), "13");
+}
+
+/// A click and drag selects the digits it moves over on the desktop,
+/// from the edge it began at to the one it ends nearest.
+#[test]
+fn a_drag_selects_the_digits_it_moves_over_on_the_desktop() {
+    let mut app = start_desktop::<Uncontrolled>();
+    app.type_text("id:otp", "123").unwrap();
+    // The input is 6 cells of 30 in a row, x 0 to 180. The drag starts
+    // at its center (x 90, the edge after digit 3) and moves 60 left,
+    // ending at x 30 (the edge after digit 1).
+    app.drag("label:Code", Point::new(px(-60.0), px(0.0)))
+        .unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(
+        app.screen().input_selection("id:otp").unwrap(),
+        Some((1, 3)),
+        "a drag from x 90 to x 30 selects digits 2 and 3"
+    );
+}
+
+/// A double click selects the code on the desktop: the digits are one
+/// word, and the run is what a double click in it selects everywhere.
+#[test]
+fn a_double_click_selects_the_code_on_the_desktop() {
+    let mut app = start_desktop::<Uncontrolled>();
+    app.type_text("id:otp", "123").unwrap();
+    app.press_at("label:Code", Point::new(px(55.0), px(20.0)))
+        .unwrap();
+    app.press_at("label:Code", Point::new(px(55.0), px(20.0)))
+        .unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(
+        app.screen().input_selection("id:otp").unwrap(),
+        Some((0, 3)),
+        "a double click selects the run"
+    );
+}
+
+/// Two quick clicks on different cells are two carets, not a double
+/// click: the second places the caret where it lands.
+#[test]
+fn two_quick_clicks_on_different_cells_place_a_caret_on_the_desktop() {
+    let mut app = start_desktop::<Uncontrolled>();
+    app.type_text("id:otp", "123").unwrap();
+    app.press_at("label:Code", Point::new(px(5.0), px(20.0)))
+        .unwrap();
+    app.press_at("label:Code", Point::new(px(85.0), px(20.0)))
+        .unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(
+        app.screen().input_selection("id:otp").unwrap(),
+        Some((3, 3)),
+        "a click on digit 1 then one on digit 3 leaves the caret after digit 3"
+    );
+}
+
+/// A secondary click on the code is the field's own on macOS and Windows:
+/// the field takes no pointer there (the input answers clicks), and the
+/// platforms take it as the hit all the same, so it takes the focus and
+/// opens its own edit menu, with what it can do now: on an empty code
+/// with a code on the clipboard, only Paste, which puts it in.
+#[test]
+fn a_right_click_opens_the_fields_own_edit_menu_on_the_desktop() {
+    use nsh_core::platform::Os;
+    for os in [Os::MacOs, Os::Windows] {
+        let mut app = start_desktop_on::<Uncontrolled>(os);
+        app.set_clipboard(Some("654321".into()));
+        app.right_click("label:Code").unwrap();
+        see(&mut app, "Focus 1 Blur 0");
+        assert_eq!(menu_labels(&app), ["Paste"], "on {os:?}");
+        app.choose_menu_item("Paste").unwrap();
+        see(&mut app, "Changes [654321]");
+        assert_eq!(field(&mut app, "id:otp"), "654321", "on {os:?}");
+    }
+}
+
+/// The field's menu offers what the field can do: Cut and Copy only with
+/// a selection and never on a masked code, Paste only with something to
+/// paste, Select All with digits.
+#[test]
+fn the_right_click_menu_offers_what_the_field_can_do_on_the_desktop() {
+    let mut app = start_desktop::<Uncontrolled>();
+    app.type_text("id:otp", "123").unwrap();
+    app.right_click("label:Code").unwrap();
+    assert_eq!(
+        menu_labels(&app),
+        ["Select All"],
+        "no selection, nothing to paste"
+    );
+    app.close_menu().unwrap();
+    app.select("id:otp", 0, 2).unwrap();
+    app.right_click("label:Code").unwrap();
+    assert_eq!(menu_labels(&app), ["Cut", "Copy", "Select All"]);
+    app.close_menu().unwrap();
+
+    let mut app = start_desktop::<States>();
+    app.type_text("id:masked", "34").unwrap();
+    app.select("id:masked", 0, 2).unwrap();
+    app.right_click("label:Masked").unwrap();
+    assert_eq!(
+        menu_labels(&app),
+        ["Select All"],
+        "a masked code is not copied"
+    );
+}
+
+/// A disabled code opens no menu on a secondary click, and takes nothing
+/// from one.
+#[test]
+fn a_disabled_code_opens_no_menu_on_a_right_click_on_the_desktop() {
+    let mut app = start_desktop::<States>();
+    app.set_clipboard(Some("9876".into()));
+    app.right_click("label:Disabled").unwrap();
+    assert!(app.menu().is_none(), "{:?}", app.menu());
+    assert_eq!(field(&mut app, "label:Disabled"), "12");
+}
+
+/// Inputs an app keeps from the pointer (`pointerEvents: none`), in views
+/// that do not listen to `onContextMenu`: one covering its view (`cover`),
+/// as an input made inert is, and a one-point text sink (`sink`, in
+/// `editor`), as an editor or a terminal keeps at its caret. They ask for
+/// the secondary press (`secondary_press_through`) when `asks`, as the
+/// code's field does. "Focused N" counts the times either took the focus.
+fn inert_fields(asks: bool) -> impl IntoElement {
+    let focus = signal(0u32);
+    let field = move |id: &'static str| {
+        input()
+            .test_id(id)
+            .absolute()
+            .pointer_events(PointerEvents::None)
+            .when(asks, |v| v.secondary_press_through(true))
+            .on_focus(move || focus.update(|f| *f += 1))
+    };
+    view()
+        .child(
+            view()
+                .test_id("cover")
+                .w(px(200.0))
+                .h(px(40.0))
+                .child(field("covering").inset_0()),
+        )
+        .child(
+            view().test_id("editor").w(px(200.0)).h(px(40.0)).child(
+                field("sink")
+                    .left(px(50.0))
+                    .top(px(10.0))
+                    .w(px(1.0))
+                    .h(px(1.0)),
+            ),
+        )
+        .child(text(move || format!("Focused {}", focus.get())))
+}
+
+/// [`inert_fields`], not asking for the secondary press.
+#[component]
+fn Inert() -> impl IntoElement {
+    inert_fields(false)
+}
+
+/// [`inert_fields`], asking for the secondary press.
+#[component]
+fn InertAsking() -> impl IntoElement {
+    inert_fields(true)
+}
+
+/// A right click on `target` of [`inert_fields`] on macOS and Windows:
+/// without the opt-in it passes through the input (no focus, no menu,
+/// with a code on the clipboard to offer), and with it the same click on
+/// the same input focuses it and opens its own edit menu, so the click
+/// does land on the input and the opt-in alone decides.
+fn right_click_inert(target: &str) {
+    use nsh_core::platform::Os;
+    for os in [Os::MacOs, Os::Windows] {
+        let mut app = start_desktop_on::<Inert>(os);
+        app.set_clipboard(Some("42".into()));
+        app.right_click(target).unwrap();
+        app.wait(Duration::from_millis(80)).unwrap();
+        assert!(
+            app.menu().is_none(),
+            "no menu on {target} on {os:?}: {:?}",
+            app.menu()
+        );
+        see(&mut app, "Focused 0");
+
+        let mut app = start_desktop_on::<InertAsking>(os);
+        app.set_clipboard(Some("42".into()));
+        app.right_click(target).unwrap();
+        see(&mut app, "Focused 1");
+        assert_eq!(menu_labels(&app), ["Paste"], "{target} on {os:?}");
+    }
+}
+
+/// A right click over an input an app keeps from the pointer, which does
+/// not ask for the secondary press, is not the input's: it is not
+/// focused and opens no edit menu. Only an input that asks (the code's
+/// field) takes it.
+#[test]
+fn a_right_click_passes_through_a_pointer_transparent_input_on_the_desktop() {
+    right_click_inert("id:cover");
+}
+
+/// A right click on a one-point text sink that takes no pointer and does
+/// not ask for the secondary press (an editor's, a terminal's) is not the
+/// sink's: it is not focused and opens no edit menu, so the component
+/// around it keeps the click.
+#[test]
+fn a_right_click_passes_through_a_one_point_sink_on_the_desktop() {
+    right_click_inert("id:sink");
+}
+
+/// The code's field, and the pointer events each view's props last gave
+/// with whether they ask for the secondary press.
+type FieldPointer = (Option<NodeId>, HashMap<NodeId, (PointerEvents, bool)>);
+
+/// On Linux the field keeps the mouse (a GTK field's edit menu opens only
+/// from a press it receives itself): it is not hit-transparent there, as
+/// it is on macOS and Windows, where it asks for the secondary press
+/// (`secondary_press_through`) with the transparency.
+#[test]
+fn the_field_keeps_the_pointer_on_linux() {
+    use nsh_core::platform::Os;
+    for (os, takes) in [(Os::Linux, true), (Os::MacOs, false), (Os::Windows, false)] {
+        let mut config = EngineConfig::new(Root::of::<Uncontrolled>());
+        config.viewport = Size::new(px(390.0), px(844.0));
+        config.environment.os = os;
+        config.environment.idiom = nsh_core::platform::Idiom::Desktop;
+        let mut app = Headless::start(config).unwrap();
+        // The code's field, and the pointer events its props last gave.
+        let seen: Arc<Mutex<FieldPointer>> = Arc::default();
+        let into = seen.clone();
+        app.observe(move |_, batch| {
+            let mut seen = into.lock().unwrap();
+            for item in &batch.items {
+                match item {
+                    MountItem::Input { id, config }
+                        if config.auto_fill == AutoFill::OneTimeCode =>
+                    {
+                        seen.0 = Some(*id);
+                    }
+                    MountItem::ViewProps { id, props } => {
+                        let asks = props.secondary_press_through;
+                        seen.1.insert(*id, (props.pointer_events, asks));
+                    }
+                    _ => {}
+                }
+            }
+        });
+        app.first_render().unwrap();
+        let seen = seen.lock().unwrap();
+        let field = seen.0.expect("the code's field");
+        let (pointer, asks) = seen
+            .1
+            .get(&field)
+            .copied()
+            .unwrap_or((PointerEvents::Auto, false));
+        assert_eq!(pointer != PointerEvents::None, takes, "on {os:?}");
+        assert_eq!(asks, !takes, "on {os:?}");
+    }
+}
+
+/// The keyboard is unchanged on the desktop: arrows move the caret,
+/// shift extends the selection, typing over it replaces exactly it.
+#[test]
+fn the_keyboard_is_unchanged_on_the_desktop() {
+    let mut app = start_desktop::<Uncontrolled>();
+    app.type_text("id:otp", "123").unwrap();
+    app.press_key("left").unwrap();
+    app.press_key("shift+left").unwrap();
+    app.type_text("id:otp", "5").unwrap();
+    app.wait(Duration::from_millis(80)).unwrap();
+    assert_eq!(field(&mut app, "id:otp"), "153");
 }

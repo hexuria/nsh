@@ -3681,6 +3681,168 @@ pub(crate) fn native_at(root: &NshView, x: f32, y: f32) -> Option<Retained<objc2
         .map(|n| n.view.clone())
 }
 
+/// The hosted view (an input's pad) of a text field under `(x, y)` (root
+/// coordinates) that takes no pointer, when a secondary click there is
+/// the field's: the field asks for it
+/// ([`nsh_core::ViewProps::secondary_press_through`]), nsh's picking lands
+/// on an app view around it (the field, or a view around it inside the
+/// picked one, is `pointerEvents: "none"`, as the one-time code's field is
+/// under the cells that answer the mouse themselves), and neither that
+/// view nor one between them listens to `onContextMenu` or is disabled. A
+/// field the pointer reaches shows its own edit menu on a secondary click;
+/// one that takes no pointer showed none, so the root's `hitTest:` hands
+/// the press to this one's editor (`view.rs`), and the field is the hit as
+/// if the pointer reached it. An app listening on the way hears the click
+/// instead, as it would over any view of its own. A field that does not
+/// ask (an editor's or a terminal's hidden text sink, an input an app made
+/// inert) is as transparent to this press as to any other: the component
+/// or the app around it has it.
+pub(crate) fn hidden_field_at(
+    root: &NshView,
+    x: f32,
+    y: f32,
+) -> Option<Retained<objc2_app_kit::NSView>> {
+    let hit = pick(root, x, y)?;
+    if hit.native {
+        return None;
+    }
+    // In the picked view's coordinates, as `native_at` takes them; from
+    // there down as `pick_in` carries the point.
+    let local = hit.view.ns().convertPoint_fromView(
+        objc2_foundation::NSPoint::new(x as f64, y as f64),
+        Some(root.ns()),
+    );
+    hidden_field_in(&hit.view, (local.x as f32, local.y as f32), false)
+}
+
+/// What [`hidden_field_in`] reads of a view besides its state: the AppKit
+/// side of it. [`NshView`] answers from AppKit; the tests answer from
+/// plain data, since an `NshView` is an AppKit view and can only be made
+/// on the main thread, which unit tests do not run on. The walk itself,
+/// which views it skips, where it carries the point and where it stops,
+/// is the same code for both.
+trait FieldTree: Sized {
+    /// What takes the press: a hosted view (an input's pad).
+    type Pad;
+    /// Its state.
+    fn view_state(&self) -> std::cell::Ref<'_, crate::view::ViewState>;
+    /// AppKit hides it.
+    fn ns_hidden(&self) -> bool;
+    /// The hosted view under `p` (its coordinates), topmost first.
+    fn pad_at(&self, p: (f32, f32)) -> Option<Self::Pad>;
+    /// Its children in their AppKit order, topmost first, each with `p`
+    /// (its coordinates) in the space of the child's parent: the
+    /// container's, at its offset and zoom, for those in it (a scroll
+    /// view's content), else its own.
+    fn children_at(&self, p: (f32, f32)) -> Vec<(Self, (f32, f32))>;
+    /// A point in its parent's space in its own, as [`into_child`].
+    fn in_own(&self, p: (f32, f32)) -> Option<(f32, f32)>;
+}
+
+impl FieldTree for NshView {
+    type Pad = Retained<objc2_app_kit::NSView>;
+
+    fn view_state(&self) -> std::cell::Ref<'_, crate::view::ViewState> {
+        self.state()
+    }
+
+    fn ns_hidden(&self) -> bool {
+        self.ns().isHidden()
+    }
+
+    fn pad_at(&self, p: (f32, f32)) -> Option<Self::Pad> {
+        let s = self.state();
+        s.natives
+            .iter()
+            .rev()
+            .find(|n| native_contains(n, p))
+            .map(|n| n.view.clone())
+    }
+
+    fn children_at(&self, p: (f32, f32)) -> Vec<(NshView, (f32, f32))> {
+        let container = self.container_view();
+        let subviews: Vec<_> = self.ns().subviews().iter().collect();
+        let mut children = Vec::new();
+        for sub in subviews.into_iter().rev() {
+            let (kids, at): (Vec<_>, _) = if container.as_deref() == Some(&*sub) {
+                (sub.subviews().iter().collect(), into_container(self, p))
+            } else {
+                (vec![sub], p)
+            };
+            children.extend(
+                kids.into_iter()
+                    .rev()
+                    .filter_map(|child| NshView::from_ns(&child))
+                    .map(|child| (child, at)),
+            );
+        }
+        children
+    }
+
+    fn in_own(&self, p: (f32, f32)) -> Option<(f32, f32)> {
+        into_child(self, p)
+    }
+}
+
+/// [`hidden_field_at`] in `view` at `p` (its coordinates) and what it
+/// holds, topmost first: `through` once a view on the way takes no
+/// pointer. It walks as [`pick_in`] does, point and clips included: a
+/// view that clips its children (`overflow: hidden`, a scroll view) is
+/// looked into only where the point is inside it, so a field scrolled out
+/// of its scroll view, or cut off by a clipping card, is not found where
+/// it does not show.
+fn hidden_field_in<V: FieldTree>(view: &V, p: (f32, f32), through: bool) -> Option<V::Pad> {
+    let (field, through, children) = {
+        let s = view.view_state();
+        if s.style.hidden
+            || s.live.as_ref().is_some_and(|l| l.dying())
+            || s.events.contains(EventKind::ContextMenu)
+            || s.props.accessibility.state.disabled
+        {
+            return None;
+        }
+        let HitArea { children, .. } = input::hit_area(
+            point(Points(p.0), Points(p.1)),
+            s.frame.size,
+            s.props.hit_slop,
+            s.overflow,
+            s.clips(),
+            laid_out(s.kind, s.id),
+        );
+        (
+            (s.kind == ViewKind::Input).then_some(s.props.secondary_press_through),
+            through || s.props.pointer_events == PointerEvents::None,
+            children,
+        )
+    };
+    if view.ns_hidden() {
+        return None;
+    }
+    if let Some(asks) = field {
+        // A field the pointer reaches is the picked one already, and one
+        // that does not ask for the press stays transparent to it. The
+        // press goes to the pad under the point, which is in the field's
+        // box.
+        if !(through && asks) {
+            return None;
+        }
+        return view.pad_at(p);
+    }
+    if !children {
+        return None;
+    }
+    // Children in their AppKit order, topmost first, those in the
+    // container (a scroll view's content) at its offset and zoom.
+    for (child, at) in view.children_at(p) {
+        if let Some(cp) = child.in_own(at)
+            && let Some(field) = hidden_field_in(&child, cp, through)
+        {
+            return Some(field);
+        }
+    }
+    None
+}
+
 /// The closest file-drop listener under the pointer, within its modal root.
 pub(crate) fn file_drop_target(surface: &Surface, x: f32, y: f32) -> Option<NshView> {
     let mut view = pick(&event_root(surface), x, y)?.view;
@@ -3850,6 +4012,158 @@ mod tests {
             cursor_to_set(true, Some(Cursor::Pointer), Cursor::Pointer),
             Some(Cursor::Pointer)
         );
+    }
+
+    /// A view of a plain tree for [`hidden_field_in`]: what AppKit holds
+    /// for an [`NshView`] (subviews, a scroll view's container, the frame
+    /// origin, an input's pad) taken from its state, so the walk runs off
+    /// the main thread. An input's pad covers its box, and a scroll view's
+    /// children are in its container at its scroll offset and zoom.
+    struct Node {
+        state: RefCell<crate::view::ViewState>,
+        children: RefCell<Vec<Rc<Node>>>,
+    }
+
+    impl FieldTree for Rc<Node> {
+        /// The field whose pad it is.
+        type Pad = NodeId;
+
+        fn view_state(&self) -> std::cell::Ref<'_, crate::view::ViewState> {
+            self.state.borrow()
+        }
+
+        fn ns_hidden(&self) -> bool {
+            false
+        }
+
+        fn pad_at(&self, p: (f32, f32)) -> Option<NodeId> {
+            let s = self.state.borrow();
+            let size = s.frame.size;
+            (p.0 >= 0.0 && p.1 >= 0.0 && p.0 < size.width.0 && p.1 < size.height.0).then_some(s.id)
+        }
+
+        fn children_at(&self, p: (f32, f32)) -> Vec<(Rc<Node>, (f32, f32))> {
+            let at = match &self.state.borrow().scroll {
+                Some(s) => ((p.0 + s.x) / s.zoom, (p.1 + s.y) / s.zoom),
+                None => p,
+            };
+            let children = self.children.borrow();
+            children.iter().rev().map(|c| (c.clone(), at)).collect()
+        }
+
+        fn in_own(&self, p: (f32, f32)) -> Option<(f32, f32)> {
+            let s = self.state.borrow();
+            let o = s.frame.origin;
+            let d = (p.0 - o.x.0, p.1 - o.y.0);
+            match s.transform() {
+                Some(m) => unproject(&m, d),
+                None => Some(d),
+            }
+        }
+    }
+
+    /// As the Windows test of the same name: a secondary click passes
+    /// through a pointer-transparent field unless the field asks for it
+    /// (`secondary_press_through`), and an asking field is found only
+    /// where it shows, not where a clipping view or a scroll view around
+    /// it cuts it off. The walk starts at the root rather than at the view
+    /// `pick` lands on (an `NshView` walk needs AppKit); nothing on the
+    /// way here listens or takes no pointer, so it finds the same.
+    #[test]
+    fn a_secondary_click_passes_through_a_field_that_does_not_ask() {
+        let node = |parent: Option<&Rc<Node>>, id, kind, frame| {
+            let mut state = crate::view::ViewState::new(id, kind);
+            state.frame = frame;
+            let node = Rc::new(Node {
+                state: RefCell::new(state),
+                children: RefCell::new(Vec::new()),
+            });
+            if let Some(parent) = parent {
+                parent.children.borrow_mut().push(node.clone());
+            }
+            node
+        };
+        let rect = |x, y, w, h| {
+            nsh_core::Bounds::new(
+                point(Points(x), Points(y)),
+                nsh_core::geometry::size(Points(w), Points(h)),
+            )
+        };
+        let root = node(None, ROOT_ID, ViewKind::View, rect(0.0, 0.0, 800.0, 400.0));
+        let found = |x: f32, y: f32| hidden_field_in(&root, (x, y), false);
+        let editor = node(
+            Some(&root),
+            2,
+            ViewKind::View,
+            rect(20.0, 20.0, 300.0, 200.0),
+        );
+        let field = node(
+            Some(&editor),
+            4,
+            ViewKind::Input,
+            rect(0.0, 0.0, 300.0, 200.0),
+        );
+        field.state.borrow_mut().props.pointer_events = PointerEvents::None;
+        let sink = node(
+            Some(&editor),
+            6,
+            ViewKind::Input,
+            rect(40.0, 60.0, 1.0, 1.0),
+        );
+        sink.state.borrow_mut().props.pointer_events = PointerEvents::None;
+        // Neither the covering field nor the sink asks: none.
+        assert_eq!(found(100.0, 100.0), None);
+        assert_eq!(found(60.5, 80.5), None);
+        // The sink asking is found on its point, the other still not.
+        sink.state.borrow_mut().props.secondary_press_through = true;
+        assert_eq!(found(60.5, 80.5), Some(6));
+        assert_eq!(found(100.0, 100.0), None);
+        sink.state.borrow_mut().props.secondary_press_through = false;
+        // An asking field a clipping view around it cuts off: none where
+        // it is cut, found where it shows.
+        let clip = node(
+            Some(&root),
+            8,
+            ViewKind::View,
+            rect(20.0, 260.0, 100.0, 40.0),
+        );
+        clip.state.borrow_mut().style.overflow_hidden = true;
+        let below = node(
+            Some(&clip),
+            10,
+            ViewKind::Input,
+            rect(0.0, 20.0, 100.0, 60.0),
+        );
+        below.state.borrow_mut().props.pointer_events = PointerEvents::None;
+        below.state.borrow_mut().props.secondary_press_through = true;
+        assert_eq!(found(70.0, 290.0), Some(10));
+        assert_eq!(found(70.0, 310.0), None);
+        // An asking field in a scroll view: found where it shows; scrolled
+        // up out of view, neither where it was (the content there is
+        // empty) nor where it now sits, above the scroll view, which cuts
+        // it off.
+        let scroll = node(
+            Some(&root),
+            12,
+            ViewKind::Scroll,
+            rect(400.0, 200.0, 200.0, 100.0),
+        );
+        let listed = node(
+            Some(&scroll),
+            14,
+            ViewKind::Input,
+            rect(0.0, 0.0, 200.0, 40.0),
+        );
+        listed.state.borrow_mut().props.pointer_events = PointerEvents::None;
+        listed.state.borrow_mut().props.secondary_press_through = true;
+        assert_eq!(found(500.0, 220.0), Some(14));
+        scroll.state.borrow_mut().scroll.as_mut().unwrap().y = 100.0;
+        assert_eq!(found(500.0, 220.0), None);
+        assert_eq!(found(500.0, 120.0), None);
+        // Scrolled back by half: its lower half shows at the top.
+        scroll.state.borrow_mut().scroll.as_mut().unwrap().y = 20.0;
+        assert_eq!(found(500.0, 210.0), Some(14));
+        assert_eq!(found(500.0, 190.0), None);
     }
 
     #[test]

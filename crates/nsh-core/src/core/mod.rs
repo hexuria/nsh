@@ -6146,6 +6146,16 @@ impl<M: TextEngine> Core<M> {
                     flags |= dirty::VIEW_PROPS;
                 }
             }
+            Prop::SecondaryPressThrough(value) => {
+                // A view prop, though only inputs read it: the hosts decide
+                // with it where they read `pointerEvents`, in the views'
+                // props, while picking.
+                let props = node.props.get_or_insert_default();
+                if props.secondary_press_through != value {
+                    props.secondary_press_through = value;
+                    flags |= dirty::VIEW_PROPS;
+                }
+            }
             Prop::Accessibility(prop) => {
                 // A label changing on mounted props goes alone: it is
                 // the one that follows app state (a count, a value).

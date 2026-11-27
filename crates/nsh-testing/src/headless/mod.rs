@@ -379,6 +379,9 @@ pub struct Headless {
     observer: Option<Observer>,
     /// The app's clock.
     clock: Clock,
+    /// Where touches' `timestamp` counts from: the app's clock at the
+    /// start, so a long press's touch ends its delay after it began.
+    touch_epoch: std::time::Instant,
     /// On a manual clock: the engine asked for a frame.
     wanted: Option<Arc<AtomicBool>>,
     /// The embedding app's channel with the app (`EngineConfig::host`),
@@ -514,6 +517,7 @@ impl Headless {
             environment,
             viewport,
             observer: None,
+            touch_epoch: clock.now(),
             clock,
             wanted,
             host,
@@ -1931,7 +1935,7 @@ impl Headless {
         // listen to touches (an overlay's `onPressOutside` among them).
         let path = self.screen.touch_path(id);
         if !path.is_empty() {
-            self.send_touch(id, nsh_core::TouchPhase::Start, path.clone(), at);
+            self.send_touch(id, nsh_core::TouchPhase::Start, path.clone(), at, false);
         }
         // A text field that listens to presses (a combobox's) takes the
         // focus as a tap's does, then hears the press.
@@ -1946,7 +1950,7 @@ impl Headless {
             self.send(id, kind, payload.clone());
         }
         if !path.is_empty() {
-            self.send_touch(id, nsh_core::TouchPhase::End, path, at);
+            self.send_touch(id, nsh_core::TouchPhase::End, path, at, false);
         }
         self.done()
     }
@@ -1980,14 +1984,14 @@ impl Headless {
         self.activate_window_of(id);
         let path = self.screen.touch_path(id);
         if !path.is_empty() {
-            self.send_touch(id, nsh_core::TouchPhase::Start, path.clone(), page);
+            self.send_touch(id, nsh_core::TouchPhase::Start, path.clone(), page, false);
         }
         let payload = self.press_payload(id, Some(at));
         for kind in [EventKind::PressDown, EventKind::PressUp, EventKind::Press] {
             self.send(id, kind, payload.clone());
         }
         if !path.is_empty() {
-            self.send_touch(id, nsh_core::TouchPhase::End, path, page);
+            self.send_touch(id, nsh_core::TouchPhase::End, path, page, false);
         }
         self.done()
     }
@@ -2052,7 +2056,7 @@ impl Headless {
         self.activate_window_of(id);
         let path = self.screen.touch_path(id);
         if !path.is_empty() {
-            self.send_touch(id, nsh_core::TouchPhase::Start, path.clone(), None);
+            self.send_touch(id, nsh_core::TouchPhase::Start, path.clone(), None, true);
         }
         let inside = self.screen.press_point(&parsed, id);
         let payload = self.press_payload(id, inside);
@@ -2061,7 +2065,46 @@ impl Headless {
         self.send(id, EventKind::LongPress, payload.clone());
         self.send(id, EventKind::PressUp, payload);
         if !path.is_empty() {
-            self.send_touch(id, nsh_core::TouchPhase::End, path, None);
+            self.send_touch(id, nsh_core::TouchPhase::End, path, None, true);
+        }
+        self.done()
+    }
+
+    /// [`Headless::long_press`] at `at` in the view `selector` names, as
+    /// [`Headless::press_at`] is a press at a point: the long press goes
+    /// to the nearest view around it that hears long presses or presses,
+    /// with `at` moved into that view's coordinates.
+    pub fn long_press_at(&mut self, selector: &str, at: Point<Points>) -> Result<(), String> {
+        let parsed = Selector::parse(selector)?;
+        self.step(format!("longPressAt({selector}, {}, {})", at.x.0, at.y.0));
+        self.input_with(InputModality::Pointer);
+        let pick = self.screen.long_pressable(&parsed);
+        let id = self.picked(pick, selector, "pressable view")?;
+        let delay = self.screen.long_press_delay(id).unwrap_or(500.0).max(0.0);
+        let named = match self.screen.resolve(&parsed)[..] {
+            [named] => named,
+            _ => id,
+        };
+        let page = self
+            .screen
+            .bounds_in_root(named)
+            .map(|bounds| bounds.origin + at);
+        let at = match (page, self.screen.bounds_in_root(id)) {
+            (Some(page), Some(target)) => page - target.origin,
+            _ => at,
+        };
+        self.activate_window_of(id);
+        let path = self.screen.touch_path(id);
+        if !path.is_empty() {
+            self.send_touch(id, nsh_core::TouchPhase::Start, path.clone(), page, true);
+        }
+        let payload = self.press_payload(id, Some(at));
+        self.send(id, EventKind::PressDown, payload.clone());
+        self.elapse(Duration::from_secs_f64(f64::from(delay) / 1000.0));
+        self.send(id, EventKind::LongPress, payload.clone());
+        self.send(id, EventKind::PressUp, payload);
+        if !path.is_empty() {
+            self.send_touch(id, nsh_core::TouchPhase::End, path, page, true);
         }
         self.done()
     }
@@ -2298,17 +2341,30 @@ impl Headless {
 
     /// A finger going down on (or lifting from) `target`, reported on the
     /// root with the views around it that listen to touches.
+    /// `timed`: the touch carries the app clock's time (a long press, whose
+    /// end comes its delay after its start); else 0, as every other step's
+    /// touches always have, so gestures that read the time (velocity) are
+    /// unchanged.
     fn send_touch(
         &self,
         target: NodeId,
         phase: nsh_core::TouchPhase,
         path: Vec<NodeId>,
         at: Option<Point<Points>>,
+        timed: bool,
     ) {
         let location = at.and_then(|p| self.screen.bounds_in_root(target).map(|b| p - b.origin));
         let touch = nsh_core::TouchEvent {
             phase,
-            timestamp: 0.0,
+            timestamp: if timed {
+                self.clock
+                    .now()
+                    .saturating_duration_since(self.touch_epoch)
+                    .as_secs_f64()
+                    * 1000.0
+            } else {
+                0.0
+            },
             points: vec![nsh_core::TouchPoint {
                 id: 0,
                 target,
