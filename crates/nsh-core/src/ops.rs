@@ -2609,15 +2609,30 @@ pub enum Command {
     #[doc(hidden)]
     CancelPress,
     /// Select a range of an input (UTF-16 units; equal for a caret).
+    ///
+    /// Platforms do not carry this one out: the core follows every one
+    /// with a [`Command::SetSelectionAt`] for the same view, which they do.
+    /// It stays in the mount stream for what only watches it. Code that
+    /// writes mount items itself, not through the core, must send the pair
+    /// too, or no platform moves the selection.
     SetSelection {
         /// Start.
         start: u32,
         /// End.
         end: u32,
-        /// The edit count the selection was written against: the platform
-        /// drops it when the user edited since, as with a value (the core
-        /// attaches it; a constructor outside the core leaves it 0).
-        #[doc(hidden)]
+    },
+    /// The [`Command::SetSelection`] before it as platforms apply it, with
+    /// the input's edit count the selection was written against: the
+    /// platform drops it when the user edited since, as with a value. Only
+    /// the core makes it (a separate variant so the public one keeps its
+    /// shape).
+    #[doc(hidden)]
+    SetSelectionAt {
+        /// Start.
+        start: u32,
+        /// End.
+        end: u32,
+        /// The input's edit count when the selection was written.
         count: u32,
     },
     /// Insert text into an input in place of its selection, as the user's

@@ -641,7 +641,7 @@ pub(crate) fn encode(batch: MountBatch, web_generation: u64) -> Encoded {
                         e.bool(block);
                     }
                     Command::ClearJsResponder => e.int(15),
-                    Command::SetSelection { start, end, count } => {
+                    Command::SetSelectionAt { start, end, count } => {
                         e.int(16);
                         e.int(start as i32);
                         e.int(end as i32);
@@ -803,8 +803,10 @@ pub(crate) fn encode(batch: MountBatch, web_generation: u64) -> Encoded {
                         e.string(nsh_core::file_dialog::extensions(&request.filters).join(","));
                         e.int(i32::try_from(request.size_limit()).unwrap_or(i32::MAX));
                     }
-                    // Turned into a mount item / `ScrollTo` by the core.
-                    Command::LayoutAnimation(_)
+                    // Turned into a mount item / `ScrollTo` by the core
+                    // (a selection into the `SetSelectionAt` after it).
+                    Command::SetSelection { .. }
+                    | Command::LayoutAnimation(_)
                     | Command::SetStatusBar(_)
                     | Command::CancelPress
                     | Command::ScrollToIndex { .. }

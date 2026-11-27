@@ -187,7 +187,6 @@ pub(crate) fn decode_command<'js>(name: &str, arg: Value<'js>) -> compat::Result
             Command::SetSelection {
                 start: field("start"),
                 end: field("end"),
-                count: 0,
             }
         }
         "scrollToIndex" => {

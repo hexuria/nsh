@@ -435,7 +435,9 @@ impl Mounter {
                 Some(view) if crate::key_focus::blur(surface, view) => {}
                 _ => crate::text_input::blur_all(surface),
             },
-            Command::SetSelection { start, end, count } => {
+            // Carried out from the `SetSelectionAt` the core sends after it.
+            Command::SetSelection { .. } => {}
+            Command::SetSelectionAt { start, end, count } => {
                 if let Some(view) = view {
                     crate::text_input::set_selection(view, *start, *end, *count);
                 }

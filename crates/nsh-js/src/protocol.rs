@@ -213,7 +213,6 @@ pub(crate) fn decode_command<'js>(
             Command::SetSelection {
                 start: field("start"),
                 end: field("end"),
-                count: 0,
             }
         }
         "scrollToIndex" => {
