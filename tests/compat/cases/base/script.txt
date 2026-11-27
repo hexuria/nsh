@@ -1893,14 +1893,16 @@ covers [props] accessibilityLabel
 # base-otp-input
 tap id:case-base-otp-input
 # One field over the cells for the keyboard and screen readers: the
-# number pad, a code's autofill, no caret of its own; the cells (at least
-# 20 high) in their groups (2 around, each cell 2 below the top) make the
-# input 26 high.
+# number pad, a code's autofill, and the platform's caret kept but unseen
+# (transparent: turning it off cost the phones' edit menu its Paste); the
+# cells (at least 20 high) in their groups (2 around, each cell 2 below the
+# top) make the input 26 high.
 expect Code []
 prop label:Code accessibilityLabel Code
 prop label:Code keyboardType number-pad
 prop label:Code autoComplete one-time-code
-prop label:Code caret false
+prop label:Code caret true
+style label:Code caretColor #00000000
 frame id:otp 0 20 390 26
 # Its own code, masked (a secure field, bullets in the cells) and
 # disabled.
