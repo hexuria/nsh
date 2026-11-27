@@ -446,12 +446,81 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
     let pressed_at = stored(None::<f64>);
     let long_press = long_press_ms(os());
     let long_pressed = stored(false);
+
+    // A long press anywhere on the input selects the code whole, as the
+    // platform's own word selection does with a run of digits. It cannot
+    // come from the field's own hit-test: the hidden glyphs sit in one
+    // small strip at the field's start, so on the phones a long press
+    // over a cell right of the strip finds no word and selects nothing
+    // (spreading the glyphs across the cells' width was the other shape
+    // — but the cells are grouped, so no uniform pitch lines them up,
+    // and the run's positions would still be the font's, not the cells').
+    // The write is the field's real selection: the edit menu and the
+    // handles are the platform's own, and it is count-guarded, so a key
+    // typed before it lands wins over it. Android only: on iOS a selection
+    // write closes the edit menu the long press opens (Paste with it), and
+    // iOS's own long press keeps its loupe and menu; an empty field has
+    // nothing to select, so Paste stays the platform's there too.
+    //
+    // The hold is timed from the input's own touches, not `onLongPress`:
+    // on Android the field covers the input and its EditText takes the
+    // finger, so a long-press listener on the input never starts (the
+    // touches still reach the input, the caret placement below is theirs
+    // too). A finger that moves past the touch slop (a scroll starting on
+    // the cells) or lifts first is no long press.
+    let android = os() == Os::Android;
+    let select_run = move || {
+        if parts.disabled.get_untracked() {
+            return;
+        }
+        let len = utf16_len(&field.get_untracked());
+        if len > 0 {
+            long_pressed.replace(true);
+            field_ref.set_selection(0, len);
+        }
+    };
+    let hold = stored(None::<Spawned<()>>);
+    let held_from = stored(None::<(f32, f32)>);
+    let stop_hold = move || {
+        held_from.replace(None);
+        if let Some(task) = hold.replace(None) {
+            task.cancel();
+        }
+    };
     let place_caret = move |e: &TouchEvent| {
+        let at = e
+            .points
+            .iter()
+            .find(|p| p.changed)
+            .or(e.points.first())
+            .map(|p| (p.location.x.0, p.location.y.0));
         if e.phase == TouchPhase::Start {
             pressed_at.replace(Some(e.timestamp));
             long_pressed.replace(false);
+            if android {
+                stop_hold();
+                held_from.replace(at);
+                let delay = Duration::from_secs_f64(long_press / 1000.0);
+                hold.replace(Some(set_timeout(delay, move || {
+                    if held_from.replace(None).is_some() {
+                        select_run();
+                    }
+                })));
+            }
             return;
         }
+        if e.phase == TouchPhase::Move {
+            let from = held_from.replace(None);
+            match (from, at) {
+                (Some(from), Some(to)) if !past_slop(from, to) => {
+                    held_from.replace(Some(from));
+                }
+                (None, _) => {}
+                _ => stop_hold(),
+            }
+            return;
+        }
+        stop_hold();
         if e.phase != TouchPhase::End || parts.disabled.get_untracked() {
             return;
         }
@@ -489,32 +558,6 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
             return;
         }
         field_ref.set_selection(position, position);
-    };
-
-    // A long press anywhere on the input selects the code whole, as the
-    // platform's own word selection does with a run of digits. It cannot
-    // come from the field's own hit-test: the hidden glyphs sit in one
-    // small strip at the field's start, so on the phones a long press
-    // over a cell right of the strip finds no word and selects nothing
-    // (spreading the glyphs across the cells' width was the other shape
-    // — but the cells are grouped, so no uniform pitch lines them up,
-    // and the run's positions would still be the font's, not the cells').
-    // The write is the field's real selection: the edit menu and the
-    // handles are the platform's own, and it is count-guarded, so a key
-    // typed before it lands wins over it. Android only: on iOS a selection
-    // write closes the edit menu the long press opens (Paste with it), and
-    // iOS's own long press keeps its loupe and menu; an empty field has
-    // nothing to select, so Paste stays the platform's there too.
-    let android = os() == Os::Android;
-    let select_run = move || {
-        if parts.disabled.get_untracked() {
-            return;
-        }
-        let len = utf16_len(&field.get_untracked());
-        if len > 0 {
-            long_pressed.replace(true);
-            field_ref.set_selection(0, len);
-        }
     };
 
     // On the desktop the field is a hosted native editor (an AppKit text
@@ -566,7 +609,6 @@ pub fn OtpInput(props: OtpInputProps, cx: Scope<OtpInputEvent>) -> impl IntoElem
     };
     view()
         .disabled(props.disabled)
-        .when(android, |v| v.on_long_press(select_run))
         // In a terminal the field is no wider than a Cell, under none of
         // the cells: a press on them gives it the keys, as the field
         // over them does elsewhere.
@@ -870,6 +912,16 @@ fn drag_selection(from: u32, to: u32) -> (u32, u32) {
 /// a tap there.
 fn long_press_ms(os: Os) -> f64 {
     if os == Os::Ios { 500.0 } else { 400.0 }
+}
+
+/// How far a finger may move, in points, and still be held in place
+/// (Android's touch slop, 8 dp): further, it is a drag or a scroll.
+const TOUCH_SLOP: f32 = 8.0;
+
+/// Whether a finger that went down at `from` and is now at `to` has moved
+/// past the touch slop.
+fn past_slop(from: (f32, f32), to: (f32, f32)) -> bool {
+    (to.0 - from.0).hypot(to.1 - from.1) > TOUCH_SLOP
 }
 
 /// Whether a tap that ended in a bare caret gets the cells' caret: not in
