@@ -1,0 +1,421 @@
+--------- beginning of main
+11-28 09:17:35.042  1752  2053 W ServiceManager: Permission failure: android.permission.ACCESS_SURFACE_FLINGER from uid=10108 pid=2647
+11-28 09:17:35.042  1752  2053 D PermissionCache: checking android.permission.ACCESS_SURFACE_FLINGER for uid=10108 => denied (1162 us)
+11-28 09:17:35.042  1944  1984 E memtrack: Couldn't load memtrack module
+11-28 09:17:35.042  1944  1984 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:17:35.049  3185  3419 W SessionLifecycleManager: Handover failed. Creating new session controller.
+11-28 09:17:35.074  3185  3470 W ThreadPoolDumper: Queue length for executor EventBus is now 11. Perhaps some tasks are too long, or the pool is too small.
+11-28 09:17:35.097  1944  2067 W AlarmManager: Unrecognized alarm listener com.android.server.wifi.WifiConfigStore$2@57d91fa
+11-28 09:17:35.106  3185  3474 W LocationOracle: No location history returned by ContextManager
+11-28 09:17:35.159  2496  6656 I Authzen : [DeviceStateSyncManager] Device state updated successfully.
+11-28 09:17:35.199  3185  3419 I MicroDetectionWorker: #startMicroDetector [speakerMode: 0]
+11-28 09:17:35.203  1944  2067 D WifiConfigStore: Writing to stores completed in 106 ms.
+11-28 09:17:35.206  3185  3419 I AudioController: Created new AudioSource
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: exception when setting module id
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: java.lang.IllegalStateException: Unable to get current module info in ModuleManager created with non-module Context
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: 	at com.google.android.chimera.config.ModuleManager.getCurrentModule(:com.google.android.gms@202414023@20.24.14 (040800-319035315):2)
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: 	at aewd.a(:com.google.android.gms@202414023@20.24.14 (040800-319035315):4)
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: 	at aewg.b(:com.google.android.gms@202414023@20.24.14 (040800-319035315):9)
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: 	at aeso.a(Unknown Source:0)
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: 	at rpm.a(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: 	at rlv.c(:com.google.android.gms@202414023@20.24.14 (040800-319035315):1)
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: 	at rlt.b(:com.google.android.gms@202414023@20.24.14 (040800-319035315):1)
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: 	at rok.b(:com.google.android.gms@202414023@20.24.14 (040800-319035315):6)
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: 	at rok.c(:com.google.android.gms@202414023@20.24.14 (040800-319035315):6)
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: 	at rok.a(:com.google.android.gms@202414023@20.24.14 (040800-319035315):63)
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: 	at roo.handleMessage(:com.google.android.gms@202414023@20.24.14 (040800-319035315):71)
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: 	at android.os.Handler.dispatchMessage(Handler.java:103)
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: 	at aekz.a(:com.google.android.gms@202414023@20.24.14 (040800-319035315):2)
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: 	at aekz.dispatchMessage(:com.google.android.gms@202414023@20.24.14 (040800-319035315):14)
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: 	at android.os.Looper.loop(Looper.java:214)
+11-28 09:17:35.208  2106  2594 E ModuleIdSetter: 	at android.os.HandlerThread.run(HandlerThread.java:67)
+11-28 09:17:35.215  3185  3419 I MicroDetectionWorker: onReady
+11-28 09:17:35.221  2106  3500 W GCoreFlp: No location to return for getLastLocation()
+11-28 09:17:35.238  3185  4829 I MicroDataManager: Created a new hotword model for:
+11-28 09:17:35.238  3185  4829 I MicroDataManager:  LOC: https://www.gstatic.com/android-search/hotword/x_google/3605cc4ae88f9e7148bcd037e6ddddb4/hotword.data SR: 16000 CC: 1
+11-28 09:17:35.249  2106  3790 W ctxmgr  : [AclManager] No 3 for (accnt=account#-517948760#, com.google.android.gms(10117):UserVelocityProducer, vrsn=202414023, 0, 3pPkg = null ,  3pMdlId = null ,  pid = 2106). Was: 3 for 1, account#-517948760# [CONTEXT service_id=47 ]
+11-28 09:17:35.251  3185  3474 I MicroRecognitionRunner: Starting detection.
+11-28 09:17:35.252  3185  3474 I MultipleReaderAudioSrc: Using micInputStream
+11-28 09:17:35.252  3185  4829 I MicrophoneInputStream: mic_starting  SR : 16000 CC : 16 SO : 1999
+11-28 09:17:35.252  1944  1984 E memtrack: Couldn't load memtrack module
+11-28 09:17:35.252  1944  1984 W android.os.Debug: failed to get memory consumption info: -1
+--------- beginning of system
+11-28 09:17:35.254  1944  2953 I ActivityManager: Killing 5876:com.google.android.packageinstaller/u0a73 (adj 985): empty #17
+11-28 09:17:35.260  1749  6713 I AudioFlinger: AudioFlinger's thread 0x7873e0de9280 tid=6713 ready to run
+11-28 09:17:35.291  2106  2923 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:17:35.298  1705  1705 I Zygote  : Process 5876 exited due to signal 9 (Killed)
+11-28 09:17:35.298  1944  1987 I libprocessgroup: Successfully killed process cgroup uid 10073 pid 5876 in 44ms
+11-28 09:17:35.299  1944  4088 I AudioService.RecordingActivityMonitor: rec update riid:39 uid:10122 session:25 src:HOTWORD pack:com.google.android.googlequicksearchbox
+11-28 09:17:35.301  3185  4829 I MicrophoneInputStream: mic_started  SR : 16000 CC : 16 SO : 1999
+11-28 09:17:35.333  3185  3419 I MicroDetectionWorker: onReady
+11-28 09:17:35.437  2106  2106 I GeofencerStateMachine: removeGeofences: removeRequest=RemoveGeofencingRequest[REMOVE_BY_PENDING_INTENT pendingIntent=PendingIntent[creatorPackage=com.google.android.gms], packageName=com.google.android.gms]
+11-28 09:17:35.437  2106  2106 I GeofencerStateMachine: removeGeofences: removeRequest=RemoveGeofencingRequest[REMOVE_BY_PENDING_INTENT pendingIntent=PendingIntent[creatorPackage=com.google.android.gms], packageName=com.google.android.gms]
+11-28 09:17:35.454  2106  5109 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:17:35.454  2106  3790 I ctxmgr  : [ProducerStatusImpl] updateStateForNewContextData: inactive, contextName=7 [CONTEXT service_id=47 ]
+11-28 09:17:35.455  2106  3500 W GCoreFlp: No location to return for getLastLocation()
+11-28 09:17:35.483  2106  6722 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:17:35.484  2106  6715 I PlacesLogger: [PlaceInferenceEngine]: [anon] Changed inference mode: 0 [CONTEXT service_id=253 ]
+11-28 09:17:35.486  2106  3500 W GCoreFlp: No location to return for getLastLocation()
+11-28 09:17:35.488  2106  6715 I LogUtils: [Places]: ?: PlacesBleScanner start() with priority 2 [CONTEXT service_id=253 ]
+11-28 09:17:35.489  2106  6722 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:17:35.493  1752  2053 E SurfaceFlinger: ro.sf.lcd_density must be defined as a build property
+11-28 09:17:35.496  1752  2053 E SurfaceFlinger: ro.sf.lcd_density must be defined as a build property
+11-28 09:17:35.500  2106  3500 W GCoreFlp: No location to return for getLastLocation()
+11-28 09:17:35.500  2106  3500 W GCoreFlp: No location to return for getLastLocation()
+11-28 09:17:35.508  2551  2587 D EGL_emulation: eglMakeCurrent: 0x747dcf8d9ac0: ver 3 1 (tinfo 0x747dcf879480)
+11-28 09:17:35.509  2106  6715 I PlacesLogger: [PlaceInferenceEngine]: [anon] Changed inference mode: 1 [CONTEXT service_id=253 ]
+11-28 09:17:35.509  1944  6724 D libEGL  : Emulator has host GPU support, qemu.gles is set to 1.
+11-28 09:17:35.531  1944  6724 W libc    : Unable to set property "qemu.gles" to "1": error code: 0x18
+11-28 09:17:35.532  1944  6724 D libEGL  : loaded /vendor/lib64/egl/libEGL_emulation.so
+11-28 09:17:35.532  1944  6724 D libEGL  : loaded /vendor/lib64/egl/libGLESv1_CM_emulation.so
+11-28 09:17:35.533  2106  2106 E BeaconBle: Missing BluetoothAdapter [CONTEXT service_id=111 ]
+11-28 09:17:35.533  2106  2106 I BeaconBle: BLE 'KK+' software access layer enabled [CONTEXT service_id=111 ]
+11-28 09:17:35.533  1944  6724 D libEGL  : loaded /vendor/lib64/egl/libGLESv2_emulation.so
+11-28 09:17:35.540  1944  6724 D HostConnection: HostConnection::get() New Host Connection established 0x747d78c13540, tid 6724
+11-28 09:17:35.540  1944  6724 D HostConnection: HostComposition ext ANDROID_EMU_CHECKSUM_HELPER_v1 ANDROID_EMU_native_sync_v2 ANDROID_EMU_dma_v1 ANDROID_EMU_direct_mem ANDROID_EMU_host_composition_v1 ANDROID_EMU_host_composition_v2 ANDROID_EMU_vulkan ANDROID_EMU_deferred_vulkan_commands ANDROID_EMU_vulkan_null_optional_strings ANDROID_EMU_vulkan_create_resources_with_requirements ANDROID_EMU_YUV_Cache ANDROID_EMU_vulkan_ignored_handles ANDROID_EMU_vulkan_free_memory_sync ANDROID_EMU_vulkan_shader_float16_int8 ANDROID_EMU_vulkan_async_queue_submit ANDROID_EMU_sync_buffer_data ANDROID_EMU_vulkan_async_qsri ANDROID_EMU_hwc_color_transform ANDROID_EMU_hwc_display_power_mode GL_OES_EGL_image_external_essl3 GL_OES_vertex_array_object GL_KHR_texture_compression_astc_ldr ANDROID_EMU_host_side_tracing ANDROID_EMU_gles_max_version_3_1 
+11-28 09:17:35.562  1944  6724 W OpenGLRenderer: Failed to choose config with EGL_SWAP_BEHAVIOR_PRESERVED, retrying without...
+11-28 09:17:35.562  2106  2106 I BeaconBle: Client requested scan, settings=BleSettings [scanMode=ZERO_POWER, callbackType=ALL_MATCHES, reportDelayMillis=0, 1 filters, 0 clients, callingClientName=Places] [CONTEXT service_id=111 ]
+11-28 09:17:35.568  1944  6724 D EGL_emulation: eglCreateContext: 0x747d78d0dc80: maj 3 min 1 rcv 4
+11-28 09:17:35.570  1944  6724 D EGL_emulation: eglMakeCurrent: 0x747d78d0dc80: ver 3 1 (tinfo 0x747d82971f20)
+11-28 09:17:35.571  1944  6724 E eglCodecCommon: glUtilsParamSize: unknow param 0x000082da
+11-28 09:17:35.571  1944  6724 E eglCodecCommon: glUtilsParamSize: unknow param 0x000082da
+11-28 09:17:35.577  2106  2106 I BeaconBle: Scan : No clients left, canceling alarm. [CONTEXT service_id=111 ]
+11-28 09:17:35.578  2106  2106 E BeaconBle: Scan couldn't start for Places [CONTEXT service_id=111 ]
+11-28 09:17:35.578  2106  2106 W Places  : BLE failure while scanning - code 5
+11-28 09:17:35.634  2106  2581 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:17:35.634  2106  3790 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:17:35.636  2106  2581 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:17:35.645  2106  6722 E cklt    : *~*~*~ Channel {0} was not shutdown properly!!! ~*~*~*
+11-28 09:17:35.645  2106  6722 E cklt    :     Make sure to call shutdown()/shutdownNow() and wait until awaitTermination() returns true.
+11-28 09:17:35.645  2106  6722 E cklt    : java.lang.RuntimeException: ManagedChannel allocation site
+11-28 09:17:35.645  2106  6722 E cklt    : 	at ckls.<init>(:com.google.android.gms@202414023@20.24.14 (040800-319035315):3)
+11-28 09:17:35.645  2106  6722 E cklt    : 	at cklt.<init>(:com.google.android.gms@202414023@20.24.14 (040800-319035315):2)
+11-28 09:17:35.645  2106  6722 E cklt    : 	at ckfk.b(:com.google.android.gms@202414023@20.24.14 (040800-319035315):21)
+11-28 09:17:35.645  2106  6722 E cklt    : 	at sjo.a(:com.google.android.gms@202414023@20.24.14 (040800-319035315):29)
+11-28 09:17:35.645  2106  6722 E cklt    : 	at sjo.a(:com.google.android.gms@202414023@20.24.14 (040800-319035315):52)
+11-28 09:17:35.645  2106  6722 E cklt    : 	at bjxj.call(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:17:35.645  2106  6722 E cklt    : 	at bjvu.run(:com.google.android.gms@202414023@20.24.14 (040800-319035315):1)
+11-28 09:17:35.645  2106  6722 E cklt    : 	at soy.b(:com.google.android.gms@202414023@20.24.14 (040800-319035315):12)
+11-28 09:17:35.645  2106  6722 E cklt    : 	at soy.run(:com.google.android.gms@202414023@20.24.14 (040800-319035315):7)
+11-28 09:17:35.645  2106  6722 E cklt    : 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1167)
+11-28 09:17:35.645  2106  6722 E cklt    : 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:641)
+11-28 09:17:35.645  2106  6722 E cklt    : 	at sux.run(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:17:35.645  2106  6722 E cklt    : 	at java.lang.Thread.run(Thread.java:919)
+11-28 09:17:35.660  2106  5109 W Conscrypt: Could not set socket write timeout: java.net.SocketException: Socket closed
+11-28 09:17:35.660  2106  5109 W Conscrypt: 	at com.google.android.gms.org.conscrypt.Platform.setSocketWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):2)
+11-28 09:17:35.660  2106  5109 W Conscrypt: 	at com.google.android.gms.org.conscrypt.ConscryptFileDescriptorSocket.setSoWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:17:35.689  2106  5109 W Conscrypt: Could not set socket write timeout: java.net.SocketException: Socket closed
+11-28 09:17:35.689  2106  5109 W Conscrypt: 	at com.google.android.gms.org.conscrypt.Platform.setSocketWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):2)
+11-28 09:17:35.689  2106  5109 W Conscrypt: 	at com.google.android.gms.org.conscrypt.ConscryptFileDescriptorSocket.setSoWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:17:35.694  2106  2923 W Conscrypt: Could not set socket write timeout: java.net.SocketException: Socket closed
+11-28 09:17:35.694  2106  2923 W Conscrypt: 	at com.google.android.gms.org.conscrypt.Platform.setSocketWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):2)
+11-28 09:17:35.694  2106  2923 W Conscrypt: 	at com.google.android.gms.org.conscrypt.ConscryptFileDescriptorSocket.setSoWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:17:35.715  2106  6715 W LogUtils: [Places]: ?: Failed to download inference model weights SLS
+11-28 09:17:35.715  2106  6715 W LogUtils: ckdr: NOT_FOUND: Requested entity was not found.
+11-28 09:17:35.715  2106  6715 W LogUtils: 	at ckdq.c(:com.google.android.gms@202414023@20.24.14 (040800-319035315):3)
+11-28 09:17:35.715  2106  6715 W LogUtils: 	at sjo.a(:com.google.android.gms@202414023@20.24.14 (040800-319035315):57)
+11-28 09:17:35.715  2106  6715 W LogUtils: 	at bjxj.call(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:17:35.715  2106  6715 W LogUtils: 	at bjvu.run(:com.google.android.gms@202414023@20.24.14 (040800-319035315):1)
+11-28 09:17:35.715  2106  6715 W LogUtils: 	at soy.b(:com.google.android.gms@202414023@20.24.14 (040800-319035315):12)
+11-28 09:17:35.715  2106  6715 W LogUtils: 	at soy.run(:com.google.android.gms@202414023@20.24.14 (040800-319035315):7)
+11-28 09:17:35.715  2106  6715 W LogUtils: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1167)
+11-28 09:17:35.715  2106  6715 W LogUtils: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:641)
+11-28 09:17:35.715  2106  6715 W LogUtils: 	at sux.run(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:17:35.715  2106  6715 W LogUtils: 	at java.lang.Thread.run(Thread.java:919)
+11-28 09:17:35.715  2106  6715 W LogUtils: 
+11-28 09:17:35.715  2106  6715 W LogUtils: [CONTEXT service_id=253 ]
+11-28 09:17:35.721  2106  6715 W PlacesLogger: [PlaceInferenceEngine]: Failed to download model weights. Status code: 7 [CONTEXT service_id=253 ]
+11-28 09:17:35.721  2106  5109 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:17:35.722  2106  5109 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:17:35.727  2106  2923 W Conscrypt: Could not set socket write timeout: java.net.SocketException: Socket closed
+11-28 09:17:35.727  2106  2923 W Conscrypt: 	at com.google.android.gms.org.conscrypt.Platform.setSocketWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):2)
+11-28 09:17:35.728  2106  2923 W Conscrypt: 	at com.google.android.gms.org.conscrypt.ConscryptFileDescriptorSocket.setSoWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:17:36.007  2106  2106 E BluetoothAdapter: Bluetooth binder is null
+11-28 09:17:36.009  2106  2106 I chatty  : uid=10117 com.google.android.gms.persistent identical 1 line
+11-28 09:17:36.009  2106  2106 E BluetoothAdapter: Bluetooth binder is null
+11-28 09:17:36.011  3185  3185 I BgTaskExecutorImpl: Starting EXCLUSIVE background task FETCH_CONFIGS_FROM_PHENOTYPE.
+11-28 09:17:36.013  2608  2608 I PhenotypeUpdate: onReceive() urgent = false
+11-28 09:17:36.016  2106  6580 I Auth    : [AuthManaged,PasswordComplexityHelperImpl] Updating password complexity components state.
+11-28 09:17:36.016  2106  6580 I Auth    : [AuthManaged,PasswordComplexityHelperImpl] Disabling com.google.android.gms.auth.managed.admin.DeviceAdminReceiver
+11-28 09:17:36.016  2106  6580 I Auth    : [AuthManaged,PasswordComplexityHelperImpl] Disabling com.google.android.gms.auth.managed.ui.SetNewPasswordActivity
+11-28 09:17:36.021  4653  6390 I Bugle   : BuglePhenotypeBroadcastReceiver.onReceive
+11-28 09:17:36.036  2106  2923 I aopq    : Scheduling adaptive one off task with window [14400, 604800] in seconds [CONTEXT service_id=51 ]
+11-28 09:17:36.053  6732  6732 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 0 <<<<<<
+11-28 09:17:36.055  6732  6732 I AndroidRuntime: Using default boot image
+11-28 09:17:36.055  6732  6732 I AndroidRuntime: Leaving lock profiling enabled
+11-28 09:17:36.055  6732  6732 I app_process: Core platform API reporting enabled, enforcing=false
+11-28 09:17:36.068  2106  6655 I aorp    : updateFromConfigurations using legacy put method [CONTEXT service_id=204 ]
+11-28 09:17:36.068  1944  1944 V SettingsProvider: Notifying for 0: content://settings/global/phenotype_test_setting
+11-28 09:17:36.092  6732  6732 D ICU     : Time zone APEX file found: /apex/com.android.tzdata/etc/icu/icu_tzdata.dat
+11-28 09:17:36.094  6732  6732 W app_process: Unexpected CPU variant for X86 using defaults: x86_64
+11-28 09:17:36.095  6732  6732 I app_process: The ClassLoaderContext is a special shared library.
+11-28 09:17:36.107  4653  4653 I BugleRcs: RcsAvailability: updating
+11-28 09:17:36.107  6732  6732 W app_process: JNI RegisterNativeMethods: attempt to register 0 native methods for android.media.AudioAttributes
+11-28 09:17:36.108  6732  6732 D AndroidRuntime: Calling main entry com.android.commands.input.Input
+11-28 09:17:36.108  4653  6750 I BugleRcs: RcsAvailability: No minimum Cs.apk version is set, not checking Cs.apk version
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_birthdaydoodle_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_call_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_canvas_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_chkpkg_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_crashtest_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_dining_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_doodle_notifications_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_imageviewer_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_ipa_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_jslocation_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_localintent_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_messaging_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_nativesrp_activity_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_nativesrp_presenter_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_nowcontent_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_recents_activity_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_save_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_searchresults_activity_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_test_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag AndroidGsaVelourJars__velour_weather_jar__name to integer.
+11-28 09:17:36.112  3185  3470 W PhenotypeToGsaConfigs: Can't format flag bindle_flags__bloblobber_blob to integer.
+11-28 09:17:36.114  3185  3470 W PhenotypeToGsaConfigs: Can't format flag bindle_flags__velour_jar to integer.
+11-28 09:17:36.133  3185  3739 I ModelDownloadListener: Schdedule model download
+11-28 09:17:36.136  3185  3185 I BgTaskExecutorImpl: Starting EXCLUSIVE background task UPDATE_HOTWORD_MODELS.
+11-28 09:17:36.137  3185  3477 I ModelDownloadController: requestHotwordModelUpdate modelType-OK_HEY_GOOGLE modelLocale-en-US
+11-28 09:17:36.137  3185  3477 I ModelDownloadController: We already downloaded model from given location.
+11-28 09:17:36.137  3185  3477 I ModelDownloadController: Model download failed
+11-28 09:17:36.139  4653  4772 I BugleRcs: MCCMNC is NOT RCS enabled
+11-28 09:17:36.139  4653  4772 I BugleRcs: Prod Fi device disabled - Not a Fi device
+11-28 09:17:36.139  4653  6750 I BugleRcs: RcsAvailability: config server url unavailable - Carrier is not RCS enabled
+11-28 09:17:36.140  3185  3739 I EngineIdGenerator: Refusing EXCLUSIVE task INTERNAL_PERIODIC_TASK_SYNC, it is already pending. Try again in 341 seconds.
+11-28 09:17:36.140  3185  3739 I OpaEligibilityChecker: send OpaEligibilityChange broadcast to CommonBroadcastReceiver
+11-28 09:17:36.151  2496  3712 I Icing   : IndexChimeraService.getServiceInterface callingPackage=com.google.android.googlequicksearchbox componentName=agsa_icing_connection serviceId=32
+11-28 09:17:36.152  2496  3360 I Icing   : IndexChimeraService.getServiceInterface callingPackage=com.google.android.googlequicksearchbox componentName=agsa_icing_connection serviceId=33
+11-28 09:17:36.155  2496  2557 W Icing   : No valid account for uploading user actions
+11-28 09:17:36.162  2106  6655 I Auth    : [AuthManaged,PasswordComplexityHelperImpl] Updating password complexity components state.
+11-28 09:17:36.162  2106  6655 I Auth    : [AuthManaged,PasswordComplexityHelperImpl] Disabling com.google.android.gms.auth.managed.admin.DeviceAdminReceiver
+11-28 09:17:36.162  2106  6655 I Auth    : [AuthManaged,PasswordComplexityHelperImpl] Disabling com.google.android.gms.auth.managed.ui.SetNewPasswordActivity
+11-28 09:17:36.189  2106  6581 I Auth    : [AuthManaged,PasswordComplexityHelperImpl] Updating password complexity components state.
+11-28 09:17:36.189  2106  6581 I Auth    : [AuthManaged,PasswordComplexityHelperImpl] Disabling com.google.android.gms.auth.managed.admin.DeviceAdminReceiver
+11-28 09:17:36.189  2106  6581 I Auth    : [AuthManaged,PasswordComplexityHelperImpl] Disabling com.google.android.gms.auth.managed.ui.SetNewPasswordActivity
+11-28 09:17:36.190  2496  2557 I Icing   : Usage reports ok 0, Failed Usage reports 0, indexed 0, rejected 0
+11-28 09:17:36.191  2496  2557 W Icing   : No valid account for uploading user actions
+11-28 09:17:36.215  1944  1977 D AutofillManagerService: onBackKeyPressed()
+11-28 09:17:36.220  2496  2557 I Icing   : Usage reports ok 0, Failed Usage reports 0, indexed 0, rejected 0
+11-28 09:17:36.267  6732  6732 D AndroidRuntime: Shutting down VM
+11-28 09:17:36.565  1944  1984 E memtrack: Couldn't load memtrack module
+11-28 09:17:36.565  1944  1984 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:17:36.636  6756  6756 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 0 <<<<<<
+11-28 09:17:36.637  6756  6756 I AndroidRuntime: Using default boot image
+11-28 09:17:36.637  6756  6756 I AndroidRuntime: Leaving lock profiling enabled
+11-28 09:17:36.638  6756  6756 I app_process: Core platform API reporting enabled, enforcing=false
+11-28 09:17:36.668  6756  6756 D ICU     : Time zone APEX file found: /apex/com.android.tzdata/etc/icu/icu_tzdata.dat
+11-28 09:17:36.670  6756  6756 W app_process: Unexpected CPU variant for X86 using defaults: x86_64
+11-28 09:17:36.673  6756  6756 I app_process: The ClassLoaderContext is a special shared library.
+11-28 09:17:36.679  6756  6756 W app_process: JNI RegisterNativeMethods: attempt to register 0 native methods for android.media.AudioAttributes
+11-28 09:17:36.680  6756  6756 D AndroidRuntime: Calling main entry com.android.commands.input.Input
+11-28 09:17:36.683  6756  6756 D AndroidRuntime: Shutting down VM
+11-28 09:17:37.038  6770  6770 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 0 <<<<<<
+11-28 09:17:37.039  6770  6770 I AndroidRuntime: Using default boot image
+11-28 09:17:37.039  6770  6770 I AndroidRuntime: Leaving lock profiling enabled
+11-28 09:17:37.040  6770  6770 I app_process: Core platform API reporting enabled, enforcing=false
+11-28 09:17:37.071  6770  6770 D ICU     : Time zone APEX file found: /apex/com.android.tzdata/etc/icu/icu_tzdata.dat
+11-28 09:17:37.072  6770  6770 W app_process: Unexpected CPU variant for X86 using defaults: x86_64
+11-28 09:17:37.077  6770  6770 I app_process: The ClassLoaderContext is a special shared library.
+11-28 09:17:37.085  6770  6770 W app_process: JNI RegisterNativeMethods: attempt to register 0 native methods for android.media.AudioAttributes
+11-28 09:17:37.087  6770  6770 D AndroidRuntime: Calling main entry com.android.commands.input.Input
+11-28 09:17:37.090  6770  6770 D AndroidRuntime: Shutting down VM
+11-28 09:17:36.682  1944  1977 I chatty  : uid=1000(system) android.ui identical 1 line
+11-28 09:17:37.089  1944  1977 D AutofillManagerService: onBackKeyPressed()
+11-28 09:17:37.145  1944  2953 W BroadcastQueue: Background execution not allowed: receiving Intent { act=android.intent.action.DROPBOX_ENTRY_ADDED flg=0x10 (has extras) } to com.google.android.gms/.stats.service.DropBoxEntryAddedReceiver
+11-28 09:17:37.145  1944  1985 W BroadcastQueue: Background execution not allowed: receiving Intent { act=android.intent.action.DROPBOX_ENTRY_ADDED flg=0x10 (has extras) } to com.google.android.gms/.chimera.GmsIntentOperationService$PersistentTrustedReceiver
+11-28 09:17:37.448  6784  6784 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 0 <<<<<<
+11-28 09:17:37.450  6784  6784 I AndroidRuntime: Using default boot image
+11-28 09:17:37.450  6784  6784 I AndroidRuntime: Leaving lock profiling enabled
+11-28 09:17:37.450  6784  6784 I app_process: Core platform API reporting enabled, enforcing=false
+11-28 09:17:37.480  6784  6784 D ICU     : Time zone APEX file found: /apex/com.android.tzdata/etc/icu/icu_tzdata.dat
+11-28 09:17:37.482  6784  6784 W app_process: Unexpected CPU variant for X86 using defaults: x86_64
+11-28 09:17:37.488  6784  6784 I app_process: The ClassLoaderContext is a special shared library.
+11-28 09:17:37.495  6784  6784 W app_process: JNI RegisterNativeMethods: attempt to register 0 native methods for android.media.AudioAttributes
+11-28 09:17:37.496  6784  6784 D AndroidRuntime: Calling main entry com.android.commands.input.Input
+11-28 09:17:37.499  6784  6784 D AndroidRuntime: Shutting down VM
+11-28 09:17:37.499  1944  1976 D AutofillManagerService: Close system dialogs
+11-28 09:17:37.499  2127  2127 V StatusBar: mStatusBarWindow: com.android.systemui.statusbar.phone.StatusBarWindowView{a72d836 V.E...... ........ 0,0-1080,63} canPanelBeCollapsed(): false
+11-28 09:17:37.500  1944  1977 I ActivityTaskManager: START u0 {act=android.intent.action.MAIN cat=[android.intent.category.HOME] flg=0x10000100 cmp=com.google.android.apps.nexuslauncher/.NexusLauncherActivity (has extras)} from uid 0
+11-28 09:17:37.503  1944  1944 W ActivityManager: Unable to start service Intent { act=android.service.appprediction.AppPredictionService cmp=com.google.android.as/com.google.android.apps.miphone.aiai.app.AiAiPredictionService } U=0: not found
+11-28 09:17:37.503  1944  1944 W RemoteAppPredictionService: could not bind to Intent { act=android.service.appprediction.AppPredictionService cmp=com.google.android.as/com.google.android.apps.miphone.aiai.app.AiAiPredictionService } using flags 67108865
+11-28 09:17:37.750  1944  1984 E memtrack: Couldn't load memtrack module
+11-28 09:17:37.750  1944  1984 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:17:38.034  1944  2953 I ActivityManager: Force stopping com.example.deviceauth.noperm appid=10146 user=0: from pid 6800
+11-28 09:17:38.040  2393  2393 D CarrierSvcBindHelper: No carrier app for: 0
+11-28 09:17:38.069  1944  2953 I ActivityTaskManager: START u0 {flg=0x10000000 cmp=com.example.deviceauth.noperm/com.longbridge.nsh.AppActivity} from uid 0
+11-28 09:17:38.073  1944  2953 W InputReader: Device has associated, but no associated display id.
+11-28 09:17:38.073  1944  2953 I chatty  : uid=1000(system) Binder:1944_D identical 8 lines
+11-28 09:17:38.073  1944  2953 W InputReader: Device has associated, but no associated display id.
+11-28 09:17:38.082  1944  1980 E system_server: Invalid ID 0x00000000.
+11-28 09:17:38.090  1705  1705 D Zygote  : Forked child process 6810
+11-28 09:17:38.101  6810  6810 W viceauth.noper: Unexpected CPU variant for X86 using defaults: x86_64
+11-28 09:17:38.101  1944  1986 I ActivityManager: Start proc 6810:com.example.deviceauth.noperm/u0a146 for activity {com.example.deviceauth.noperm/com.longbridge.nsh.AppActivity}
+11-28 09:17:38.103  1737  1757 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 10371072
+11-28 09:17:38.145  1944  4088 W InputReader: Device has associated, but no associated display id.
+11-28 09:17:38.146  1944  4088 I chatty  : uid=1000(system) Binder:1944_11 identical 28 lines
+11-28 09:17:38.146  1944  4088 W InputReader: Device has associated, but no associated display id.
+11-28 09:17:38.148  1704  1704 I netd    : firewallSetUidRule(2, 10146, 1) <0.19ms>
+11-28 09:17:38.188  1752  2053 E SurfaceFlinger: ro.sf.lcd_density must be defined as a build property
+11-28 09:17:38.188  1752  2053 E SurfaceFlinger: ro.sf.lcd_density must be defined as a build property
+11-28 09:17:38.189  3185  3422 I DeviceStateChecker: DeviceStateChecker cancelled
+11-28 09:17:38.189  3185  3419 I MicroDetector: Keeping mic open: false
+11-28 09:17:38.192  3185  3614 I AudioController: internalShutdown
+11-28 09:17:38.192  6810  6810 W viceauth.noper: Accessing hidden method Landroid/view/Window;->getInsetsController()Landroid/view/WindowInsetsController; (blacklist, linking, denied)
+11-28 09:17:38.193  3185  4828 I MicroRecognitionRunner: Stopping hotword detection.
+11-28 09:17:38.196  6810  6810 W viceauth.noper: Accessing hidden method Landroid/view/WindowInsets$Type;->systemBars()I (blacklist, linking, denied)
+11-28 09:17:38.199  6810  6810 W viceauth.noper: Accessing hidden method Landroid/view/WindowInsets$Type;->systemBars()I (blacklist, linking, denied)
+11-28 09:17:38.204  3185  3614 I MicrophoneInputStream: mic_close  SR : 16000 CC : 16 SO : 1999
+11-28 09:17:38.204  3185  3614 E AudioSource: Stop listening is called on already closed AudioSource
+11-28 09:17:38.205  3185  3474 I MicroRecognitionRunner: Detection finished
+11-28 09:17:38.205  6810  6832 D libEGL  : Emulator has host GPU support, qemu.gles is set to 1.
+11-28 09:17:38.205  6810  6832 W libc    : Unable to set property "qemu.gles" to "1": connection failed; errno=13 (Permission denied)
+11-28 09:17:38.210  1944  1980 W InputReader: Device has associated, but no associated display id.
+11-28 09:17:38.210  1944  1980 I chatty  : uid=1000(system) android.anim identical 8 lines
+11-28 09:17:38.210  1944  1980 W InputReader: Device has associated, but no associated display id.
+11-28 09:17:38.229  1737  1757 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 10371072
+11-28 09:17:38.188  6810  6810 W RenderThread: type=1400 audit(0.0:20): avc: denied { write } for name="property_service" dev="tmpfs" ino=8448 scontext=u:r:untrusted_app:s0:c146,c256,c512,c768 tcontext=u:object_r:property_socket:s0 tclass=sock_file permissive=0 app=com.example.deviceauth.noperm
+11-28 09:17:38.289  6810  6832 D libEGL  : loaded /vendor/lib64/egl/libEGL_emulation.so
+11-28 09:17:38.290  6810  6832 D libEGL  : loaded /vendor/lib64/egl/libGLESv1_CM_emulation.so
+11-28 09:17:38.290  6810  6832 D libEGL  : loaded /vendor/lib64/egl/libGLESv2_emulation.so
+11-28 09:17:38.351  2106  3572 W Nearby  : Failed attempt #3 out of 3 for RestoreDeviceName [CONTEXT service_id=49 ]
+11-28 09:17:38.351  2106  3572 W Nearby  : java.lang.IllegalStateException: BluetoothAdapter not ready yet!
+11-28 09:17:38.351  2106  3572 W Nearby  : 	at ajpy.d(:com.google.android.gms@202414023@20.24.14 (040800-319035315):2)
+11-28 09:17:38.351  2106  3572 W Nearby  : 	at ajpx.run(Unknown Source:0)
+11-28 09:17:38.351  2106  3572 W Nearby  : 	at bwuj.call(Unknown Source:0)
+11-28 09:17:38.351  2106  3572 W Nearby  : 	at bwuo.a(:com.google.android.gms@202414023@20.24.14 (040800-319035315):2)
+11-28 09:17:38.351  2106  3572 W Nearby  : 	at bwuo.a(:com.google.android.gms@202414023@20.24.14 (040800-319035315):9)
+11-28 09:17:38.351  2106  3572 W Nearby  : 	at ajpw.run(Unknown Source:0)
+11-28 09:17:38.351  2106  3572 W Nearby  : 	at java.lang.Thread.run(Thread.java:919)
+11-28 09:17:38.351  2106  3572 W Nearby  : 	at sow.run(Unknown Source:0)
+11-28 09:17:38.351  2106  3572 W Nearby  : 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1167)
+11-28 09:17:38.351  2106  3572 W Nearby  : 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:641)
+11-28 09:17:38.351  2106  3572 W Nearby  : 	at sux.run(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:17:38.351  2106  3572 W Nearby  : 	at java.lang.Thread.run(Thread.java:919)
+11-28 09:17:38.505  6810  6830 D HostConnection: HostConnection::get() New Host Connection established 0x747dd1672280, tid 6830
+11-28 09:17:38.520  6810  6830 D HostConnection: HostComposition ext ANDROID_EMU_CHECKSUM_HELPER_v1 ANDROID_EMU_native_sync_v2 ANDROID_EMU_dma_v1 ANDROID_EMU_direct_mem ANDROID_EMU_host_composition_v1 ANDROID_EMU_host_composition_v2 ANDROID_EMU_vulkan ANDROID_EMU_deferred_vulkan_commands ANDROID_EMU_vulkan_null_optional_strings ANDROID_EMU_vulkan_create_resources_with_requirements ANDROID_EMU_YUV_Cache ANDROID_EMU_vulkan_ignored_handles ANDROID_EMU_vulkan_free_memory_sync ANDROID_EMU_vulkan_shader_float16_int8 ANDROID_EMU_vulkan_async_queue_submit ANDROID_EMU_sync_buffer_data ANDROID_EMU_vulkan_async_qsri ANDROID_EMU_hwc_color_transform ANDROID_EMU_hwc_display_power_mode GL_OES_EGL_image_external_essl3 GL_OES_vertex_array_object GL_KHR_texture_compression_astc_ldr ANDROID_EMU_host_side_tracing ANDROID_EMU_gles_max_version_3_1 
+11-28 09:17:38.527  3185  3502 D EGL_emulation: eglMakeCurrent: 0xd491bc20: ver 3 1 (tinfo 0xd490fe30)
+11-28 09:17:38.530  6810  6830 W OpenGLRenderer: Failed to choose config with EGL_SWAP_BEHAVIOR_PRESERVED, retrying without...
+11-28 09:17:38.533  2647  3288 D EGL_emulation: eglMakeCurrent: 0x747dd168dfa0: ver 3 1 (tinfo 0x747dd1618760)
+11-28 09:17:38.534  6810  6830 D EGL_emulation: eglCreateContext: 0x747dd1672460: maj 3 min 1 rcv 4
+11-28 09:17:38.535  6810  6830 D EGL_emulation: eglMakeCurrent: 0x747dd1672460: ver 3 1 (tinfo 0x747dd1618580)
+11-28 09:17:38.536  6810  6830 E eglCodecCommon: glUtilsParamSize: unknow param 0x000082da
+11-28 09:17:38.536  6810  6830 E eglCodecCommon: glUtilsParamSize: unknow param 0x000082da
+11-28 09:17:38.552  1737  1757 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 10371072
+11-28 09:17:38.554  1608  1608 I hwservicemanager: getTransport: Cannot find entry android.hardware.graphics.mapper@3.0::IMapper/default in either framework or device manifest.
+11-28 09:17:38.554  6810  6830 W Gralloc3: mapper 3.x is not supported
+11-28 09:17:38.555  6810  6830 D HostConnection: createUnique: call
+11-28 09:17:38.556  6810  6830 D HostConnection: HostConnection::get() New Host Connection established 0x747dd1672640, tid 6830
+11-28 09:17:38.556  6810  6830 D HostConnection: HostComposition ext ANDROID_EMU_CHECKSUM_HELPER_v1 ANDROID_EMU_native_sync_v2 ANDROID_EMU_dma_v1 ANDROID_EMU_direct_mem ANDROID_EMU_host_composition_v1 ANDROID_EMU_host_composition_v2 ANDROID_EMU_vulkan ANDROID_EMU_deferred_vulkan_commands ANDROID_EMU_vulkan_null_optional_strings ANDROID_EMU_vulkan_create_resources_with_requirements ANDROID_EMU_YUV_Cache ANDROID_EMU_vulkan_ignored_handles ANDROID_EMU_vulkan_free_memory_sync ANDROID_EMU_vulkan_shader_float16_int8 ANDROID_EMU_vulkan_async_queue_submit ANDROID_EMU_sync_buffer_data ANDROID_EMU_vulkan_async_qsri ANDROID_EMU_hwc_color_transform ANDROID_EMU_hwc_display_power_mode GL_OES_EGL_image_external_essl3 GL_OES_vertex_array_object GL_KHR_texture_compression_astc_ldr ANDROID_EMU_host_side_tracing ANDROID_EMU_gles_max_version_3_1 
+11-28 09:17:38.557  6810  6830 D eglCodecCommon: allocate: Ask for block of size 0x1000
+11-28 09:17:38.557  6810  6830 D eglCodecCommon: allocate: ioctl allocate returned offset 0x3ff609000 size 0x2000
+11-28 09:17:38.580  1737  1757 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 10371072
+11-28 09:17:38.580  1737  1757 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 10371072
+11-28 09:17:38.600  6810  6830 D EGL_emulation: eglMakeCurrent: 0x747dd1672460: ver 3 1 (tinfo 0x747dd1618580)
+11-28 09:17:38.616  1944  1984 I ActivityTaskManager: Displayed com.example.deviceauth.noperm/com.longbridge.nsh.AppActivity: +546ms
+11-28 09:17:38.693  3185  3614 I PBSessionCacheImpl: Deleted sessionId[86678051111] from persistence.
+11-28 09:17:38.706  3185  3419 W SearchServiceCore: Abort, client detached.
+11-28 09:17:38.805  6810  6834 I nsh     : js: NSHDEVAUTH available none
+11-28 09:17:38.831  6810  6834 I nsh     : js: NSHDEVAUTH result notAvailable
+11-28 09:17:38.833  6810  6810 W viceauth.noper: Accessing hidden method Landroid/view/Window;->getInsetsController()Landroid/view/WindowInsetsController; (blacklist, linking, denied)
+11-28 09:17:38.833  6810  6810 W viceauth.noper: Accessing hidden method Landroid/view/Window;->getInsetsController()Landroid/view/WindowInsetsController; (blacklist, linking, denied)
+11-28 09:17:38.914  2127  2343 D EGL_emulation: eglMakeCurrent: 0x747dcf9e0720: ver 3 1 (tinfo 0x747d85477f40)
+11-28 09:17:38.977  2127  2343 I chatty  : uid=10116(com.android.systemui) RenderThread identical 3 lines
+11-28 09:17:39.005  2127  2343 D EGL_emulation: eglMakeCurrent: 0x747dcf9e0720: ver 3 1 (tinfo 0x747d85477f40)
+11-28 09:17:39.199  1944  1984 E memtrack: Couldn't load memtrack module
+11-28 09:17:39.199  1944  1984 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:17:39.267  1944  4784 D WificondControl: Scan result ready event
+11-28 09:17:39.972  1944  1984 E memtrack: Couldn't load memtrack module
+11-28 09:17:39.972  1944  1984 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:17:39.973  1944  1984 E memtrack: Couldn't load memtrack module
+11-28 09:17:39.973  1944  1984 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:17:39.975  1944  1984 E memtrack: Couldn't load memtrack module
+11-28 09:17:39.975  1944  1984 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:17:40.644  1944  1984 E memtrack: Couldn't load memtrack module
+11-28 09:17:40.644  1944  1984 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:17:40.647  1944  1984 E memtrack: Couldn't load memtrack module
+11-28 09:17:40.647  1944  1984 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:17:41.112  1944  1984 E memtrack: Couldn't load memtrack module
+11-28 09:17:41.112  1944  1984 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:17:42.611  2393  2393 D CarrierSvcBindHelper: No carrier app for: 0
+11-28 09:17:42.616  1944  2055 I InputReader: Reconfiguring input devices.  changes=0x00000010
+11-28 09:17:42.620  2496  3712 I Icing   : IndexChimeraService.getServiceInterface callingPackage=com.google.android.gms componentName=AppsCorpus serviceId=36
+11-28 09:17:42.621  2496  3424 I Icing   : updateResources: need to parse acek{com.google.android.gms}
+11-28 09:17:42.626  1944  1944 I Telecom : DefaultDialerCache: Refreshing default dialer for user 0: now com.android.dialer: CM.CCCR->CM.UECNT->CM.CCCR->CM.UECNT@ADY
+11-28 09:17:42.626  2106  6655 I Fitness : OnPackageChangedOperation got intent: Intent { act=android.intent.action.PACKAGE_CHANGED dat=package:com.google.android.gms flg=0x45000010 cmp=com.google.android.gms/.chimera.PersistentIntentOperationService (has extras) } [CONTEXT service_id=17 ]
+11-28 09:17:42.630  2106  6845 I Fitness : FitCleanupIntentOperation received Intent android.intent.action.PACKAGE_CHANGED [CONTEXT service_id=17 ]
+11-28 09:17:42.643  2496  3424 W Icing   : No valid account for uploading user actions
+11-28 09:17:42.650  2496  3424 I Icing   : Usage reports ok 1, Failed Usage reports 0, indexed 0, rejected 0
+11-28 09:17:42.752  2496  6840 I Vision  : Requesting optional module download of ocr.
+11-28 09:17:42.752  2496  6840 I Vision  : Exceeded maximum feature download tries for ocr
+11-28 09:17:42.752  2496  6840 W Vision  : Request of optional module download of ocr failed.
+11-28 09:17:42.753  2496  6840 I Vision  : Checking for download completion for 70636 -- ocr
+11-28 09:17:43.041  1944  4508 I ActivityManager: Killing 6009:com.google.android.projection.gearhead:projection/u0a111 (adj 975): empty #17
+11-28 09:17:43.068  5934  5934 D GH.CarClientManager: unregistered listener bof@66e738b
+11-28 09:17:43.068  5934  5934 I GH.HatsManager: HaTS feature flag is not enabled. Not stopping HatsManager.
+11-28 09:17:43.068  5934  5934 D GH.RatingPromptManager: Stopping RatingPromptManager.
+11-28 09:17:43.068  5934  5934 D GH.AutoLaunchPromptMgr: Stopping AutoLaunchPromptManager.
+11-28 09:17:43.068  5934  5934 D GH.FeedbackNotifManager: Stopping FeedbackNotificationManager.
+11-28 09:17:43.068  5934  5934 D GH.CarClientManager: stop
+11-28 09:17:43.068  5934  5934 D CAR.CLIENT: disconnect com.google.android.gms.car.CarClientImpl@160487f
+11-28 09:17:43.070  5934  5934 D CAR.CLIENT: tearDown com.google.android.gms.car.CarClientImpl@160487f
+11-28 09:17:43.071  5934  5934 I GH.SharedService: Shared Service destroyed
+11-28 09:17:43.076  6048  6071 W CAR.SERVICE: Binder died: com.google.android.projection.gearhead [CONTEXT service_id=13 ]
+11-28 09:17:43.077  1705  1705 I Zygote  : Process 6009 exited due to signal 9 (Killed)
+11-28 09:17:43.087  1944  1987 I libprocessgroup: Successfully killed process cgroup uid 10111 pid 6009 in 43ms
+11-28 09:17:43.590  1944  1984 E memtrack: Couldn't load memtrack module
+11-28 09:17:43.590  1944  1984 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:17:43.592  1944  1984 E memtrack: Couldn't load memtrack module
+11-28 09:17:43.592  1944  1984 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:17:43.593  1944  1984 E memtrack: Couldn't load memtrack module
+11-28 09:17:43.593  1944  1984 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:17:43.651  2496  2557 I Icing   : Indexing com.google.android.gms-apps from com.google.android.gms
+11-28 09:17:43.652  2496  2557 I Icing   : Indexing done com.google.android.gms-apps
+11-28 09:17:43.703  1944  4088 I ActivityManager: Killing 6048:com.google.android.gms:car/u0a117 (adj 985): empty #17
+11-28 09:17:43.717  1944  2530 W ActivityManager: Scheduling restart of crashed service com.google.android.gms/.car.CarService in 1000ms
+11-28 09:17:43.737  1705  1705 I Zygote  : Process 6048 exited due to signal 9 (Killed)
+11-28 09:17:43.747  1944  1987 I libprocessgroup: Successfully killed process cgroup uid 10117 pid 6048 in 43ms
+11-28 09:17:43.754  2106  6722 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:17:43.755  2106  5109 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:17:43.758  2106  6715 I LogUtils: [Places]: ?: PlacesBleScanner stop() [CONTEXT service_id=253 ]
+11-28 09:17:43.758  2106  2106 I BeaconBle: Scan : No clients left, canceling alarm. [CONTEXT service_id=111 ]
+11-28 09:17:43.758  2106  2106 I BeaconBle: Scan canceled successfully. [CONTEXT service_id=111 ]
+11-28 09:17:43.762  2106  6715 I PlacesLogger: [PlaceInferenceEngine]: [anon] Changed inference mode: 0 [CONTEXT service_id=253 ]
+11-28 09:17:43.763  2106  3500 W GCoreFlp: No location to return for getLastLocation()
+11-28 09:17:43.768  2106  2581 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:17:43.769  2106  2923 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:17:43.775  2106  2106 I GeofencerStateMachine: removeGeofences: removeRequest=RemoveGeofencingRequest[REMOVE_BY_PENDING_INTENT pendingIntent=PendingIntent[creatorPackage=com.google.android.gms], packageName=com.google.android.gms]
+11-28 09:17:44.725  1705  1705 D Zygote  : Forked child process 6848
+11-28 09:17:44.727  6848  6848 W android.gms:ca: Unexpected CPU variant for X86 using defaults: x86_64
+11-28 09:17:44.729  1944  1986 I ActivityManager: Start proc 6848:com.google.android.gms:car/u0a117 for service {com.google.android.gms/com.google.android.gms.car.CarService}
+11-28 09:17:44.736  1944  1984 E memtrack: Couldn't load memtrack module
+11-28 09:17:44.736  1944  1984 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:17:44.740  6848  6848 I android.gms:ca: The ClassLoaderContext is a special shared library.
+11-28 09:17:44.741  6848  6848 I chatty  : uid=10117 com.google.android.gms:car identical 2 lines
+11-28 09:17:44.742  6848  6848 I android.gms:ca: The ClassLoaderContext is a special shared library.
+11-28 09:17:44.756  6848  6848 W DynamiteModule: Local module descriptor class for providerinstaller not found.
+11-28 09:17:44.758  6848  6848 W ProviderHelper: Unknown dynamite feature providerinstaller
+11-28 09:17:44.759  6848  6848 I DynamiteModule: Considering local module providerinstaller:0 and remote module providerinstaller:0
+11-28 09:17:44.759  6848  6848 W ProviderInstaller: Failed to load providerinstaller module: No acceptable module found. Local version is 0 and remote version is 0.
+11-28 09:17:44.760  6848  6848 V NativeCrypto: Registering com/google/android/gms/org/conscrypt/NativeCrypto's 286 native methods...
+11-28 09:17:44.764  6848  6848 D NetworkSecurityConfig: Using Network Security Config from resource network_security_config debugBuild: false
+11-28 09:17:44.765  6848  6848 I ProviderInstaller: Installed default security provider GmsCore_OpenSSL
+11-28 09:17:44.767  6848  6848 I Safeboot: Checking safeboot...
+11-28 09:17:44.767  6848  6848 I Safeboot: Not entering safeboot; wrong process.
+11-28 09:17:44.805  6848  6848 I bezb    : Primes not initialized, returning default (no-op) Primes instance which will ignore all calls. Please call Primes.initialize(...) before using any Primes API.
+11-28 09:17:44.842  1944  1984 E memtrack: Couldn't load memtrack module
+11-28 09:17:44.842  1944  1984 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:17:44.846  6848  6848 I CAR.TEL.CarCall: creating a non-static CarCallMapper [CONTEXT service_id=13 ]
+11-28 09:17:44.846  6848  6848 I CAR.TEL.Service: Binding to InCallService [CONTEXT service_id=13 ]
+11-28 09:17:44.846  1944  2348 W ActivityManager: Unable to start service Intent { act=local_action cmp=com.google.android.gms/.car.InCallService2 } U=0: not found
+11-28 09:17:44.847  6848  6848 E CAR.TEL.Service: Failed to bind to InCallService [CONTEXT service_id=13 ]
+11-28 09:17:44.854  1944  2348 I ActivityManager: Killing 5934:com.google.android.projection.gearhead:shared/u0a111 (adj 985): empty #17
+11-28 09:17:44.869  6848  6848 I CAR.ANALYTICS: Flushing event queue to clearcut [CONTEXT service_id=13 ]
+11-28 09:17:44.904  6848  6848 I CAR.SERVICE: Skip, no clients bound. [CONTEXT service_id=13 ]
+11-28 09:17:44.904  6848  6848 I CAR.TEL.Service: Unbinding from InCallService [CONTEXT service_id=13 ]
+11-28 09:17:44.908  1944  2951 W ActivityManager: Unbind failed: could not find connection for android.os.BinderProxy@1c691b0
+11-28 09:17:44.908  6848  6848 I CAR.TEL.CarCall: clearCalls [CONTEXT service_id=13 ]
+11-28 09:17:44.908  6848  6848 I CAR.TEL.Service: Clearing calls during removePhone [CONTEXT service_id=13 ]
+11-28 09:17:44.917  1705  1705 I Zygote  : Process 5934 exited due to signal 9 (Killed)
+11-28 09:17:44.939  1944  1987 I libprocessgroup: Successfully killed process cgroup uid 10111 pid 5934 in 84ms

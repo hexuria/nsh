@@ -1,0 +1,2 @@
+{"service":"Fingerprint Manager","prints":[{"id":0,"count":1,"accept":0,"reject":0,"acquire":0,"lockout":0,"permanentLockout":0,"acceptCrypto":0,"rejectCrypto":0,"acquireCrypto":0,"lockoutCrypto":0,"permanentLockoutCrypto":0}]}
+HAL Deaths: 0

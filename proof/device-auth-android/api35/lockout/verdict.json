@@ -1,0 +1,6 @@
+{
+  "availability": "biometric",
+  "result": "lockedOut",
+  "crash": false,
+  "expected": "lockedOut"
+}

@@ -1,0 +1,11 @@
+[
+  {
+    "row": "no-support",
+    "app": "bio",
+    "action": "none",
+    "availability": "none",
+    "result": "notAvailable",
+    "crash": false,
+    "expected": "notAvailable"
+  }
+]

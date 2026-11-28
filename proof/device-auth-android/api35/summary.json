@@ -1,0 +1,65 @@
+[
+  {
+    "row": "noperm-launch",
+    "app": "noperm",
+    "action": "none",
+    "availability": "none",
+    "result": "notAvailable",
+    "crash": false,
+    "expected": "notAvailable"
+  },
+  {
+    "row": "no-enrollment",
+    "app": "bio",
+    "action": "none",
+    "availability": "none",
+    "result": "notAvailable",
+    "crash": false,
+    "expected": "notAvailable"
+  },
+  {
+    "row": "match",
+    "app": "bio",
+    "action": "match",
+    "availability": "biometric",
+    "result": "yes",
+    "crash": false,
+    "expected": "yes"
+  },
+  {
+    "row": "nonmatch",
+    "app": "bio",
+    "action": "nonmatch",
+    "availability": "biometric",
+    "result": "",
+    "crash": false,
+    "expected": ""
+  },
+  {
+    "row": "cancel",
+    "app": "bio",
+    "action": "cancel",
+    "availability": "biometric",
+    "result": "cancelled",
+    "crash": false,
+    "expected": "cancelled"
+  },
+  {
+    "row": "lockout",
+    "app": "bio",
+    "action": "lockout",
+    "availability": "biometric",
+    "result": "lockedOut",
+    "crash": false,
+    "expected": "lockedOut"
+  },
+  {
+    "row": "timeout",
+    "app": "bio",
+    "action": "timeout",
+    "availability": "biometric",
+    "result": "cancelled",
+    "crash": false,
+    "expected": "cancelled"
+  }
+]

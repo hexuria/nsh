@@ -1,0 +1,531 @@
+--------- beginning of main
+11-28 09:24:53.851  1694  2715 I A       : (REDACTED) Writing metadata key: %s, corpus: %s
+11-28 09:24:53.852  1694  2715 I A       : (REDACTED) Writing metadata key: %s, corpus: %s
+11-28 09:24:53.879  1694  2709 W MDD     : No download stage experiment ids found even though experiment info is set.
+11-28 09:24:53.902  1694  1910 I A       : (REDACTED) NGA Sync: MDD Task: %s done.
+11-28 09:24:53.903  1694  2715 D t       : Starting download: https://dl.google.com/mdi-serving/agsa-apa-bisto-hotword-models/20023/ed62ea940f5a5958c55577276e8511a01a19ea87
+11-28 09:24:53.903  1694  2715 V t       : Is http uri, downloading (uri: https://dl.google.com/mdi-serving/agsa-apa-bisto-hotword-models/20023/ed62ea940f5a5958c55577276e8511a01a19ea87)
+11-28 09:24:53.903  1694  1910 I A       : (REDACTED) NGA Sync: isNgaSyncEnabled: %s; enableFileGroupPopulator: %s; requiresMddAssets: %s
+11-28 09:24:53.903  1694  2704 D t       : Starting download: https://dl.google.com/mdi-serving/agsa-apa-bisto-hotword-models/20023/9ddd15509ef1423e75c283efb4659f475c74ee60
+11-28 09:24:53.903  1694  2704 V t       : Is http uri, downloading (uri: https://dl.google.com/mdi-serving/agsa-apa-bisto-hotword-models/20023/9ddd15509ef1423e75c283efb4659f475c74ee60)
+11-28 09:24:53.903  1694  2255 W SearchServiceCore: Abort, client detached.
+11-28 09:24:53.903  1694  2255 W SearchServiceCore: Abort, client detached.
+11-28 09:24:53.906  1694  2709 I t       : Request is already being executed for key: /data/user/0/com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834711
+11-28 09:24:53.909  1694  2709 I t       : Request is already being executed for key: /data/user/0/com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834712
+11-28 09:24:53.909  1694  2709 I t       : Request is already being executed for key: /data/user/0/com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834703
+11-28 09:24:53.910  1694  2709 I t       : Request is already being executed for key: /data/user/0/com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834709
+11-28 09:24:53.910  1694  2709 I t       : Request is already being executed for key: /data/user/0/com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834710
+11-28 09:24:53.916  1694  2709 I t       : Request is already being executed for key: /data/user/0/com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834708
+11-28 09:24:53.916  1694  2709 I t       : Request is already being executed for key: /data/user/0/com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834713
+11-28 09:24:53.916  1694  2709 I t       : Request is already being executed for key: /data/user/0/com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834702
+11-28 09:24:53.924  1694  2709 E MDD     : FileGroupManager downloadFileGroup apa_bisto_hotword_models com.google.android.googlequicksearchbox can't finish!
+11-28 09:24:53.924  1694  2709 E MDD     : FileGroupManager: Expecting DownloadException's in AggregateException
+11-28 09:24:53.924  1694  2709 E MDD     : FileGroupManager: Expecting DownloadException's in AggregateException
+11-28 09:24:53.925  1694  2709 E MDD     : FileGroupManager downloadFileGroup smart_dictation_policy_config_group com.google.android.googlequicksearchbox can't finish!
+11-28 09:24:53.925  1694  2709 E MDD     : FileGroupManager: Expecting DownloadException's in AggregateException
+11-28 09:24:53.925  1694  2709 W MDD     : No download stage experiment ids found even though experiment info is set.
+11-28 09:24:53.926  1694  2709 E MDD     : FileGroupManager downloadFileGroup apa_lightweight_tokens com.google.android.googlequicksearchbox can't finish!
+11-28 09:24:53.926  1694  2709 E MDD     : FileGroupManager: Expecting DownloadException's in AggregateException
+11-28 09:24:53.927  1694  2704 E MDD     : DownloadProgressMonitor: Can't find file group for uri: android://com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834712
+11-28 09:24:53.929  1694  2701 D t       : Starting download: https://www.gstatic.com/federated_assistant/poliy_config_smart_dictation-v598965937.binarypb
+11-28 09:24:53.929  1694  2701 V t       : Is http uri, downloading (uri: https://www.gstatic.com/federated_assistant/poliy_config_smart_dictation-v598965937.binarypb)
+11-28 09:24:53.933  1694  2709 E MDD     : FileGroupManager downloadFileGroup apa_head_suggest com.google.android.googlequicksearchbox can't finish!
+11-28 09:24:53.933  1694  2715 E MDD     : DownloadProgressMonitor: Can't find file group for uri: android://com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834711
+11-28 09:24:53.933  1694  2709 E MDD     : FileGroupManager: Expecting DownloadException's in AggregateException
+11-28 09:24:53.935  1694  2704 D t       : Starting download: https://www.gstatic.com/mdi-serving/299/7e594def911311b4a1008abe8453a00c296dab16
+11-28 09:24:53.935  1694  2704 V t       : Is http uri, downloading (uri: https://www.gstatic.com/mdi-serving/299/7e594def911311b4a1008abe8453a00c296dab16)
+11-28 09:24:53.937  1694  2709 E MDD     : FileGroupManager downloadFileGroup hotword_model_en-US_okhey com.google.android.googlequicksearchbox can't finish!
+11-28 09:24:53.937  1694  2709 E MDD     : FileGroupManager: Expecting DownloadException's in AggregateException
+11-28 09:24:53.941  1694  2701 E MDD     : DownloadProgressMonitor: Can't find file group for uri: android://com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834703
+11-28 09:24:53.943  1694  2715 D t       : Starting download: https://dl.google.com/mdi-serving/agsa-apa-head-suggest/13542/f7c7cce868a52e786747bbb1abd6b4de7a5044f1
+11-28 09:24:53.943  1694  2715 V t       : Is http uri, downloading (uri: https://dl.google.com/mdi-serving/agsa-apa-head-suggest/13542/f7c7cce868a52e786747bbb1abd6b4de7a5044f1)
+--------- beginning of system
+11-28 09:24:53.947   582  1555 W ActivityTaskManager: callingPackage for (uid=0, pid=4674) has no WPC
+11-28 09:24:53.948   582  1555 D CompatChangeReporter: Compat change id reported: 151861875; UID 10210; state: ENABLED
+11-28 09:24:53.948   582  1555 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_USER_ASPECT_RATIO_OVERRIDE
+11-28 09:24:53.948   582  1555 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_USER_ASPECT_RATIO_FULLSCREEN_OVERRIDE
+11-28 09:24:53.948   582  1555 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_ORIENTATION_OVERRIDE
+11-28 09:24:53.948   582  1555 V GrammaticalInflectionUtils: AttributionSource: AttributionSource { uid = 10210, packageName = null, attributionTag = null, token = android.os.Binder@6209cbb, deviceId = 0, next = null } does not have READ_SYSTEM_GRAMMATICAL_GENDER permission.
+11-28 09:24:53.949   582  1555 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_RESIZEABLE_ACTIVITY_OVERRIDES
+11-28 09:24:53.949   582  1555 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_MIN_ASPECT_RATIO_OVERRIDE
+11-28 09:24:53.950  1694  2704 E MDD     : DownloadProgressMonitor: Can't find file group for uri: android://com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834709
+11-28 09:24:53.951  1694  2709 E MDD     : FileGroupManager downloadFileGroup apa_hotword_model_config com.google.android.googlequicksearchbox can't finish!
+11-28 09:24:53.952  1694  2709 E MDD     : FileGroupManager: Expecting DownloadException's in AggregateException
+11-28 09:24:53.954  1694  2701 D t       : Starting download: https://www.gstatic.com/android-search/hotword/x_google/2dffe6834b5f79de5f001f1cc71b08ea/hotword.data
+11-28 09:24:53.954  1694  2701 V t       : Is http uri, downloading (uri: https://www.gstatic.com/android-search/hotword/x_google/2dffe6834b5f79de5f001f1cc71b08ea/hotword.data)
+11-28 09:24:53.955   582  1555 V SplashScreenExceptionList: SplashScreen checking exception for package com.example.deviceauth.bio (target sdk:35) -> false
+11-28 09:24:53.957  1694  2709 E MDD     : FileGroupManager downloadFileGroup fedass_policy_config_group com.google.android.googlequicksearchbox can't finish!
+11-28 09:24:53.957  1694  2709 E MDD     : FileGroupManager: Expecting DownloadException's in AggregateException
+11-28 09:24:53.961   582  1555 I ActivityTaskManager: START u0 {flg=0x10000000 cmp=com.example.deviceauth.bio/com.longbridge.nsh.AppActivity} with LAUNCH_MULTIPLE from uid 0 (BAL_ALLOW_ALLOWLISTED_UID) result code=0
+11-28 09:24:53.962   983  1027 V WindowManagerShell: Transition requested (#40): android.os.BinderProxy@d793dd3 TransitionRequestInfo { type = OPEN, triggerTask = TaskInfo{userId=0 taskId=12 displayId=0 isRunning=true baseIntent=Intent { flg=0x10000000 cmp=com.example.deviceauth.bio/com.longbridge.nsh.AppActivity } baseActivity=ComponentInfo{com.example.deviceauth.bio/com.longbridge.nsh.AppActivity} topActivity=ComponentInfo{com.example.deviceauth.bio/com.longbridge.nsh.AppActivity} origActivity=null realActivity=ComponentInfo{com.example.deviceauth.bio/com.longbridge.nsh.AppActivity} numActivities=1 lastActiveTime=99632 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{android.window.IWindowContainerToken$Stub$Proxy@1a7cd10} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=Rect(0, 136 - 0, 0) topActivityInfo=ActivityInfo{f4d6009 com.longbridge.nsh.AppActivity} launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=false isVisible=false isVisibleRequested=false isSleeping=false locusId=null displayAreaFeatureId=1 isTopActivityTransparent=false appCompatTaskInfo=AppCompatTaskInfo { topActivityInSizeCompat=false topActivityEligibleForLetterboxEducation= falseisLetterboxEducationEnabled= true isLetterboxDoubleTapEnabled= false topActivityEligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=1080 topActivityLetterboxHeight=2400 isUserFullscreenOverrideEnabled=false isSystemFullscreenOverrideEnabled=false cameraCompatTaskInfo=CameraCompatTaskInfo { cameraCompatControlState=hidden freeformCameraCompatMode=inactive}}}, pipTask = null, remoteTransition = null, displayChange = null, flags = 0, debugId = 40 }
+11-28 09:24:53.963   582  1555 D CompatChangeReporter: Compat change id reported: 309578419; UID 10210; state: ENABLED
+11-28 09:24:53.964  1254  1254 I TopTaskTracker: onTaskMovedToFront: (moved taskInfo to front) taskId=12, baseIntent=Intent { flg=0x10000000 cmp=com.example.deviceauth.bio/com.longbridge.nsh.AppActivity }
+11-28 09:24:53.964   582   608 V GrammaticalInflectionUtils: AttributionSource: AttributionSource { uid = 10210, packageName = null, attributionTag = null, token = android.os.Binder@6209cbb, deviceId = 0, next = null } does not have READ_SYSTEM_GRAMMATICAL_GENDER permission.
+11-28 09:24:53.965  1254  1254 W SplitSelectStateCtor: Missing session instanceIds
+11-28 09:24:53.965  1254  1254 D StatsLog: LAUNCHER_SPLIT_SELECTION_EXIT_INTERRUPTED
+11-28 09:24:53.966   983  1058 D SplashScreenView: Build android.window.SplashScreenView{fa4aa3c V.E...... ......ID 0,0-0,0}
+11-28 09:24:53.966   983  1058 D SplashScreenView: Icon: view: android.widget.ImageView{b62f3c5 V.ED..... ......I. 0,0-0,0 #1020504 android:id/splashscreen_icon_view} drawable: com.android.wm.shell.startingsurface.SplashscreenIconDrawableFactory$ImmobileIconDrawable@ec6011a size: 420
+11-28 09:24:53.966   983  1058 D SplashScreenView: Branding: view: android.view.View{2c0944b G.ED..... ......I. 0,0-0,0 #1020503 android:id/splashscreen_branding_view} drawable: null size w: 0 h: 0
+11-28 09:24:53.969   983  1027 D WindowManagerShell: setLauncherKeepClearAreaHeight: visible=false, height=527
+11-28 09:24:53.969   582  1708 I AppsFilter: interaction: PackageSetting{39483e com.android.microdroid.empty_payload/10202} -> PackageSetting{c12e8eb com.example.deviceauth.bio/10210} BLOCKED
+11-28 09:24:53.977   582   926 I AppWidgetServiceImpl: Received broadcast: android.intent.action.PACKAGE_UNSTOPPED on user 0
+11-28 09:24:53.977   582   926 I AppWidgetServiceImpl: Updating package stopped masked state for uid 10210 package com.example.deviceauth.bio isStopped false
+11-28 09:24:53.991   384   384 D Zygote  : Forked child process 4677
+11-28 09:24:53.991   582   618 I ActivityManager: Start proc 4677:com.example.deviceauth.bio/u0a210 for next-top-activity {com.example.deviceauth.bio/com.longbridge.nsh.AppActivity}
+11-28 09:24:53.999  4677  4677 I .deviceauth.bio: Using CollectorTypeCMC GC.
+11-28 09:24:54.000  4677  4677 W .deviceauth.bio: Unexpected CPU variant for x86: x86_64.
+11-28 09:24:54.000  4677  4677 W .deviceauth.bio: Known variants: atom, sandybridge, silvermont, goldmont, goldmont-plus, goldmont-without-sha-xsaves, tremont, kabylake, default
+11-28 09:24:54.002  4677  4677 E .deviceauth.bio: Not starting debugger since process cannot load the jdwp agent.
+11-28 09:24:54.003  4677  4677 D nativeloader: Load libframework-connectivity-tiramisu-jni.so using APEX ns com_android_tethering for caller /apex/com.android.tethering/javalib/framework-connectivity-t.jar: ok
+11-28 09:24:54.006   455   455 I BpBinder: onLastStrongRef automatically unlinking death recipients: 
+11-28 09:24:54.008  1694  2709 W MDD     : No download stage experiment ids found even though experiment info is set.
+11-28 09:24:54.008  1694  2701 E MDD     : DownloadProgressMonitor: Can't find file group for uri: android://com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834708
+11-28 09:24:54.009  1694  2715 E MDD     : DownloadProgressMonitor: Can't find file group for uri: android://com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834710
+11-28 09:24:54.045  4677  4677 D nativeloader: Configuring clns-7 for other apk /data/app/~~t7rCWhCiG99ppaY5fT-VeQ==/com.example.deviceauth.bio-lCoja95klHGIWh9rEPNLlg==/base.apk. target_sdk_version=35, uses_libraries=, library_path=/data/app/~~t7rCWhCiG99ppaY5fT-VeQ==/com.example.deviceauth.bio-lCoja95klHGIWh9rEPNLlg==/lib/x86_64:/data/app/~~t7rCWhCiG99ppaY5fT-VeQ==/com.example.deviceauth.bio-lCoja95klHGIWh9rEPNLlg==/base.apk!/lib/x86_64, permitted_path=/data:/mnt/expand:/data/user/0/com.example.deviceauth.bio
+11-28 09:24:54.046  4677  4677 D CompatChangeReporter: Compat change id reported: 202956589; UID 10210; state: ENABLED
+11-28 09:24:54.050  4677  4677 V GraphicsEnvironment: Currently set values for:
+11-28 09:24:54.051  4677  4677 V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+11-28 09:24:54.051  4677  4677 V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+11-28 09:24:54.051  4677  4677 V GraphicsEnvironment: Global.Settings values are invalid: number of packages: 0, number of values: 0
+11-28 09:24:54.051  4677  4677 V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+11-28 09:24:54.059   582  1555 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ENABLE_FAKE_FOCUS
+11-28 09:24:54.059   582  1555 D CompatChangeReporter: Compat change id reported: 324203798; UID 10210; state: ENABLED
+11-28 09:24:54.067   983  1906 V WindowManagerShell: onTransitionReady(transaction=2499670967286)
+11-28 09:24:54.069   983  1027 V WindowManagerShell: onTransitionReady (#40) android.os.BinderProxy@d793dd3: {id=40 t=OPEN f=0x0 trk=0 r=[0@Point(0, 0)] c=[{WCT{android.window.IWindowContainerToken$Stub$Proxy@f48371f} m=OPEN f=NONE leash=Surface(name=Task=12)/@0x2109a40 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0 taskParent=-1},{WCT{android.window.IWindowContainerToken$Stub$Proxy@3851a6c} m=TO_BACK f=SHOW_WALLPAPER leash=Surface(name=Task=1)/@0xd915d79 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0 taskParent=-1}]}
+11-28 09:24:54.069   983  1027 V WindowManagerShell: Playing animation for (#40) android.os.BinderProxy@d793dd3@0
+11-28 09:24:54.069   983  1027 V WindowManagerShell:  try handler com.android.wm.shell.transition.DefaultMixedHandler@476ab9b
+11-28 09:24:54.069   582   605 V WindowManager: Sent Transition (#40) createdAt=11-28 09:24:53.949 via request=TransitionRequestInfo { type = OPEN, triggerTask = TaskInfo{userId=0 taskId=12 displayId=0 isRunning=true baseIntent=Intent { flg=0x10000000 cmp=com.example.deviceauth.bio/com.longbridge.nsh.AppActivity } baseActivity=ComponentInfo{com.example.deviceauth.bio/com.longbridge.nsh.AppActivity} topActivity=ComponentInfo{com.example.deviceauth.bio/com.longbridge.nsh.AppActivity} origActivity=null realActivity=ComponentInfo{com.example.deviceauth.bio/com.longbridge.nsh.AppActivity} numActivities=1 lastActiveTime=99632 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{RemoteToken{921e051 Task{a182ecf #12 type=standard A=10210:com.example.deviceauth.bio}}} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=Rect(0, 136 - 0, 0) topActivityInfo=ActivityInfo{56b60b6 com.longbridge.nsh.AppActivity} launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=false isVisible=false isVisibleRequested=false isSleeping=false locusId=null displayAreaFeatureId=1 isTopActivityTransparent=false appCompatTaskInfo=AppCompatTaskInfo { topActivityInSizeCompat=false topActivityEligibleForLetterboxEducation= falseisLetterboxEducationEnabled= true isLetterboxDoubleTapEnabled= false topActivityEligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=1080 topActivityLetterboxHeight=2400 isUserFullscreenOverrideEnabled=false isSystemFullscreenOverrideEnabled=false cameraCompatTaskInfo=CameraCompatTaskInfo { cameraCompatControlState=hidden freeformCameraCompatMode=inactive}}}, pipTask = null, remoteTransition = null, displayChange = null, flags = 0, debugId = 40 }
+11-28 09:24:54.069   582  1708 W UserManagerService: Requested status bar icon for non-badged user 0
+11-28 09:24:54.069   582   605 V WindowManager:     startWCT=WindowContainerTransaction { changes = {} hops = [] errorCallbackToken=null taskFragmentOrganizer=null }
+11-28 09:24:54.069   582   605 V WindowManager:     info={id=40 t=OPEN f=0x0 trk=0 r=[0@Point(0, 0)] c=[
+11-28 09:24:54.069   582   605 V WindowManager:         {WCT{RemoteToken{921e051 Task{a182ecf #12 type=standard A=10210:com.example.deviceauth.bio}}} m=OPEN f=NONE leash=Surface(name=Task=12)/@0xfa3e2db sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0 taskParent=-1},
+11-28 09:24:54.069   582   605 V WindowManager:         {WCT{RemoteToken{4c7108e Task{39d952f #1 type=home}}} m=TO_BACK f=SHOW_WALLPAPER leash=Surface(name=Task=1)/@0xebe0693 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0 taskParent=-1}
+11-28 09:24:54.069   582   605 V WindowManager:     ]}
+11-28 09:24:54.070   983  1027 V WindowManagerShell:  try handler com.android.wm.shell.keyguard.KeyguardTransitionHandler@3b27b38
+11-28 09:24:54.070   983  1027 V WindowManagerShell:  try handler com.android.wm.shell.pip.PipTransition@9d9b711
+11-28 09:24:54.070   983  1027 V WindowManagerShell:  try handler com.android.wm.shell.activityembedding.ActivityEmbeddingController@fa05076
+11-28 09:24:54.070   983  1027 V WindowManagerShell:  try handler com.android.wm.shell.recents.RecentsTransitionHandler@10a6677
+11-28 09:24:54.070   983  1027 V ShellRecents: RecentsTransitionHandler.startAnimation: no controller found
+11-28 09:24:54.070   983  1027 V WindowManagerShell:  try handler com.android.wm.shell.splitscreen.StageCoordinator@3b012e4
+11-28 09:24:54.070   983  1027 V WindowManagerShell:  try handler com.android.wm.shell.transition.RemoteTransitionHandler@811b34d
+11-28 09:24:54.070   983  1027 V WindowManagerShell: Transition doesn't have explicit remote, search filters for match for {id=40 t=OPEN f=0x0 trk=0 r=[0@Point(0, 0)] c=[{WCT{android.window.IWindowContainerToken$Stub$Proxy@f48371f} m=OPEN f=NONE leash=Surface(name=Task=12)/@0x2109a40 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0 taskParent=-1},{WCT{android.window.IWindowContainerToken$Stub$Proxy@3851a6c} m=TO_BACK f=SHOW_WALLPAPER leash=Surface(name=Task=1)/@0xd915d79 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0 taskParent=-1}]}
+11-28 09:24:54.072   983  1027 V WindowManagerShell:  Checking filter Pair{{types=[] flags=0x0] notFlags=0x0 checks=[{atype=undefined independent=true modes=[OPEN,TO_FRONT] flags=IN_TASK_WITH_EMBEDDED_ACTIVITY mustBeTask=false order=ANY topActivity=ComponentInfo{com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity} launchCookie=null},{atype=undefined independent=true modes=[CLOSE,TO_BACK] flags=IN_TASK_WITH_EMBEDDED_ACTIVITY mustBeTask=false order=ANY topActivity=null launchCookie=null}]} RemoteTransition { remoteTransition = android.window.IRemoteTransition$Stub$Proxy@6de358a, appThread = android.app.IApplicationThread$Stub$Proxy@3a907fb, debugName = OverlaySwipeBack }}
+11-28 09:24:54.081  4677  4677 D CompatChangeReporter: Compat change id reported: 279646685; UID 10210; state: ENABLED
+11-28 09:24:54.082  4677  4677 D CompatChangeReporter: Compat change id reported: 309578419; UID 10210; state: ENABLED
+11-28 09:24:54.092   983  1027 V WindowManagerShell:  Checking filter Pair{{types=[] flags=0x0] notFlags=0x0 checks=[{atype=dream independent=true modes=[OPEN,TO_FRONT] flags=NONE mustBeTask=false order=ANY topActivity=null launchCookie=null},{atype=home independent=true modes=[CLOSE,TO_BACK] flags=NONE mustBeTask=false order=ANY topActivity=null launchCookie=null}]} RemoteTransition { remoteTransition = android.window.IRemoteTransition$Stub$Proxy@6891018, appThread = android.app.IApplicationThread$Stub$Proxy@5d35a71, debugName = LauncherToDream }}
+11-28 09:24:54.092   983  1027 V WindowManagerShell:  Checking filter Pair{{types=[] flags=0x0] notFlags=0x100 checks=[{atype=home independent=true modes=[OPEN,TO_FRONT] flags=NONE mustBeTask=false order=TOP topActivity=ComponentInfo{com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity} launchCookie=null},{atype=standard independent=true modes=[CLOSE,TO_BACK] flags=NONE mustBeTask=false order=ANY topActivity=null launchCookie=null}]} RemoteTransition { remoteTransition = android.window.IRemoteTransition$Stub$Proxy@4f22056, appThread = android.app.IApplicationThread$Stub$Proxy@97628d7, debugName = QuickstepLaunchHome }}
+11-28 09:24:54.092   983  1027 V WindowManagerShell:  Delegate animation for (#40) to null
+11-28 09:24:54.092   983  1027 V WindowManagerShell:  try handler com.android.wm.shell.transition.DefaultTransitionHandler@218da7c
+11-28 09:24:54.092   983  1027 V WindowManagerShell: start default transition animation, info = {id=40 t=OPEN f=0x0 trk=0 r=[0@Point(0, 0)] c=[{WCT{android.window.IWindowContainerToken$Stub$Proxy@f48371f} m=OPEN f=NONE leash=Surface(name=Task=12)/@0x2109a40 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0 taskParent=-1},{WCT{android.window.IWindowContainerToken$Stub$Proxy@3851a6c} m=TO_BACK f=SHOW_WALLPAPER leash=Surface(name=Task=1)/@0xd915d79 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0 taskParent=-1}]}
+11-28 09:24:54.093   983  1027 V WindowManagerShell: loadAnimation: anim=android.view.animation.AnimationSet@a43263b animAttr=0x13 type=OPEN isEntrance=false
+11-28 09:24:54.096   983  1027 V WindowManagerShell: loadAnimation: anim=android.view.animation.AnimationSet@433eb17 animAttr=0x12 type=OPEN isEntrance=true
+11-28 09:24:54.108   983  1027 V WindowManagerShell:  animated by com.android.wm.shell.transition.DefaultTransitionHandler@218da7c
+11-28 09:24:54.109   983  1027 W Looper  : Slow dispatch took 40ms wmshell.main h=android.os.Handler c=com.android.wm.shell.transition.Transitions$TransitionPlayerImpl$$ExternalSyntheticLambda0@b2158ed m=0
+11-28 09:24:54.109   983  1027 W Looper  : Slow delivery took 39ms wmshell.main h=android.os.Handler c=null m=1
+11-28 09:24:54.110   983  1027 W Looper  : Drained
+11-28 09:24:54.114  4677  4677 D nativeloader: Load /data/app/~~t7rCWhCiG99ppaY5fT-VeQ==/com.example.deviceauth.bio-lCoja95klHGIWh9rEPNLlg==/base.apk!/lib/x86_64/libnsh.so using ns clns-7 from class loader (caller=/data/app/~~t7rCWhCiG99ppaY5fT-VeQ==/com.example.deviceauth.bio-lCoja95klHGIWh9rEPNLlg==/base.apk): ok
+11-28 09:24:54.130  4677  4677 W HWUI    : Unknown dataspace 0
+11-28 09:24:54.168   582  1818 D CoreBackPreview: Window{c3540af u0 com.example.deviceauth.bio/com.longbridge.nsh.AppActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@b5ae445, mPriority=-1, mIsAnimationCallback=false}
+11-28 09:24:54.197   582  1555 D BiometricService: canAuthenticate: User=0, Caller=0, Authenticators=15
+11-28 09:24:54.198  1694  2704 D t       : Starting download: https://dl.google.com/mdi-serving/agsa-apa-hotword-model/3199/ffb81d3fa060005d3ffe33e46a81b491a7c24f1e
+11-28 09:24:54.198   582  1555 D BiometricService/PreAuthInfo: Package: com.example.deviceauth.bio Sensor ID: 0 Modality: 2 Status: 1
+11-28 09:24:54.198  1694  2704 V t       : Is http uri, downloading (uri: https://dl.google.com/mdi-serving/agsa-apa-hotword-model/3199/ffb81d3fa060005d3ffe33e46a81b491a7c24f1e)
+11-28 09:24:54.200   582  1555 D BiometricService/PreAuthInfo: Package: com.example.deviceauth.bio Sensor ID: 4 Modality: 8 Status: 7
+11-28 09:24:54.200   582  1555 D BiometricService/PreAuthInfo: getCanAuthenticateInternal Modality: 2 AuthenticatorStatus: 1
+11-28 09:24:54.200   582  1555 D AuthService: canAuthenticate, userId: 0, callingUserId: 0, authenticators: 15, result: 0
+11-28 09:24:54.212  4677  4690 I EGL_emulation: Opening libGLESv1_CM_emulation.so
+11-28 09:24:54.212  4677  4690 I EGL_emulation: Opening libGLESv2_emulation.so
+11-28 09:24:54.227   582  1555 D BiometricService: canAuthenticate: User=0, Caller=0, Authenticators=15
+11-28 09:24:54.228   582  1555 D BiometricService/PreAuthInfo: Package: com.example.deviceauth.bio Sensor ID: 0 Modality: 2 Status: 1
+11-28 09:24:54.229   582  1555 D BiometricService/PreAuthInfo: Package: com.example.deviceauth.bio Sensor ID: 4 Modality: 8 Status: 7
+11-28 09:24:54.229   582  1555 D BiometricService/PreAuthInfo: getCanAuthenticateInternal Modality: 2 AuthenticatorStatus: 1
+11-28 09:24:54.229   582  1555 D AuthService: canAuthenticate, userId: 0, callingUserId: 0, authenticators: 15, result: 0
+11-28 09:24:54.232  4677  4690 W HWUI    : Failed to choose config with EGL_SWAP_BEHAVIOR_PRESERVED, retrying without...
+11-28 09:24:54.238  1694  2704 E MDD     : DownloadProgressMonitor: Can't find file group for uri: android://com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834713
+11-28 09:24:54.239  4677  4690 W HWUI    : Failed to initialize 101010-2 format, error = EGL_SUCCESS
+11-28 09:24:54.278   983  1103 D EGL_emulation: app_time_stats: avg=282.77ms min=1.13ms max=1308.12ms count=6
+11-28 09:24:54.299  4677  4693 I nsh     : js: NSHDEVAUTH available biometric
+11-28 09:24:54.331  1694  2701 D t       : Starting download: https://www.gstatic.com/federated_assistant/policy_config_federated_hotword-v610555528.binarypb
+11-28 09:24:54.331  1694  2701 V t       : Is http uri, downloading (uri: https://www.gstatic.com/federated_assistant/policy_config_federated_hotword-v610555528.binarypb)
+11-28 09:24:54.351  1254  1762 D EGL_emulation: app_time_stats: avg=189.77ms min=4.91ms max=423.41ms count=5
+11-28 09:24:54.369  1694  2701 E MDD     : DownloadProgressMonitor: Can't find file group for uri: android://com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834702
+11-28 09:24:54.384  1694  2704 D t       : Starting download: https://www.gstatic.com/assistant/appintegration/models/1/662c5aa4617258c027708e2bb9323ead.binarypb
+11-28 09:24:54.384  1694  2704 V t       : Is http uri, downloading (uri: https://www.gstatic.com/assistant/appintegration/models/1/662c5aa4617258c027708e2bb9323ead.binarypb)
+11-28 09:24:54.396  1694  2715 D t       : Starting download: https://www.gstatic.com/assistant/appintegration/models/1/05a8f7c516a3ad6c26cc4161a3dd6ac6.binarypb
+11-28 09:24:54.396  1694  2715 V t       : Is http uri, downloading (uri: https://www.gstatic.com/assistant/appintegration/models/1/05a8f7c516a3ad6c26cc4161a3dd6ac6.binarypb)
+11-28 09:24:54.400  1694  2704 E MDD     : DownloadProgressMonitor: Can't find file group for uri: android://com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834700
+11-28 09:24:54.403  1694  2701 D t       : Starting download: https://dl.google.com/assistant/nga/1/4bce3720332aff95260f75ee29bbe97bd379e868.mddz
+11-28 09:24:54.403  1694  2701 V t       : Is http uri, downloading (uri: https://dl.google.com/assistant/nga/1/4bce3720332aff95260f75ee29bbe97bd379e868.mddz)
+11-28 09:24:54.409   983  1027 V WindowManagerShell: Transition animation finished (aborted=false), notifying core (#40) android.os.BinderProxy@d793dd3@0
+11-28 09:24:54.409  1694  2715 E MDD     : DownloadProgressMonitor: Can't find file group for uri: android://com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834701
+11-28 09:24:54.421   582   605 V WindowManager: Finish Transition (#40): created at 11-28 09:24:53.949 collect-started=0.024ms request-sent=11.755ms started=14.306ms ready=110.584ms sent=117.608ms finished=471.362ms
+11-28 09:24:54.421   983  1027 V WindowManagerShell: Track 0 became idle
+11-28 09:24:54.421   983  1027 V WindowManagerShell: All active transition animations finished
+11-28 09:24:54.423  1694  2704 D t       : Starting download: https://dl.google.com/assistant/nga/1/17d453d07f334b7d810f8e6e05dbd6001dc45eea.mddz
+11-28 09:24:54.423  1694  2704 V t       : Is http uri, downloading (uri: https://dl.google.com/assistant/nga/1/17d453d07f334b7d810f8e6e05dbd6001dc45eea.mddz)
+11-28 09:24:54.425  1292  4634 W CCTFlatFileLogStore: Excessive logging: 64 events, 126027 bytes from log source PHENOTYPE last 1s
+11-28 09:24:54.430  1254  1762 D EGL_emulation: app_time_stats: avg=193.37ms min=1.04ms max=1373.30ms count=9
+11-28 09:24:54.433   582  1708 W UserManagerService: Requested status bar icon for non-badged user 0
+11-28 09:24:54.436  1694  2701 E MDD     : DownloadProgressMonitor: Can't find file group for uri: android://com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834704_1d48ae4b292cd15bc945ae5ddedb9565d268f7e2
+11-28 09:24:54.438   582  1708 W UserManagerService: Requested status bar icon for non-badged user 0
+11-28 09:24:54.438  1694  2709 E SingleDataFileGroupPop: Failed to add file group 
+11-28 09:24:54.438  1694  2709 E PhFileGroupPop: Failed to add file group 
+11-28 09:24:54.438  1694  2709 E PhFileGroupPop: Failed to add file group 
+11-28 09:24:54.438  1694  2709 E PhFileGroupPop: Failed to add file group 
+11-28 09:24:54.438  1694  2709 E PhFileGroupPop: Failed to add file group 
+11-28 09:24:54.438  1694  2709 E PhFileGroupPop: Failed to add file group 
+11-28 09:24:54.438  1694  2709 E PhFileGroupPop: Failed to add file group 
+11-28 09:24:54.438  1694  2709 E PhFileGroupPop: Failed to add file group 
+11-28 09:24:54.438  1694  2709 E PhFileGroupPop: Failed to add file group 
+11-28 09:24:54.439  1694  2709 I A       : Scheduling next refresh
+11-28 09:24:54.439  1694  2709 I A       : Scheduling next refresh
+11-28 09:24:54.439  1694  2709 I A       : Scheduling next refresh
+11-28 09:24:54.439  1694  2709 I A       : Scheduling next refresh
+11-28 09:24:54.439  1694  2709 I A       : Scheduling next refresh
+11-28 09:24:54.439  1694  2709 E SingleDataFileGroupPop: Failed to add file group 
+11-28 09:24:54.439  1694  2709 I ZipLPPopulator: #scheduleLanguagePackDeletion
+11-28 09:24:54.439  1694  2709 I ZipLPPopulator: com.google.common.f.w: MEDIUM
+11-28 09:24:54.439  1694  2709 I ZipLPPopulator: 	at com.google.android.libraries.speech.b.b.k.aj.b(PG:22)
+11-28 09:24:54.439  1694  2709 I ZipLPPopulator: 	at com.google.android.libraries.mdi.download.gg.y(PG:24)
+11-28 09:24:54.439  1694  2709 I ZipLPPopulator: 	at com.google.android.libraries.mdi.download.dp.apply(PG:5)
+11-28 09:24:54.439  1694  2709 I ZipLPPopulator: 	at com.google.apps.tiktok.tracing.ff.apply(PG:13)
+11-28 09:24:54.439  1694  2709 I ZipLPPopulator: 	at com.google.common.util.concurrent.h.e(PG:3)
+11-28 09:24:54.439  1694  2709 I ZipLPPopulator: 	at com.google.common.util.concurrent.j.run(PG:42)
+11-28 09:24:54.439  1694  2709 I ZipLPPopulator: 	at com.google.common.util.concurrent.dl.run(PG:76)
+11-28 09:24:54.439  1694  2709 I ZipLPPopulator: 	at com.google.android.libraries.k.x.run(PG:3)
+11-28 09:24:54.439  1694  2709 I ZipLPPopulator: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1145)
+11-28 09:24:54.439  1694  2709 I ZipLPPopulator: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:644)
+11-28 09:24:54.439  1694  2709 I ZipLPPopulator: 	at com.google.android.libraries.k.b.run(PG:6)
+11-28 09:24:54.439  1694  2709 I ZipLPPopulator: 	at java.lang.Thread.run(Thread.java:1012)
+11-28 09:24:54.439  1694  2709 I ZipLPPopulator: 	at com.google.android.libraries.k.d.b.run(PG:74)
+11-28 09:24:54.439  1694  2709 I ZipLPPopulator: #addNewFileGroups
+11-28 09:24:54.439  1694  2709 I A       : #getDownloadableLanguagePacks
+11-28 09:24:54.439  1694  2709 I A       : (REDACTED) Loaded languagepack (LP) flag value from latest config %s: %s
+11-28 09:24:54.440  1694  1910 I LPRequestState: (REDACTED) [%s] #resolveDesiredLanguagePacks
+11-28 09:24:54.444  1694  1910 I A       : #getInstalledPackages
+11-28 09:24:54.445  1694  2709 I A       : (REDACTED) Download file group for language pack: %s
+11-28 09:24:54.445  1694  2709 W A       : (REDACTED) Locale %s is not compatible, please check manifest exists
+11-28 09:24:54.446  1694  2709 I A       : getLocaleToModelSpecsMap
+11-28 09:24:54.449  1694  2709 I A       : Fetching latest config from MDD...
+11-28 09:24:54.449  1694  2709 I A       : (REDACTED) Found map of size: %d
+11-28 09:24:54.449  1694  2709 I HotwordModelPopulator: (REDACTED) #updateHotwordFileGroup group name: %s, raw locale: %s, locale: %s
+11-28 09:24:54.451  1694  2709 I A       : getLocaleToModelSpecsMap
+11-28 09:24:54.451  1694  2709 I A       : Fetching latest config from MDD...
+11-28 09:24:54.451  1694  2709 I A       : (REDACTED) Found map of size: %d
+11-28 09:24:54.451  1694  2709 I HotwordModelPopulator: (REDACTED) #updateHotwordFileGroup group name: %s, raw locale: %s, locale: %s
+11-28 09:24:54.455  1694  2704 E MDD     : DownloadProgressMonitor: Can't find file group for uri: android://com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834705_a64a3f98d26fa7e7180cd6d29bf44fced216fc32
+11-28 09:24:54.456  1694  2709 D PhFileGroupPop: Added file groups assistant_appintegration_appactions_config
+11-28 09:24:54.466  1694  2715 D t       : Starting download: https://dl.google.com/assistant/nga/1/c11ffd9ddd4f0c6433a5cb07a437812b735fa547.mddz
+11-28 09:24:54.468  1694  2715 V t       : Is http uri, downloading (uri: https://dl.google.com/assistant/nga/1/c11ffd9ddd4f0c6433a5cb07a437812b735fa547.mddz)
+11-28 09:24:54.500  1694  2715 E MDD     : DownloadProgressMonitor: Can't find file group for uri: android://com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834706_5e9da2701f510020f2592c1e5b468922569445d7
+11-28 09:24:54.577  1694  2704 D t       : Starting download: https://dl.google.com/assistant/nga/1/1658155c551c182a9c9cbdff0bc6cd4293920bc3.mddz
+11-28 09:24:54.577  1694  2704 V t       : Is http uri, downloading (uri: https://dl.google.com/assistant/nga/1/1658155c551c182a9c9cbdff0bc6cd4293920bc3.mddz)
+11-28 09:24:54.579  1694  2709 D PhFileGroupPop: Added file groups fedass_policy_config_group
+11-28 09:24:54.609  1694  2704 E MDD     : DownloadProgressMonitor: Can't find file group for uri: android://com.google.android.googlequicksearchbox/files/datadownload/shared/public/datadownloadfile_1795857834707_b56351a773b9354cf1ebcacf86f309b6489173ac
+--------- beginning of kernel
+11-28 09:24:54.965     0     0 I servicemanager: Caller(pid=4677,uid=10210,sid=u:r:untrusted_app:s0:c210,c256,c512,c768) Could not find android.hardware.graphics.allocator.IAllocator/default in the VINTF manifest. No alternative instances declared in VINTF.
+11-28 09:24:54.757   169   169 I hwservicemanager: getTransport: Cannot find entry android.hardware.graphics.mapper@4.0::IMapper/default in either framework or device VINTF manifest.
+11-28 09:24:54.757  4677  4690 I Gralloc4: mapper 4.x is not supported
+11-28 09:24:54.796  1254  1254 D VRI[NexusLauncherActivity]: visibilityChanged oldVisibility=true newVisibility=false
+11-28 09:24:54.804  1254  1254 D NexusLauncherModelDelegate: notifySmartspaceEvent: SmartspaceTargetEvent{mSmartspaceTarget=null, mSmartspaceActionId='null', mEventType=7}
+11-28 09:24:54.828  1694  2709 D PhFileGroupPop: Added file groups smart_dictation_policy_config_group
+11-28 09:24:54.830  1694  2709 D PhFileGroupPop: Added file groups tapas_cortex
+11-28 09:24:54.852  1694  2709 E SingleDataFileGroupPop: Failed to add file group 
+11-28 09:24:54.852  1694  2709 E PhFileGroupPop: Failed to add file group 
+11-28 09:24:54.852  1694  2709 E PhFileGroupPop: Failed to add file group 
+11-28 09:24:54.852  1694  2709 E PhFileGroupPop: Failed to add file group 
+11-28 09:24:54.852  1694  2709 E PhFileGroupPop: Failed to add file group 
+11-28 09:24:54.852  1694  2709 E PhFileGroupPop: Failed to add file group 
+11-28 09:24:54.852  1694  2709 E PhFileGroupPop: Failed to add file group 
+11-28 09:24:54.852  1694  2709 E PhFileGroupPop: Failed to add file group 
+11-28 09:24:54.852  1694  2709 E PhFileGroupPop: Failed to add file group 
+11-28 09:24:54.853  1694  2709 I A       : Throttled; returning pending refresh
+11-28 09:24:54.854  1694  2709 I A       : Throttled; returning pending refresh
+11-28 09:24:54.854  1694  2709 I A       : Throttled; returning pending refresh
+11-28 09:24:54.854  1694  2709 I A       : Throttled; returning pending refresh
+11-28 09:24:54.855  1694  2709 I A       : Throttled; returning pending refresh
+11-28 09:24:54.855  1694  2709 E SingleDataFileGroupPop: Failed to add file group 
+11-28 09:24:54.857  1694  2709 I ZipLPPopulator: #scheduleLanguagePackDeletion
+11-28 09:24:54.857  1694  2709 I ZipLPPopulator: com.google.common.f.w: MEDIUM
+11-28 09:24:54.857  1694  2709 I ZipLPPopulator: 	at com.google.android.libraries.speech.b.b.k.aj.b(PG:22)
+11-28 09:24:54.857  1694  2709 I ZipLPPopulator: 	at com.google.android.libraries.mdi.download.gg.y(PG:24)
+11-28 09:24:54.857  1694  2709 I ZipLPPopulator: 	at com.google.android.libraries.mdi.download.dp.apply(PG:5)
+11-28 09:24:54.857  1694  2709 I ZipLPPopulator: 	at com.google.apps.tiktok.tracing.ff.apply(PG:13)
+11-28 09:24:54.857  1694  2709 I ZipLPPopulator: 	at com.google.common.util.concurrent.h.e(PG:3)
+11-28 09:24:54.857  1694  2709 I ZipLPPopulator: 	at com.google.common.util.concurrent.j.run(PG:42)
+11-28 09:24:54.857  1694  2709 I ZipLPPopulator: 	at com.google.common.util.concurrent.dl.run(PG:76)
+11-28 09:24:54.857  1694  2709 I ZipLPPopulator: 	at com.google.android.libraries.k.x.run(PG:3)
+11-28 09:24:54.857  1694  2709 I ZipLPPopulator: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1145)
+11-28 09:24:54.857  1694  2709 I ZipLPPopulator: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:644)
+11-28 09:24:54.857  1694  2709 I ZipLPPopulator: 	at com.google.android.libraries.k.b.run(PG:6)
+11-28 09:24:54.857  1694  2709 I ZipLPPopulator: 	at java.lang.Thread.run(Thread.java:1012)
+11-28 09:24:54.857  1694  2709 I ZipLPPopulator: 	at com.google.android.libraries.k.d.b.run(PG:74)
+11-28 09:24:54.857  1694  2709 I ZipLPPopulator: #addNewFileGroups
+11-28 09:24:54.857  1694  2709 I A       : #getDownloadableLanguagePacks
+11-28 09:24:54.857  1694  2709 I A       : (REDACTED) Loaded languagepack (LP) flag value from latest config %s: %s
+11-28 09:24:54.860  1694  2013 I LPRequestState: (REDACTED) [%s] #resolveDesiredLanguagePacks
+11-28 09:24:54.861  1694  2013 I A       : #getInstalledPackages
+11-28 09:24:54.873  1694  2709 I A       : (REDACTED) Download file group for language pack: %s
+11-28 09:24:54.873  1694  2709 W A       : (REDACTED) Locale %s is not compatible, please check manifest exists
+11-28 09:24:54.873  1694  2709 I A       : getLocaleToModelSpecsMap
+11-28 09:24:54.873  1694  2709 I A       : Fetching latest config from MDD...
+11-28 09:24:54.874  1694  2709 I A       : (REDACTED) Found map of size: %d
+11-28 09:24:54.874  1694  2709 I HotwordModelPopulator: (REDACTED) #updateHotwordFileGroup group name: %s, raw locale: %s, locale: %s
+11-28 09:24:54.874  1694  2709 I A       : getLocaleToModelSpecsMap
+11-28 09:24:54.874  1694  2709 I A       : Fetching latest config from MDD...
+11-28 09:24:54.874  1694  2709 I A       : (REDACTED) Found map of size: %d
+11-28 09:24:54.874  1694  2709 I HotwordModelPopulator: (REDACTED) #updateHotwordFileGroup group name: %s, raw locale: %s, locale: %s
+11-28 09:24:54.877  1694  2013 I LPRequestState: (REDACTED) [%s] #resolveUnusedLanguagePacks
+11-28 09:24:54.877  1694  2013 I LPRequestState: (REDACTED) [%s] #resolveDesiredLanguagePacks
+11-28 09:24:54.877  1694  2709 D PhFileGroupPop: Added file groups assistant_appintegration_appactions_config
+11-28 09:24:54.878  1694  2709 D PhFileGroupPop: Added file groups fedass_policy_config_group
+11-28 09:24:54.878  1694  2709 D PhFileGroupPop: Added file groups smart_dictation_policy_config_group
+11-28 09:24:54.878  1694  2709 D PhFileGroupPop: Added file groups tapas_cortex
+11-28 09:24:54.883  1694  2013 I LPRequestState: (REDACTED) [%s] #resolveUnusedLanguagePacks
+11-28 09:24:54.883  1694  2013 I LPRequestState: (REDACTED) [%s] #resolveDesiredLanguagePacks
+11-28 09:24:54.883  1694  1912 I MicroModelsUtil: (REDACTED) #getHotwordModelFromMobstore [mobstoreUri: %s]
+11-28 09:24:54.883  1694  1913 I MicroModelsUtil: (REDACTED) #getHotwordModelFromMobstore [mobstoreUri: %s]
+11-28 09:24:54.884  1694  1902 I MicroModelsUtil: (REDACTED) #getHotwordModelFromMobstore [mobstoreUri: %s]
+11-28 09:24:54.888  1694  1902 I HotwordModelPopulator: (REDACTED) Updated file group for locale '%s' from location: %s. Download already finished. Version: %d
+11-28 09:24:54.889  1694  1889 I MicroModelsUtil: (REDACTED) #getHotwordModelFromMobstore [mobstoreUri: %s]
+11-28 09:24:54.889  1694  1902 I HotwordModelPopulator: (REDACTED) Updated file group for locale '%s' from location: %s. Download in progress, but older model found. Expected version: %d. Found version: %d
+11-28 09:24:54.889  1694  1912 I HotwordModelPopulator: (REDACTED) Updated file group for locale '%s' from location: %s. Download already finished. Version: %d
+11-28 09:24:54.889  1694  1913 I HotwordModelPopulator: (REDACTED) Updated file group for locale '%s' from location: %s. Download already finished. Version: %d
+11-28 09:24:54.889  1694  1912 I HotwordModelPopulator: (REDACTED) Updated file group for locale '%s' from location: %s. Download in progress, but older model found. Expected version: %d. Found version: %d
+11-28 09:24:54.889  1694  1913 I HotwordModelPopulator: (REDACTED) Updated file group for locale '%s' from location: %s. Download in progress, but older model found. Expected version: %d. Found version: %d
+11-28 09:24:54.890  1694  1889 I HotwordModelPopulator: (REDACTED) Updated file group for locale '%s' from location: %s. Download already finished. Version: %d
+11-28 09:24:54.890  1694  1889 I HotwordModelPopulator: (REDACTED) Updated file group for locale '%s' from location: %s. Download in progress, but older model found. Expected version: %d. Found version: %d
+11-28 09:24:54.919  4677  4677 I Choreographer: Skipped 42 frames!  The application may be doing too much work on its main thread.
+11-28 09:24:54.934   582   605 I ActivityTaskManager: Displayed com.example.deviceauth.bio/com.longbridge.nsh.AppActivity for user 0: +975ms
+11-28 09:24:54.964   582   889 D BiometricService/PreAuthInfo: Package: com.example.deviceauth.bio Sensor ID: 0 Modality: 2 Status: 1
+11-28 09:24:54.965   582   889 D BiometricService/PreAuthInfo: Package: com.example.deviceauth.bio Sensor ID: 4 Modality: 8 Status: 7
+11-28 09:24:54.965   582   889 D BiometricService/PreAuthInfo: getCanAuthenticateInternal Modality: 2 AuthenticatorStatus: 1
+11-28 09:24:54.965   582   889 D BiometricService: handleAuthenticate: modality(2), status(0), preAuthInfo: BiometricRequested: true, StrengthRequested: 15, CredentialRequested: false, Eligible:{0 }, Ineligible:{ID(4), oemStrength: 15, updatedStrength: 15, modality 8, state: 0, cookie: 0:7 }, CredentialAvailable: true,  requestId: 2 promptInfo.isIgnoreEnrollmentState: false
+11-28 09:24:54.965   582   889 D BiometricService: Creating authSession with authRequest: BiometricRequested: true, StrengthRequested: 15, CredentialRequested: false, Eligible:{0 }, Ineligible:{ID(4), oemStrength: 15, updatedStrength: 15, modality 8, state: 0, cookie: 0:7 }, CredentialAvailable: true, 
+11-28 09:24:54.965   582   889 D BiometricService/AuthSession: Creating AuthSession with: BiometricRequested: true, StrengthRequested: 15, CredentialRequested: false, Eligible:{0 }, Ineligible:{ID(4), oemStrength: 15, updatedStrength: 15, modality 8, state: 0, cookie: 0:7 }, CredentialAvailable: true, 
+11-28 09:24:54.966   582   889 V BiometricService/AuthSession: set to unknown state sensor: 0
+11-28 09:24:54.966   582   889 V BiometricService/AuthSession: waiting for cooking for sensor: 0
+11-28 09:24:54.977   582   937 D BiometricScheduler: [Added] {[19] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth.bio, cookie=206131091, requestId=2, userId=0}, new queue size: 1
+11-28 09:24:54.977   582   937 D BiometricScheduler: [Polled] {[19] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth.bio, cookie=206131091, requestId=2, userId=0}, State: 0
+11-28 09:24:54.977   582   937 D GestureAvailabilityTracker: Notifying gesture availability, active=false
+11-28 09:24:54.977   582   937 D BiometricScheduler: Waiting for cookie before starting: {[19] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth.bio, cookie=206131091, requestId=2, userId=0}, State: 4
+11-28 09:24:54.980   582   889 D BiometricService/Sensor: Sensor(0) matched cookie: 206131091
+11-28 09:24:54.980   582   889 D BiometricService/AuthSession: Remaining cookies: 0
+11-28 09:24:54.985   983   983 D AuthController: showAuthenticationDialog, authenticators: 15, sensorIds: 0 , credentialAllowed: false, requireConfirmation: false, operationId: 0, requestId: 2
+11-28 09:24:54.988   383   427 I netd    : tetherGetStats() -> {[]} <1.16ms>
+11-28 09:24:54.991   582   712 I ImeTracker: com.example.deviceauth.bio:f2bdb347: onRequestHide at ORIGIN_SERVER reason HIDE_UNSPECIFIED_WINDOW fromUser false
+11-28 09:24:54.992   582   712 I ImeTracker: com.example.deviceauth.bio:f2bdb347: onCancelled at PHASE_SERVER_SHOULD_HIDE
+11-28 09:24:55.000   983   983 E ThemeUtils: View class com.android.systemui.biometrics.BiometricPromptLottieViewWrapper is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+11-28 09:24:55.004   983   983 E ThemeUtils: View class com.android.systemui.biometrics.BiometricPromptLottieViewWrapper is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+11-28 09:24:55.005   983   983 D AuthController: userId: 0 mCurrentDialog: null newDialog: com.android.systemui.biometrics.AuthContainerView{df909d0 VFE...... .F....I. 0,0-0,0}
+11-28 09:24:55.007  1419  1419 I GoogleInputMethodService: GoogleInputMethodService.onFinishInput():3157 
+11-28 09:24:55.010  1419  1419 I GoogleInputMethodService: GoogleInputMethodService.updateDeviceLockedStatus():2248 repeatCheckTimes = 0, locked = false
+11-28 09:24:55.011  1419  1419 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1986 onStartInput(EditorInfo{EditorInfo{packageName=com.example.deviceauth.bio, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=0, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+11-28 09:24:55.014  1292  1292 D BoundBrokerSvc: onUnbind: Intent { act=com.google.android.gms.phenotype.service.START dat=chimera-action:/... cmp=com.google.android.gms/.chimera.PersistentApiService }
+11-28 09:24:55.014  1419  1419 I GoogleInputMethodService: GoogleInputMethodService.updateDeviceLockedStatus():2248 repeatCheckTimes = 1, locked = false
+11-28 09:24:55.015  1419  1419 I AndroidIME: InputBundleManager.loadActiveInputBundleId():450 loadActiveInputBundleId: und-Latn-x-password, password
+11-28 09:24:55.016   582  1555 W PackageConfigPersister: App-specific configuration not found for packageName: com.example.deviceauth.bio and userId: 0
+11-28 09:24:55.017  4677  4687 I HWUI    : Davey! duration=748ms; Flags=1, FrameTimelineVsyncId=30022, IntendedVsync=99826770564, Vsync=99826770564, InputEventId=0, HandleInputStart=99840093404, AnimationStart=99840094943, PerformTraversalsStart=99840096823, DrawStart=100529918530, FrameDeadline=99843437230, FrameInterval=99840090732, FrameStartTime=16666666, SyncQueued=100530605084, SyncStart=100549343870, IssueDrawCommandsStart=100550284012, SwapBuffers=100581264563, FrameCompleted=100593893690, DequeueBufferDuration=3442, QueueBufferDuration=1916800, GpuCompleted=100593893690, SwapBuffersCompleted=100586931392, DisplayPresentTime=0, CommandSubmissionCompleted=100581264563, 
+11-28 09:24:55.022  1292  1292 D BoundBrokerSvc: onUnbind: Intent { act=com.google.android.gms.scheduler.ACTION_PROXY_SCHEDULE dat=chimera-action:/... cmp=com.google.android.gms/.chimera.PersistentDirectBootAwareApiService }
+11-28 09:24:55.022  1694  1694 W JobService: onNetworkChanged() not implemented in com.google.android.apps.gsa.tasks.BackgroundTasksJobService. Must override in a subclass.
+11-28 09:24:55.022  1694  1694 W JobService: onNetworkChanged() not implemented in com.google.android.apps.gsa.tasks.BackgroundTasksJobService. Must override in a subclass.
+11-28 09:24:55.029   582   903 W IPCThreadState: Sending oneway calls to frozen process.
+11-28 09:24:55.029   582   903 W IPCThreadState: Sending oneway calls to frozen process.
+11-28 09:24:55.048  1292  2023 I ChimeraSrvcProxy: NullBinder for android.net.action.RECOMMEND_NETWORKS triggering remote TransactionTooLargeException due to Service without Chimera impl
+11-28 09:24:55.048  1292  2023 W .gms.persistent: Large reply transaction of 1056768 bytes, interface descriptor , code 1
+11-28 09:24:55.110  3643  3705 I BugleRcsEngine: handleMessage processing message:[NOTIFY_UPTIME_IGNORE_STATE_CHANGED] with [non-null]:RcsEngineImpl reference [CONTEXT log_prefix="RcsEngineImpl[DUAL_REG]:[d8f46022-7815]>Handler" thread_id=62 ]
+11-28 09:24:55.116  3643  3681 I BugleRcsEngine: Connected state: [1], networkType: [WIFI] [CONTEXT thread_id=57 ]
+11-28 09:24:55.132  3643  3705 I BugleRcsEngine: No RCS Configuration was found in Bugle for simID: redacted-pii:sim_id[chars:20,last3:897] [CONTEXT log_prefix="ProvisioningEngineDataRetriever" thread_id=62 ]
+11-28 09:24:55.161  1254  1254 D BaseDepthController: setSurface:
+11-28 09:24:55.161  1254  1254 D BaseDepthController: 	mWaitingOnSurfaceValidity: false
+11-28 09:24:55.161  1254  1254 D BaseDepthController: 	mSurface: null
+11-28 09:24:55.161  1254  1254 D BaseDepthController: mSurface is null and mCurrentBlur is: 0
+11-28 09:24:55.162  1254  1254 D StateManager: goToState - fromState: Normal, toState: Normal, partial trace:
+11-28 09:24:55.162  1254  1254 D StateManager: 	at com.android.launcher3.statemanager.StateManager.moveToRestState(go/retraceme 31f9979659277bb965985aff1272c33e3c3c9e755b77166d20a2465454178f2c:4)
+11-28 09:24:55.162  1254  1254 D StateManager: 	at com.android.launcher3.statemanager.StateManager.moveToRestState(go/retraceme 31f9979659277bb965985aff1272c33e3c3c9e755b77166d20a2465454178f2c:1)
+11-28 09:24:55.162  1254  1254 D StateManager: 	at com.android.launcher3.statemanager.StatefulActivity.onStop(go/retraceme 31f9979659277bb965985aff1272c33e3c3c9e755b77166d20a2465454178f2c:34)
+11-28 09:24:55.164  1254  1254 D StatsLog: LAUNCHER_ONSTOP
+11-28 09:24:55.164   582  1708 I AppWidgetServiceImpl: setAppWidgetHidden() 0
+11-28 09:24:55.167  1254  1254 D StatsLog: LAUNCHER_GOOGLE_SEARCH_RESTORE_LIST_SIZE_AFTER_ACTIVITY_RESTART
+11-28 09:24:55.170  1254  2047 D OneSearchSuggestProvider: Shut down the binder channel
+11-28 09:24:55.171  1254  1274 I IPCThreadState: oneway function results for code 2 on binder at 0x73f671687550 will be dropped but finished with status UNKNOWN_TRANSACTION
+11-28 09:24:55.214   582  1555 W AppOps  : Noting op not finished: uid 10181 pkg com.android.systemui code 24 startTime of in progress event=1795857815580
+11-28 09:24:55.219   582   693 D ActivityManager: freezing 987 com.google.android.permissioncontroller
+11-28 09:24:55.268   582   903 D InetDiagMessage: Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET, states=14
+11-28 09:24:55.269   582   903 D InetDiagMessage: Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET6, states=14
+11-28 09:24:55.269   582   903 D InetDiagMessage: Destroyed live tcp sockets for uids={10199} in 1ms
+11-28 09:24:55.302   383   427 I netd    : tetherGetStats() -> {[]} <3.41ms>
+11-28 09:24:55.306   582   894 D CompatChangeReporter: Compat change id reported: 297989574; UID 1000; state: ENABLED
+11-28 09:24:55.309   383   427 I netd    : bandwidthSetGlobalAlert(2097152) <0.20ms>
+11-28 09:24:55.314   383   427 I netd    : bandwidthRemoveInterfaceQuota(eth0) <0.89ms>
+11-28 09:24:55.315   383   427 I netd    : bandwidthSetInterfaceQuota(eth0, 9223372036854775807) <1.00ms>
+11-28 09:24:55.405   582   599 D CoreBackPreview: Window{534adee u0 BiometricPrompt}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@dd717dd, mPriority=0, mIsAnimationCallback=false}
+11-28 09:24:55.416   582   599 W InputManager-JNI: Input channel object 'e2e6a06 Splash Screen com.example.deviceauth.bio (client)' was disposed without first being removed with the input manager!
+11-28 09:24:55.443  1694  2013 I A       : Running throttled refresh
+11-28 09:24:55.443  1694  2013 I A       : Running throttled refresh
+11-28 09:24:55.443  1694  2013 I A       : Running throttled refresh
+11-28 09:24:55.443  1694  2013 I A       : Running throttled refresh
+11-28 09:24:55.443  1694  2013 I A       : Running throttled refresh
+11-28 09:24:55.446  1694  1912 W MDD     : GddFileGroupPopulator: Account was not provided, skipping private sync for corpus: GDD_APA_HEAD_SUGGEST, configuration: GddAgsaApaHeadSuggest
+11-28 09:24:55.449  1694  1902 W MDD     : GddFileGroupPopulator: Account was not provided, skipping private sync for corpus: GDD_APA_BISTO, configuration: GddAgsaApaBisto
+11-28 09:24:55.450  1694  1913 W MDD     : GddFileGroupPopulator: Account was not provided, skipping private sync for corpus: GDD_AIP_TOAST_QUALITY, configuration: GddAipToastQuality
+11-28 09:24:55.450  1694  1910 I A       : (REDACTED) Starting batch sync for corpora: %s
+11-28 09:24:55.450  1694  1902 W MDD     : GddFileGroupPopulator: Account was not provided, skipping private sync for corpus: GDD_APA_LIGHTWEIGHT_TOKENS, configuration: GddAgsaApaLightweightTokens
+11-28 09:24:55.450  1694  1912 W MDD     : GddFileGroupPopulator: Account was not provided, skipping private sync for corpus: GDD_APA_HOTWORD_MODEL, configuration: GddAgsaApaHotword
+11-28 09:24:55.450  1694  2013 I A       : (REDACTED) Starting batch sync for corpora: %s
+11-28 09:24:55.452  1694  1913 W A       : (REDACTED) Corpus: %s is disabled
+11-28 09:24:55.452  1694  1913 I AppStateUtil: (REDACTED) getting App Capabilities %s
+11-28 09:24:55.453  1694  1913 I DPContextParams: Building Device Properties.
+11-28 09:24:55.454  1694  2013 I A       : (REDACTED) Starting batch sync for corpora: %s
+11-28 09:24:55.454  1694  2013 I A       : (REDACTED) Starting batch sync for corpora: %s
+11-28 09:24:55.455  1694  1902 I AppStateUtil: (REDACTED) getting App Capabilities %s
+11-28 09:24:55.455  1694  1902 I AppStateUtil: (REDACTED) getting App Capabilities %s
+11-28 09:24:55.458  1694  1913 I DPContextParams: Building Device Properties.
+11-28 09:24:55.458  1694  1902 I DPContextParams: Building Device Properties.
+11-28 09:24:55.461  1694  2709 I A       : The GellerConfig is not present, returning null.
+11-28 09:24:55.461  1694  2709 I A       : (REDACTED) The GellerConfig is not present, defaulting isUploadEnabled for corpus %s to true.
+11-28 09:24:55.463  1694  2709 I A       : (REDACTED) The syncToken for corpus %s is %s.
+11-28 09:24:55.474   451   674 W APM::HwModule: getDeviceDescriptor: could not find HW module for device  (AUDIO_DEVICE_OUT_WIRED_HEADSET, 00000004) address 
+11-28 09:24:55.474   451   474 W APM::HwModule: getDeviceDescriptor: could not find HW module for device  (AUDIO_DEVICE_OUT_WIRED_HEADPHONE, 00000008) address 
+11-28 09:24:55.474   451   451 W APM::HwModule: getDeviceDescriptor: could not find HW module for device  (AUDIO_DEVICE_OUT_USB_HEADSET, 04000000) address 
+11-28 09:24:55.475   451   451 W APM::HwModule: getDeviceDescriptor: could not find HW module for device  (AUDIO_DEVICE_OUT_WIRED_HEADSET, 00000004) address 
+11-28 09:24:55.475   451   451 W APM::HwModule: getDeviceDescriptor: could not find HW module for device  (AUDIO_DEVICE_OUT_WIRED_HEADPHONE, 00000008) address 
+11-28 09:24:55.475   451   451 W APM::HwModule: getDeviceDescriptor: could not find HW module for device  (AUDIO_DEVICE_OUT_USB_HEADSET, 04000000) address 
+11-28 09:24:55.489  1694  2704 I A       : The GellerConfig is not present, returning null.
+11-28 09:24:55.489  1694  2704 I A       : (REDACTED) The GellerConfig is not present, defaulting isUploadEnabled for corpus %s to true.
+11-28 09:24:55.489  1694  2704 I A       : (REDACTED) The syncToken for corpus %s is %s.
+11-28 09:24:55.494  1694  2709 D TrafficStats: tagSocket(129) with statsTag=0x0, statsUid=-1
+11-28 09:24:55.496   451   451 W APM::HwModule: getDeviceDescriptor: could not find HW module for device  (AUDIO_DEVICE_OUT_WIRED_HEADSET, 00000004) address 
+11-28 09:24:55.496   451   674 W APM::HwModule: getDeviceDescriptor: could not find HW module for device  (AUDIO_DEVICE_OUT_WIRED_HEADPHONE, 00000008) address 
+11-28 09:24:55.496   451   674 W APM::HwModule: getDeviceDescriptor: could not find HW module for device  (AUDIO_DEVICE_OUT_USB_HEADSET, 04000000) address 
+11-28 09:24:55.496  1694  2704 D TrafficStats: tagSocket(130) with statsTag=0x0, statsUid=-1
+11-28 09:24:55.497  1694  2701 I A       : The GellerConfig is not present, returning null.
+11-28 09:24:55.497  1694  2701 I A       : (REDACTED) The GellerConfig is not present, defaulting isUploadEnabled for corpus %s to true.
+11-28 09:24:55.499  1694  2701 I A       : (REDACTED) The syncToken for corpus %s is %s.
+11-28 09:24:55.504  1694  2701 D TrafficStats: tagSocket(133) with statsTag=0x0, statsUid=-1
+11-28 09:24:55.510  1694  2715 I A       : The GellerConfig is not present, returning null.
+11-28 09:24:55.510  1694  2715 I A       : (REDACTED) The GellerConfig is not present, defaulting isUploadEnabled for corpus %s to true.
+11-28 09:24:55.512  1694  2715 I A       : (REDACTED) The syncToken for corpus %s is %s.
+11-28 09:24:55.513  1694  2715 D TrafficStats: tagSocket(246) with statsTag=0x0, statsUid=-1
+11-28 09:24:55.572  1694  2717 I A       : (REDACTED) Writing metadata key: %s, corpus: %s
+11-28 09:24:55.573  1694  2717 I A       : (REDACTED) Writing metadata key: %s, corpus: %s
+11-28 09:24:55.596  1694  4623 I A       : (REDACTED) Writing metadata key: %s, corpus: %s
+11-28 09:24:55.596  1694  4623 I A       : (REDACTED) Writing metadata key: %s, corpus: %s
+11-28 09:24:55.599  1694  2717 I A       : (REDACTED) Writing metadata key: %s, corpus: %s
+11-28 09:24:55.599  1694  2717 I A       : (REDACTED) Writing metadata key: %s, corpus: %s
+11-28 09:24:55.600  1694  2704 I A       : (REDACTED) Writing metadata key: %s, corpus: %s
+11-28 09:24:55.600  1694  2704 I A       : (REDACTED) Writing metadata key: %s, corpus: %s
+11-28 09:24:55.608  1694  1910 I A       : (REDACTED) NGA Sync: MDD Task: %s done.
+11-28 09:24:55.608  1694  2013 I A       : (REDACTED) NGA Sync: MDD Task: %s done.
+11-28 09:24:55.609  1694  1910 I A       : (REDACTED) NGA Sync: isNgaSyncEnabled: %s; enableFileGroupPopulator: %s; requiresMddAssets: %s
+11-28 09:24:55.609  1694  2013 I A       : (REDACTED) NGA Sync: isNgaSyncEnabled: %s; enableFileGroupPopulator: %s; requiresMddAssets: %s
+11-28 09:24:55.610  1694  2255 W SearchServiceCore: Abort, client detached.
+11-28 09:24:55.698   582   712 I ImeTracker: com.android.systemui:63fa2db7: onRequestHide at ORIGIN_SERVER reason HIDE_UNSPECIFIED_WINDOW fromUser false
+11-28 09:24:55.698   582   712 I ImeTracker: com.android.systemui:63fa2db7: onCancelled at PHASE_SERVER_SHOULD_HIDE
+11-28 09:24:55.700  1419  1419 I GoogleInputMethodService: GoogleInputMethodService.onFinishInput():3157 
+11-28 09:24:55.701  1419  1419 I GoogleInputMethodService: GoogleInputMethodService.updateDeviceLockedStatus():2248 repeatCheckTimes = 0, locked = false
+11-28 09:24:55.701  1419  1419 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1986 onStartInput(EditorInfo{EditorInfo{packageName=com.android.systemui, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=0, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+11-28 09:24:55.707  1419  1419 I GoogleInputMethodService: GoogleInputMethodService.updateDeviceLockedStatus():2248 repeatCheckTimes = 1, locked = false
+11-28 09:24:55.707  1419  1419 I AndroidIME: InputBundleManager.loadActiveInputBundleId():450 loadActiveInputBundleId: und-Latn-x-password, password
+11-28 09:24:55.708   582   599 W PackageConfigPersister: App-specific configuration not found for packageName: com.android.systemui and userId: 0
+11-28 09:24:55.870   983  1103 D EGL_emulation: app_time_stats: avg=309.41ms min=44.33ms max=1209.46ms count=5
+11-28 09:24:55.871   582   889 D BiometricService: handleOnDialogAnimatedIn
+11-28 09:24:55.871   582   889 V BiometricService/AuthSession: Starting sensor: 0
+11-28 09:24:55.871   582   937 D BiometricScheduler: [Started] {[19] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth.bio, cookie=206131091, requestId=2, userId=0}
+11-28 09:24:55.871   582   937 D BiometricStateCallback: State updated from 0 to 3, client {[19] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth.bio, cookie=206131091, requestId=2, userId=0}
+11-28 09:24:55.872   582   937 D Biometrics/AuthenticationClient: Requesting auth for com.example.deviceauth.bio
+11-28 09:24:55.872   983  2002 D BiometricStatusRepositoryImpl: authenticationState updated: Started(biometricSourceType=FINGERPRINT, requestReason=BiometricPromptAuthentication)
+11-28 09:24:55.872   942   946 D fingerprint-service.ranchu: 0x73af04e270d0:authenticate:229: AUTHENTICATING operationId=0
+11-28 09:24:55.875   582   937 V ALSProbe: Enable ALS: 122830426
+11-28 09:24:55.875   582   937 V BiometricSchedulerOperation: started: {[19] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth.bio, cookie=206131091, requestId=2, userId=0}, State: 2
+11-28 09:24:55.875   582   937 D BiometricScheduler: [Started] Prepared client: {[19] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth.bio, cookie=206131091, requestId=2, userId=0}, State: 2
+11-28 09:24:55.946  1254  1762 D EGL_emulation: app_time_stats: avg=208.64ms min=18.27ms max=854.57ms count=7
+11-28 09:24:56.116   983   983 W FrameTracker: Missed App frame:UNKNOWN: 10, 30757, 0, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 09:24:56.116   983   983 W FrameTracker: Missed SF frame:UNKNOWN: 10, 30757, 0, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 09:24:56.116   983   983 W FrameTracker: Missing HWUI jank callback for vsyncId: 30757, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 09:24:56.116   983   983 W FrameTracker: Missed App frame:UNKNOWN: 74, 30786, 0, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 09:24:56.116   983   983 W FrameTracker: Missed SF frame:UNKNOWN: 74, 30786, 0, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 09:24:56.116   983   983 W FrameTracker: Missing HWUI jank callback for vsyncId: 30786, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 09:24:56.116   983   983 W FrameTracker: Missed App frame:UNKNOWN: 74, 30815, 0, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 09:24:56.116   983   983 W FrameTracker: Missed SF frame:UNKNOWN: 74, 30815, 0, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 09:24:56.116   983   983 W FrameTracker: Missing HWUI jank callback for vsyncId: 30815, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 09:24:56.116   983   983 W FrameTracker: Missed App frame:UNKNOWN: 88, 30958, 278967095, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 09:24:56.116   983   983 W FrameTracker: Missed SF frame:UNKNOWN: 88, 30958, 278967095, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 09:24:56.116   983   983 W FrameTracker: Missed SF frame:UNKNOWN: 80, 30980, 251511345, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 09:24:56.823   582  2601 E TaskPersister: File error accessing recents directory (directory doesn't exist?).
+11-28 09:24:57.802   582   903 D InetDiagMessage: Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET, states=14
+11-28 09:24:57.803   582   903 D InetDiagMessage: Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET6, states=14
+11-28 09:24:57.803   582   903 D InetDiagMessage: Destroyed live tcp sockets for uids={10140} in 1ms
+11-28 09:24:57.803   582   903 D InetDiagMessage: Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET, states=14
+11-28 09:24:57.803   582   903 D InetDiagMessage: Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET6, states=14
+11-28 09:24:57.803   582   903 D InetDiagMessage: Destroyed live tcp sockets for uids={20140} in 0ms
+11-28 09:24:58.009   383   427 I netd    : setProcSysNet(4, 2, wlan0, retrans_time_ms, 750) <0.09ms>
+11-28 09:24:58.009   383   427 I netd    : setProcSysNet(4, 2, wlan0, ucast_solicit, 10) <0.02ms>
+11-28 09:24:58.009   383   427 I netd    : setProcSysNet(6, 2, wlan0, retrans_time_ms, 750) <0.07ms>
+11-28 09:24:58.010   383   427 I netd    : setProcSysNet(6, 2, wlan0, ucast_solicit, 10) <0.01ms>
+11-28 09:24:58.031   942   950 D fingerprint-service.ranchu: 0x73af04e270d0:onSensorEventOn:400: onAcquired(GOOD, 0)
+11-28 09:24:58.031   942   950 E fingerprint-service.ranchu: 0x73af04e270d0:onSensorEventOn:424: onAuthenticationFailed: enrollmentId=2
+11-28 09:24:58.031   983  1906 D BiometricStatusRepositoryImpl: authenticationState updated: Acquired(biometricSourceType=FINGERPRINT, requestReason=BiometricPromptAuthentication, acquiredInfo=0)
+11-28 09:24:58.031   582   937 V Biometrics/AcquisitionClient: Acquired: 0 0, shouldSend: true
+11-28 09:24:58.032   582   937 V BiometricLogger: Authentication latency: -1
+11-28 09:24:58.032   582   889 D BiometricService/AuthSession: sensorId: 0 acquiredInfo: 0 message: null
+11-28 09:24:58.032   582   937 W BiometricFrameworkStatsLogger: found a negative latency : -1
+11-28 09:24:58.032   582   937 V Biometrics/AuthenticationClient: onAuthenticated(false), ID:0, Owner: com.example.deviceauth.bio, isBP: true, listener: com.android.server.biometrics.sensors.ClientMonitorCallbackConverter@be65581, requireConfirmation: false, user: 0, clientMonitor: {[19] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth.bio, cookie=206131091, requestId=2, userId=0}
+11-28 09:24:58.032   582   937 V BiometricService: onAuthenticationFailed
+11-28 09:24:58.032   582   937 D FingerprintAuthenticationClient: Lockout is implemented by the HAL
+11-28 09:24:58.032   582   889 V BiometricService: handleAuthenticationRejected()
+11-28 09:24:58.032   582   937 I AdaptiveAuthService: AuthenticationStateListener#onAuthenticationFailed
+11-28 09:24:58.032   983   983 D AuthController: onBiometricError(2, 100, 0)
+11-28 09:24:58.032   582   582 I AdaptiveAuthService: reportAuthAttempt: numFailedAttempts=1, userId=0
+11-28 09:24:58.032   983  1906 D BiometricStatusRepositoryImpl: authenticationState updated: Failed(biometricSourceType=FINGERPRINT, requestReason=BiometricPromptAuthentication, userId=0)
+11-28 09:24:58.033   983   983 D AuthController: onBiometricError, soft error: Not recognized
+11-28 09:24:58.033   582   582 D AdaptiveAuthService: Not locking the device because the number of failed attempts is below the threshold.
+11-28 09:24:58.041   983  1103 D EGL_emulation: app_time_stats: avg=263.47ms min=10.24ms max=1834.26ms count=9
+11-28 09:24:58.052   582   616 D OomAdjuster: Not killing cached processes
+11-28 09:24:58.054   582   903 W IPCThreadState: Sending oneway calls to frozen process.
+11-28 09:24:58.054   582   903 W IPCThreadState: Sending oneway calls to frozen process.
+11-28 09:24:58.056  1292  1315 I ChimeraSrvcProxy: NullBinder for android.net.action.RECOMMEND_NETWORKS triggering remote TransactionTooLargeException due to Service without Chimera impl
+11-28 09:24:58.056  1292  1315 W .gms.persistent: Large reply transaction of 1056768 bytes, interface descriptor , code 1
+11-28 09:24:58.058  3643  3705 I BugleRcsEngine: handleMessage processing message:[NOTIFY_UPTIME_IGNORE_STATE_CHANGED] with [non-null]:RcsEngineImpl reference [CONTEXT log_prefix="RcsEngineImpl[DUAL_REG]:[d8f46022-7815]>Handler" thread_id=62 ]
+11-28 09:24:58.059  3643  3681 I BugleRcsEngine: Connected state: [1], networkType: [WIFI] [CONTEXT thread_id=57 ]
+11-28 09:24:58.064  3643  3705 I BugleRcsEngine: No RCS Configuration was found in Bugle for simID: redacted-pii:sim_id[chars:20,last3:897] [CONTEXT log_prefix="ProvisioningEngineDataRetriever" thread_id=62 ]
+11-28 09:24:58.346   191  4586 I keystore2: system/security/keystore2/watchdog/src/lib.rs:319 - Watchdog thread idle -> terminating. Have a great day.
+11-28 09:24:58.729   582  1025 D WifiNl80211Manager: Scan result ready event
+11-28 09:24:58.729   582  1025 D WifiNative: Scan result ready event
+11-28 09:24:58.732   582   896 I HalDevMgr: bestIfaceCreationProposal is null, requestIface=STA, existingIface=[name=wlan0 type=STA]
+11-28 09:25:00.016  1582  1788 I AiAiEcho: Predicting[0]:  [CONTEXT sampling_count=5 ]
+11-28 09:25:00.016  1582  1788 I AiAiEcho: EchoTargets: 
+11-28 09:25:00.016  1582  1788 I AiAiEcho: Filtered by AiAi flag check: 
+11-28 09:25:00.016  1582  1788 I AiAiEcho: [CONTEXT ratelimit_period="10 SECONDS" ]
+11-28 09:25:00.016  1582  1788 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata:  [CONTEXT ratelimit_period="10 SECONDS" ]
+11-28 09:25:00.017  1582  1788 I AiAiEcho: #remoteViewsTwiddler: feature disabled.
+11-28 09:25:00.017  1582  1788 I AiAiEcho: Predicting[0]:  [CONTEXT sampling_count=5 ]
+11-28 09:25:00.017  1582  1788 I AiAiEcho: EchoTargets: 
+11-28 09:25:00.017  1582  1788 I AiAiEcho: Filtered by AiAi flag check: 
+11-28 09:25:00.017  1582  1788 I AiAiEcho: [CONTEXT ratelimit_period="10 SECONDS" ]
+11-28 09:25:00.017  1582  1788 I AiAiEcho: Ranked targets strategy: SORT, count: 0, ranking metadata:  [CONTEXT ratelimit_period="10 SECONDS" ]
+11-28 09:25:00.017  1582  1788 I AiAiEcho: #remoteViewsTwiddler: feature disabled.
+11-28 09:25:00.017  1582  1788 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface lockscreen with targets# 0 (types=[])
+11-28 09:25:00.018  1582  1788 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface home with targets# 0 (types=[])
+11-28 09:25:00.018  1254  1254 D SsBaseTemplateCard: No text view can be set up
+11-28 09:25:00.018  1254  1254 D SsBaseTemplateCard: Passed-in item info is null
+11-28 09:25:00.019  1254  1254 D SsBaseTemplateCard: Passed-in item info is null
+11-28 09:25:00.019  1254  1254 D SsBaseTemplateCard: Passed-in item info is null
+11-28 09:25:00.019  1254  1254 I SsBaseTemplateCard: Secondary card pane is null
+11-28 09:25:00.021   983  1103 D EGL_emulation: app_time_stats: avg=1379.85ms min=1.71ms max=4006.58ms count=3
+11-28 09:25:00.026   983   983 W PageIndicator: Total number of pages invalid: 0. Assuming 1 page.
+11-28 09:25:00.079   983  1103 D EGL_emulation: app_time_stats: avg=247.38ms min=15.41ms max=1577.14ms count=8
+11-28 09:25:01.058   582   903 W IPCThreadState: Sending oneway calls to frozen process.
+11-28 09:25:01.058   582   903 W IPCThreadState: Sending oneway calls to frozen process.
+11-28 09:25:01.060  1292  2165 I ChimeraSrvcProxy: NullBinder for android.net.action.RECOMMEND_NETWORKS triggering remote TransactionTooLargeException due to Service without Chimera impl
+11-28 09:25:01.060  1292  2165 W .gms.persistent: Large reply transaction of 1056768 bytes, interface descriptor , code 1
+11-28 09:25:01.061  3643  3705 I BugleRcsEngine: handleMessage processing message:[NOTIFY_UPTIME_IGNORE_STATE_CHANGED] with [non-null]:RcsEngineImpl reference [CONTEXT log_prefix="RcsEngineImpl[DUAL_REG]:[d8f46022-7815]>Handler" thread_id=62 ]
+11-28 09:25:01.061  3643  3681 I BugleRcsEngine: Connected state: [1], networkType: [WIFI] [CONTEXT thread_id=57 ]
+11-28 09:25:01.063  3643  3705 I BugleRcsEngine: No RCS Configuration was found in Bugle for simID: redacted-pii:sim_id[chars:20,last3:897] [CONTEXT log_prefix="ProvisioningEngineDataRetriever" thread_id=62 ]
+11-28 09:25:02.124   582   693 D ActivityManager: freezing 1434 com.google.android.gms
+11-28 09:25:02.125   582   693 D ActivityManager: freezing 1474 com.google.android.apps.wellbeing
+11-28 09:25:02.298   582   903 D InetDiagMessage: Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET, states=14
+11-28 09:25:02.333   582   903 D InetDiagMessage: Destroyed 0 sockets, proto=IPPROTO_TCP, family=AF_INET6, states=14
+11-28 09:25:02.333   582   903 D InetDiagMessage: Destroyed live tcp sockets for uids={10142} in 35ms
+11-28 09:25:02.721   983  1103 D EGL_emulation: app_time_stats: avg=2700.46ms min=2700.46ms max=2700.46ms count=1
+11-28 09:25:03.400     0     0 I logd    : logdr: UID=0 GID=0 PID=4713 n tail=0 logMask=99 pid=0 start=0ns deadline=0ns

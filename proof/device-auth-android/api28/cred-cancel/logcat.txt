@@ -1,0 +1,126 @@
+--------- beginning of main
+11-28 09:11:33.326  1771  1771 I Zygote  : Process 6626 exited due to signal (9)
+--------- beginning of system
+11-28 09:11:33.331  1930  1953 W ActivityManager: setHasOverlayUi called on unknown pid: 6626
+11-28 09:11:33.335  1930  1948 W libprocessgroup: kill(-6626, 9) failed: No such process
+11-28 09:11:33.335  1930  1948 I libprocessgroup: Successfully killed process cgroup uid 10088 pid 6626 in 42ms
+11-28 09:11:33.337  1930  3175 I ActivityManager: START u0 {flg=0x10000000 cmp=com.example.deviceauth.cred/com.longbridge.nsh.AppActivity} from uid 0
+11-28 09:11:33.359  6713  6713 W deviceauth.cre: Unexpected CPU variant for X86 using defaults: x86_64
+11-28 09:11:33.365  1930  1947 I ActivityManager: Start proc 6713:com.example.deviceauth.cred/u0a88 for activity com.example.deviceauth.cred/com.longbridge.nsh.AppActivity
+11-28 09:11:33.388  1636  1676 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 10371072
+11-28 09:11:33.469  1636  1676 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 10371072
+11-28 09:11:33.560  6713  6713 D OpenGLRenderer: Skia GL Pipeline
+11-28 09:11:33.593  1765  1767 E SurfaceFlinger: ro.sf.lcd_density must be defined as a build property
+11-28 09:11:33.715  1636  1676 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 10371072
+11-28 09:11:33.719  6713  6729 D HostConnection: HostConnection::get() New Host Connection established 0x7810dd43d2c0, tid 6729
+11-28 09:11:33.721  6713  6729 D HostConnection: HostComposition ext ANDROID_EMU_CHECKSUM_HELPER_v1 ANDROID_EMU_native_sync_v2 ANDROID_EMU_dma_v1 ANDROID_EMU_YUV420_888_to_NV21 ANDROID_EMU_YUV_Cache ANDROID_EMU_sync_buffer_data ANDROID_EMU_hwc_color_transform ANDROID_EMU_hwc_display_power_mode GL_OES_EGL_image_external_essl3 GL_OES_vertex_array_object GL_KHR_texture_compression_astc_ldr ANDROID_EMU_host_side_tracing ANDROID_EMU_gles_max_version_3_1 
+11-28 09:11:33.732  6713  6729 I ConfigStore: android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasWideColorDisplay retrieved: 0
+11-28 09:11:33.733  6713  6729 I ConfigStore: android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasHDRDisplay retrieved: 0
+11-28 09:11:33.733  6713  6729 I OpenGLRenderer: Initialized EGL, version 1.4
+11-28 09:11:33.733  6713  6729 D OpenGLRenderer: Swap behavior 1
+11-28 09:11:33.733  6713  6729 W OpenGLRenderer: Failed to choose config with EGL_SWAP_BEHAVIOR_PRESERVED, retrying without...
+11-28 09:11:33.733  6713  6729 D OpenGLRenderer: Swap behavior 0
+11-28 09:11:33.734  1636  1675 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 10371072
+11-28 09:11:33.746  1636  1676 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 10371072
+11-28 09:11:33.747  6713  6729 D eglCodecCommon: setVertexArrayObject: set vao to 0 (0) 0 0
+11-28 09:11:33.747  6713  6729 D EGL_emulation: eglCreateContext: 0x7810dd43d540: maj 3 min 1 rcv 4
+11-28 09:11:33.775  6713  6729 D EGL_emulation: eglMakeCurrent: 0x7810dd43d540: ver 3 1 (tinfo 0x7810dd40dc20)
+11-28 09:11:33.787  2136  2379 D EGL_emulation: eglMakeCurrent: 0x7810dd43ef80: ver 3 1 (tinfo 0x7810dd4ac740)
+11-28 09:11:33.789  6713  6730 I nsh     : js: NSHDEVAUTH available biometric
+11-28 09:11:33.803  2793  3133 D EGL_emulation: eglMakeCurrent: 0xe20296c0: ver 3 1 (tinfo 0xcb3aa650)
+11-28 09:11:33.803  2826  2997 D EGL_emulation: eglMakeCurrent: 0x7810cd91a460: ver 3 1 (tinfo 0x7810cd8a9c80)
+11-28 09:11:33.815  2136  2379 D EGL_emulation: eglMakeCurrent: 0x7810dd43ef80: ver 3 1 (tinfo 0x7810dd4ac740)
+11-28 09:11:33.815  6713  6729 E eglCodecCommon: glUtilsParamSize: unknow param 0x000082da
+11-28 09:11:33.815  6713  6729 E eglCodecCommon: glUtilsParamSize: unknow param 0x000082da
+11-28 09:11:33.818  1765  1767 E SurfaceFlinger: ro.sf.lcd_density must be defined as a build property
+11-28 09:11:33.819  2136  2379 D EGL_emulation: eglMakeCurrent: 0x7810dd43ef80: ver 3 1 (tinfo 0x7810dd4ac740)
+11-28 09:11:33.875  6713  6729 D HostConnection: createUnique: call
+11-28 09:11:33.876  6713  6729 D HostConnection: HostConnection::get() New Host Connection established 0x7810dd43d860, tid 6729
+11-28 09:11:33.879  6713  6729 D HostConnection: HostComposition ext ANDROID_EMU_CHECKSUM_HELPER_v1 ANDROID_EMU_native_sync_v2 ANDROID_EMU_dma_v1 ANDROID_EMU_YUV420_888_to_NV21 ANDROID_EMU_YUV_Cache ANDROID_EMU_sync_buffer_data ANDROID_EMU_hwc_color_transform ANDROID_EMU_hwc_display_power_mode GL_OES_EGL_image_external_essl3 GL_OES_vertex_array_object GL_KHR_texture_compression_astc_ldr ANDROID_EMU_host_side_tracing ANDROID_EMU_gles_max_version_3_1 
+11-28 09:11:33.879  6713  6729 E eglCodecCommon: GoldfishAddressSpaceHostMemoryAllocator: ioctl_ping failed for device_type=5, ret=-1
+11-28 09:11:33.907  6713  6729 D EGL_emulation: eglMakeCurrent: 0x7810dd43d540: ver 3 1 (tinfo 0x7810dd40dc20)
+11-28 09:11:33.937  1930  1953 I ActivityManager: Displayed com.example.deviceauth.cred/com.longbridge.nsh.AppActivity: +581ms
+11-28 09:11:33.951  3092  3092 I GoogleInputMethod: onFinishInput() : Dummy InputConnection bound
+11-28 09:11:33.952  3092  3092 I GoogleInputMethod: onStartInput() : Dummy InputConnection bound
+11-28 09:11:33.977  6713  6729 D eglCodecCommon: setVertexArrayObject: set vao to 0 (0) 3 2
+11-28 09:11:34.003  1793  1793 D FingerprintHal: ----------------> fingerprint_get_auth_id ----------------->
+11-28 09:11:34.003  1793  1793 D FingerprintHal: ----------------> fingerprint_get_auth_id auth id 6b8b4567327b23c6----------------->
+11-28 09:11:34.004  1930  1930 V FingerprintService: startAuthentication(com.example.deviceauth.cred)
+11-28 09:11:34.004  1930  1930 V FingerprintService: starting client AuthenticationClient(com.example.deviceauth.cred), initiatedByClient = true
+11-28 09:11:34.011  1930  1930 W FingerprintService: client com.example.deviceauth.cred is authenticating...
+11-28 09:11:34.012  2136  2136 D FingerprintDialogImpl: showFingerprintDialog
+11-28 09:11:34.012  2136  2136 D FingerprintDialogImpl: handleShowDialog, isAnimatingAway: false
+11-28 09:11:34.063  1765  1765 W SurfaceFlinger: couldn't log to binary event log: overflow.
+11-28 09:11:34.064  1765  1765 W SurfaceFlinger: couldn't log to binary event log: overflow.
+11-28 09:11:34.064  1636  1676 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 9826304
+11-28 09:11:34.066  1636  1675 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 9826304
+11-28 09:11:34.083  1636  1675 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 9826304
+11-28 09:11:34.088  3092  3092 I GoogleInputMethod: onFinishInput() : Dummy InputConnection bound
+11-28 09:11:34.089  3092  3092 I GoogleInputMethod: onStartInput() : Dummy InputConnection bound
+11-28 09:11:34.120  2136  2379 D EGL_emulation: eglMakeCurrent: 0x7810dd43ef80: ver 3 1 (tinfo 0x7810dd4ac740)
+11-28 09:11:34.143  1765  1766 W SurfaceFlinger: Attempting to set client state on removed layer: Splash Screen com.example.deviceauth.cred#0
+11-28 09:11:34.147  1765  1766 W SurfaceFlinger: Attempting to destroy on removed layer: Splash Screen com.example.deviceauth.cred#0
+11-28 09:11:34.148  2136  2379 D EGL_emulation: eglMakeCurrent: 0x7810dd43ef80: ver 3 1 (tinfo 0x7810dd4ac740)
+11-28 09:11:34.165  2793  2793 I StreamRenderer: cleanUpRendererScope(nowcards--8611763226842563469)
+11-28 09:11:34.187  2793  3039 I PBSessionCacheImpl: Deleted sessionId[86678047644] from persistence.
+11-28 09:11:34.199  2793  2793 W SearchService: Abort, client detached.
+11-28 09:11:34.199  2793  2793 I StreamController: cleanUpControllerScope(nowcards--8611763226842563469)
+11-28 09:11:34.220  2136  2379 D EGL_emulation: eglMakeCurrent: 0x7810dd43ef80: ver 3 1 (tinfo 0x7810dd4ac740)
+11-28 09:11:34.245  2136  2379 I chatty  : uid=10033(com.android.systemui) RenderThread identical 1 line
+11-28 09:11:34.275  2136  2379 D EGL_emulation: eglMakeCurrent: 0x7810dd43ef80: ver 3 1 (tinfo 0x7810dd4ac740)
+11-28 09:11:34.303  1930  2079 I GnssLocationProvider: WakeLock acquired by sendMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@1e17610)
+11-28 09:11:34.304  1930  1944 I GnssLocationProvider: WakeLock released by handleMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@1e17610)
+11-28 09:11:34.315  2136  2379 D EGL_emulation: eglMakeCurrent: 0x7810dd43ef80: ver 3 1 (tinfo 0x7810dd4ac740)
+11-28 09:11:34.464  2136  2379 I chatty  : uid=10033(com.android.systemui) RenderThread identical 2 lines
+11-28 09:11:34.496  2136  2379 D EGL_emulation: eglMakeCurrent: 0x7810dd43ef80: ver 3 1 (tinfo 0x7810dd4ac740)
+11-28 09:11:35.302  1930  2079 I GnssLocationProvider: WakeLock acquired by sendMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@7b230e)
+11-28 09:11:35.303  1930  1944 I GnssLocationProvider: WakeLock released by handleMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@7b230e)
+11-28 09:11:36.021  2793  3267 I EventLogSendingHelper: Sending log events.
+11-28 09:11:36.301  1930  2079 I GnssLocationProvider: WakeLock acquired by sendMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@3f0612f)
+11-28 09:11:36.302  1930  1944 I GnssLocationProvider: WakeLock released by handleMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@3f0612f)
+11-28 09:11:36.639  1930  1944 E memtrack: Couldn't load memtrack module
+11-28 09:11:36.639  1930  1944 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:11:36.640  2090  2090 I BeaconBle: Scan : No clients left, canceling alarm. [CONTEXT service_id=111 ]
+11-28 09:11:37.301  1930  2079 I GnssLocationProvider: WakeLock acquired by sendMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@44fe33c)
+11-28 09:11:37.302  1930  1944 I GnssLocationProvider: WakeLock released by handleMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@44fe33c)
+11-28 09:11:37.416  6735  6735 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 0 <<<<<<
+11-28 09:11:37.443  6735  6735 W app_process: Unexpected CPU variant for X86 using defaults: x86_64
+11-28 09:11:37.444  6735  6735 I app_process: The ClassLoaderContext is a special shared library.
+11-28 09:11:37.458  6735  6735 D AndroidRuntime: Calling main entry com.android.commands.input.Input
+11-28 09:11:37.458  6735  6735 I Input   : injectKeyEvent: KeyEvent { action=ACTION_DOWN, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x0, repeatCount=0, eventTime=209423, downTime=209423, deviceId=-1, source=0x101 }
+11-28 09:11:37.461  6735  6735 I Input   : injectKeyEvent: KeyEvent { action=ACTION_UP, keyCode=KEYCODE_BACK, scanCode=0, metaState=0, flags=0x0, repeatCount=0, eventTime=209423, downTime=209423, deviceId=-1, source=0x101 }
+11-28 09:11:37.462  1930  1946 D AutofillManagerService: onBackKeyPressed()
+11-28 09:11:37.462  2136  2136 D FingerprintDialogImpl: handleHideDialog, userCanceled: true
+11-28 09:11:37.462  6735  6735 D AndroidRuntime: Shutting down VM
+11-28 09:11:37.464  2136  2136 D FingerprintDialogImpl: onFingerprintError: Fingerprint operation canceled by user.
+11-28 09:11:37.465  2136  2136 D FingerprintDialogImpl: handleFingerprintError: Fingerprint operation canceled by user.
+11-28 09:11:37.465  2136  2136 D FingerprintDialogImpl: Dialog already dismissed
+11-28 09:11:37.465  1793  1793 D FingerprintHal: ----------------> fingerprint_cancel ----------------->
+11-28 09:11:37.465  1793  1793 D android.hardware.biometrics.fingerprint@2.1-service: onError(5)
+11-28 09:11:37.465  1930  3945 W FingerprintService: client com.example.deviceauth.cred is no longer authenticating
+11-28 09:11:37.465  1930  1930 V FingerprintService: Done with client: com.example.deviceauth.cred
+11-28 09:11:37.465  1930  1930 V FingerprintService: handleError(client=com.example.deviceauth.cred, error = 5)
+11-28 09:11:37.466  6713  6730 I nsh     : js: NSHDEVAUTH result cancelled
+11-28 09:11:37.941  2136  2379 D EGL_emulation: eglMakeCurrent: 0x7810dd43ef80: ver 3 1 (tinfo 0x7810dd4ac740)
+11-28 09:11:37.945  1636  1675 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 9826304
+11-28 09:11:37.969  1765  2639 W SurfaceFlinger: Attempting to destroy on removed layer: 9cc750d FingerprintDialogView#0
+11-28 09:11:37.978  3092  3092 I GoogleInputMethod: onFinishInput() : Dummy InputConnection bound
+11-28 09:11:37.979  3092  3092 I GoogleInputMethod: onStartInput() : Dummy InputConnection bound
+11-28 09:11:38.302  1930  2079 I GnssLocationProvider: WakeLock acquired by sendMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@2abe14b)
+11-28 09:11:38.302  1930  1944 I GnssLocationProvider: WakeLock released by handleMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@2abe14b)
+11-28 09:11:38.718  2462  6745 I Vision  : Requesting optional module download of ocr.
+11-28 09:11:38.718  2462  6745 I Vision  : Checking for download completion for 220683 -- ocr
+11-28 09:11:39.212  1930  3175 I GnssLocationProvider: WakeLock acquired by sendMessage(SET_REQUEST, 0, com.android.server.location.GnssLocationProvider$GpsRequest@9589c41)
+11-28 09:11:39.214  1930  1944 I GnssLocationProvider: WakeLock released by handleMessage(SET_REQUEST, 0, com.android.server.location.GnssLocationProvider$GpsRequest@9589c41)
+11-28 09:11:39.223  2136  2379 D EGL_emulation: eglMakeCurrent: 0x7810dd43ef80: ver 3 1 (tinfo 0x7810dd4ac740)
+11-28 09:11:39.228  1930  1944 E memtrack: Couldn't load memtrack module
+11-28 09:11:39.228  1930  1944 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:11:39.302  1930  2079 I GnssLocationProvider: WakeLock acquired by sendMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@59c85e6)
+11-28 09:11:39.302  1930  1944 I GnssLocationProvider: WakeLock released by handleMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@59c85e6)
+11-28 09:11:40.302  1930  2079 I GnssLocationProvider: WakeLock acquired by sendMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@a554727)
+11-28 09:11:40.302  1930  1944 I GnssLocationProvider: WakeLock released by handleMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@a554727)
+11-28 09:11:41.021  2793  3267 I EventLogSendingHelper: Sending log events.
+11-28 09:11:41.303  1930  2079 I GnssLocationProvider: WakeLock acquired by sendMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@1452ec3)
+11-28 09:11:41.303  1930  1944 I GnssLocationProvider: WakeLock released by handleMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@1452ec3)
+11-28 09:11:42.303  1930  2079 I GnssLocationProvider: WakeLock acquired by sendMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@c868340)
+11-28 09:11:42.303  1930  1944 I GnssLocationProvider: WakeLock released by handleMessage(REPORT_SV_STATUS, 0, com.android.server.location.GnssLocationProvider$SvStatusInfo@c868340)

@@ -1,0 +1,1 @@
+Starting: Intent { cmp=com.example.deviceauth.cred/com.longbridge.nsh.AppActivity }

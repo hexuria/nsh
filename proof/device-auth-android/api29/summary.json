@@ -1,0 +1,56 @@
+[
+  {
+    "row": "noperm-launch",
+    "app": "noperm",
+    "action": "none",
+    "availability": "none",
+    "result": "notAvailable",
+    "crash": false,
+    "expected": "notAvailable"
+  },
+  {
+    "row": "bio-match",
+    "app": "bio",
+    "action": "match",
+    "availability": "biometric",
+    "result": "yes",
+    "crash": false,
+    "expected": "yes"
+  },
+  {
+    "row": "bio-cancel",
+    "app": "bio",
+    "action": "cancel",
+    "availability": "biometric",
+    "result": "cancelled",
+    "crash": false,
+    "expected": "cancelled"
+  },
+  {
+    "row": "cred-match",
+    "app": "cred",
+    "action": "match",
+    "availability": "biometric",
+    "result": "yes",
+    "crash": false,
+    "expected": "yes"
+  },
+  {
+    "row": "cred-cancel",
+    "app": "cred",
+    "action": "cancel",
+    "availability": "biometric",
+    "result": "cancelled",
+    "crash": false,
+    "expected": "cancelled"
+  },
+  {
+    "row": "cred-pin",
+    "app": "cred",
+    "action": "pin",
+    "availability": "biometric",
+    "result": "",
+    "crash": false,
+    "expected": "yes"
+  }
+]
