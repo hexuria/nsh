@@ -544,9 +544,24 @@ final class InputBox extends FrameLayout implements Node {
             super(target, true);
         }
 
+        /** The composing span as the text itself has it. */
+        private CharSequence composingInText() {
+            Editable current = edit.getText();
+            int start = current == null ? -1 : BaseInputConnection.getComposingSpanStart(current);
+            int end = current == null ? -1 : BaseInputConnection.getComposingSpanEnd(current);
+            if (start < 0 || end < 0) return null;
+            int first = Math.min(start, end), last = Math.max(start, end);
+            return last <= current.length() ? current.subSequence(first, last) : null;
+        }
+
+        private CharSequence composingBefore() {
+            return Composition.before(composingInText(), composing);
+        }
+
         @Override
         public boolean setComposingText(CharSequence text, int position) {
-            int before = composing == null ? 0 : composing.length();
+            CharSequence was = composingBefore();
+            int before = was == null ? 0 : was.length();
             if (text.length() > before) key(text.subSequence(text.length() - 1, text.length()).toString());
             else if (text.length() < before) key("Backspace");
             composing = text;
@@ -572,9 +587,8 @@ final class InputBox extends FrameLayout implements Node {
 
         @Override
         public boolean commitText(CharSequence text, int position) {
-            String added = text.toString();
             // Committing the word being composed adds only what is new.
-            if (composing != null && added.startsWith(composing.toString())) added = added.substring(composing.length());
+            String added = Composition.committedAddition(composingBefore(), text);
             composing = null;
             if (added.equals("\n")) key("Enter");
             else if (!added.isEmpty()) key(added);
