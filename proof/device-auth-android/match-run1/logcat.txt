@@ -1,0 +1,383 @@
+--------- beginning of system
+11-28 02:55:34.581  4340  6056 I ActivityManager: Force stopping com.example.deviceauth appid=10209 user=0: from pid 9461
+11-28 02:55:34.598  4340  4361 D DisplayManagerService: Drop pending events for gone uid 10209
+11-28 02:55:34.607  4340  6056 D CompatChangeReporter: Compat change id reported: 151861875; UID 10209; state: ENABLED
+11-28 02:55:34.613  4340  6056 I ActivityManager: Killing 9422:com.example.deviceauth/u0a209 (adj 0): stop com.example.deviceauth due to from pid 9461
+11-28 02:55:34.655  4340  6056 W ActivityTaskManager: Force removing ActivityRecord{c0ab916 u0 com.example.deviceauth/com.longbridge.nsh.AppActivity t20 f}}: app died, no saved state
+--------- beginning of main
+11-28 02:55:34.663  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:34.671  4275  4275 I netd    : tetherGetStats() -> {[]} <4.89ms>
+11-28 02:55:34.674  4606  4623 V WindowManagerShell: Transition requested (#31): android.os.BinderProxy@ff47060 TransitionRequestInfo { type = CLOSE, triggerTask = TaskInfo{userId=0 taskId=20 displayId=0 isRunning=false baseIntent=Intent { flg=0x10000000 cmp=com.example.deviceauth/com.longbridge.nsh.AppActivity } baseActivity=null topActivity=null origActivity=null realActivity=ComponentInfo{com.example.deviceauth/com.longbridge.nsh.AppActivity} numActivities=0 lastActiveTime=3062471 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{android.window.IWindowContainerToken$Stub$Proxy@f914919} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=null topActivityInfo=null launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=true isVisible=true isVisibleRequested=true isSleeping=false locusId=null displayAreaFeatureId=1 isTopActivityTransparent=false appCompatTaskInfo=AppCompatTaskInfo { topActivityInSizeCompat=false topActivityEligibleForLetterboxEducation= falseisLetterboxEducationEnabled= false isLetterboxDoubleTapEnabled= false topActivityEligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 isUserFullscreenOverrideEnabled=false isSystemFullscreenOverrideEnabled=false cameraCompatTaskInfo=CameraCompatTaskInfo { cameraCompatControlState=hidden freeformCameraCompatMode=inactive}}}, pipTask = null, remoteTransition = null, displayChange = null, flags = 0, debugId = 31 }
+11-28 02:55:34.675  4340  4363 D ContentCapturePerUserService: onActivityEvent(): remote service is dead or unbound
+11-28 02:55:34.771  4340  4354 E BiometricService/AuthSession: Binder died, session: State: 3, cancelled: true, isCrypto: false, PreAuthInfo: BiometricRequested: true, StrengthRequested: 15, CredentialRequested: false, Eligible:{0 }, Ineligible:{ID(4), oemStrength: 15, updatedStrength: 15, modality 8, state: 0, cookie: 0:7 }, CredentialAvailable: true, , requestId: 9
+11-28 02:55:34.772  4271  4271 I Zygote  : Process 9422 exited due to signal 9 (Killed)
+11-28 02:55:34.783  4340  4385 I libprocessgroup: Removed cgroup /sys/fs/cgroup/uid_10209/pid_9422
+11-28 02:55:34.789  4340  4926 I ImeTracker: com.example.deviceauth:a1b4eb90: onRequestHide at ORIGIN_SERVER reason HIDE_REMOVE_CLIENT fromUser false
+11-28 02:55:34.798  4340  4525 W BiometricService: handleClientDied: AuthSession is not current
+11-28 02:55:34.804  4340  4926 I ImeTracker: com.example.deviceauth:a1b4eb90: onCancelled at PHASE_SERVER_SHOULD_HIDE
+11-28 02:55:34.805  4340  5541 W system_server: Long monitor contention with owner binder:4340_15 (6056) at void com.android.server.wm.ActivityTaskManagerService$LocalService.handleAppDied(com.android.server.wm.WindowProcessController, boolean, java.lang.Runnable)(ActivityTaskManagerService.java:6602) waiters=0 in android.os.IBinder com.android.server.wm.WindowOrganizerController.startTransition(int, android.os.IBinder, android.window.WindowContainerTransaction) for 125ms
+11-28 02:55:34.817  4340  4364 W system_server: Long monitor contention with owner binder:4340_15 (6056) at void com.android.server.wm.ActivityTaskManagerService$LocalService.handleAppDied(com.android.server.wm.WindowProcessController, boolean, java.lang.Runnable)(ActivityTaskManagerService.java:6602) waiters=1 in void com.android.server.wm.WindowAnimator.lambda$new$1(long) for 114ms
+11-28 02:55:34.835  4606  4623 W Looper  : Slow dispatch took 161ms wmshell.main h=android.os.Handler c=com.android.wm.shell.transition.Transitions$TransitionPlayerImpl$$ExternalSyntheticLambda1@777edde m=0
+11-28 02:55:34.846   484   484 I BpBinder: onLastStrongRef automatically unlinking death recipients: 
+11-28 02:55:34.872  4606  4623 W Looper  : Slow delivery took 143ms wmshell.main h=android.os.Handler c=com.android.wm.shell.pip.PinnedStackListenerForwarder$PinnedTaskListenerImpl$$ExternalSyntheticLambda1@3e1bbf m=0
+11-28 02:55:34.872  4340  4355 I WindowManager: WIN DEATH: Window{ec14ce4 u0 com.example.deviceauth/com.longbridge.nsh.AppActivity}
+11-28 02:55:34.880  4340  4355 W InputManager-JNI: Input channel object 'ec14ce4 com.example.deviceauth/com.longbridge.nsh.AppActivity (client)' was disposed without first being removed with the input manager!
+11-28 02:55:34.897  4340  4363 D ContentCapturePerUserService: onActivityEvent(): remote service is dead or unbound
+11-28 02:55:34.900  4606  4623 W Looper  : Drained
+11-28 02:55:34.963  4340  6056 W ProcessStats: Tracking association SourceState{e9fb646 com.android.settings/1000 BTop #1038} whose proc state 2 is better than process ProcessState{9e613d3 com.google.android.settings.intelligence/10140 pkg=com.google.android.settings.intelligence} proc state 12 (2 skipped)
+11-28 02:55:35.001  4340  4529 W system_server: Long monitor contention with owner binder:4340_15 (6056) at void com.android.server.am.OomAdjuster.updateOomAdjLocked(int)(OomAdjuster.java:578) waiters=1 in void com.android.server.am.ActivityManagerService$LocalService.notifyNetworkPolicyRulesUpdated(int, long) for 255ms
+11-28 02:55:35.036  4340  4364 W ActivityTaskManager: Unable to send transaction to client proc com.example.deviceauth: no app thread
+11-28 02:55:35.052  4340  4361 W Looper  : Slow dispatch took 108ms android.ui h=com.android.server.am.ActivityManagerService$UiHandler c=com.android.server.am.UidObserverController$$ExternalSyntheticLambda0@5de2077 m=0
+11-28 02:55:35.113  4340  6056 I AppsFilter: interaction: PackageSetting{3f995e5 com.android.microdroid.empty_payload/10190} -> PackageSetting{5cbd5be com.example.deviceauth/10209} BLOCKED
+11-28 02:55:35.132  4340  4724 W system_server: Long monitor contention with owner binder:4340_15 (6056) at void com.android.server.am.ActivityManagerService.forceStopPackage(java.lang.String, int, int, java.lang.String)(ActivityManagerService.java:3966) waiters=0 in void com.android.server.am.ActivityManagerService$AppDeathRecipient.binderDied() for 363ms
+11-28 02:55:35.135  4340  4724 V ActivityManager: Got obituary of 9422:com.example.deviceauth
+11-28 02:55:35.138  4606  4606 E OverviewProxyService: Failed to get overview proxy for system bar attr change.
+11-28 02:55:35.232  4340  4561 I AppWidgetServiceImpl: Received broadcast: android.intent.action.PACKAGE_RESTARTED on user 0
+11-28 02:55:35.235  4340  4561 I AppWidgetServiceImpl: Updating package stopped masked state for uid 10209 package com.example.deviceauth isStopped true
+11-28 02:55:35.247  4340  6056 W ActivityTaskManager: callingPackage for (uid=0, pid=9466) has no WPC
+11-28 02:55:35.259  4340  6056 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_USER_ASPECT_RATIO_OVERRIDE
+11-28 02:55:35.263  4340  6056 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_USER_ASPECT_RATIO_FULLSCREEN_OVERRIDE
+11-28 02:55:35.264  4340  6056 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_ORIENTATION_OVERRIDE
+11-28 02:55:35.267  4340  6056 V GrammaticalInflectionUtils: AttributionSource: AttributionSource { uid = 10209, packageName = null, attributionTag = null, token = android.os.Binder@7a33c2b, deviceId = 0, next = null } does not have READ_SYSTEM_GRAMMATICAL_GENDER permission.
+11-28 02:55:35.271  4340  6056 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_RESIZEABLE_ACTIVITY_OVERRIDES
+11-28 02:55:35.275  4340  6056 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ALLOW_MIN_ASPECT_RATIO_OVERRIDE
+11-28 02:55:35.275  6131  6131 D CarrierSvcBindHelper: onHandleForceStop: [com.example.deviceauth]
+11-28 02:55:35.279  4340  6056 E CellBroadcastUtils: getDefaultCellBroadcastReceiverPackageName: no package found
+11-28 02:55:35.286  4340  4363 W system_server: Long monitor contention with owner binder:4340_15 (6056) at void com.android.server.am.ActivityManagerService.forceStopPackage(java.lang.String, int, int, java.lang.String)(ActivityManagerService.java:3966) waiters=1 in void com.android.server.am.ProcessRecord.updateProcessInfo(boolean, boolean, boolean) for 382ms
+11-28 02:55:35.316  4340  4499 W InputMethodInfoUtils: Found no fallback locale. imis=[InputMethodInfo{com.google.android.tts/com.google.android.apps.speech.tts.googletts.settings.asr.voiceime.VoiceInputMethodService, settings: com.google.android.apps.speech.tts.googletts.settings.asr.voiceime.ui.VoiceImeSettingsActivity, languageSettings: null}]
+11-28 02:55:35.348  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:35.357  4340  4363 D ContentCapturePerUserService: onActivityEvent(): remote service is dead or unbound
+11-28 02:55:35.359  4340  4499 W InputMethodInfoUtils: No software keyboard is found. imis=[InputMethodInfo{com.google.android.tts/com.google.android.apps.speech.tts.googletts.settings.asr.voiceime.VoiceInputMethodService, settings: com.google.android.apps.speech.tts.googletts.settings.asr.voiceime.ui.VoiceImeSettingsActivity, languageSettings: null}] systemLocale=en_US fallbackLocale=null
+11-28 02:55:35.367  4340  4363 W ActivityManager: setHasOverlayUi called on unknown pid: 9422
+11-28 02:55:35.383  4340  6056 V SplashScreenExceptionList: SplashScreen checking exception for package com.example.deviceauth (target sdk:35) -> false
+11-28 02:55:35.415  6131  6131 D CarrierSvcBindHelper: No carrier app for: 0
+11-28 02:55:35.463  4606  4623 W Looper  : Slow delivery took 60ms wmshell.main h=android.os.Handler c=android.window.TaskOrganizer$1$$ExternalSyntheticLambda2@ba0328c m=0
+11-28 02:55:35.480  4340  4926 D CompatChangeReporter: Compat change id reported: 309578419; UID 10209; state: ENABLED
+11-28 02:55:35.565  4606  4642 D SplashScreenView: Build android.window.SplashScreenView{ddb56bc V.E...... ......ID 0,0-0,0}
+11-28 02:55:35.565  4606  4642 D SplashScreenView: Icon: view: android.widget.ImageView{c396645 V.ED..... ......I. 0,0-0,0 #1020504 android:id/splashscreen_icon_view} drawable: com.android.wm.shell.startingsurface.SplashscreenIconDrawableFactory$ImmobileIconDrawable@ff7c19a size: 280
+11-28 02:55:35.565  4606  4642 D SplashScreenView: Branding: view: android.view.View{968acb G.ED..... ......I. 0,0-0,0 #1020503 android:id/splashscreen_branding_view} drawable: null size w: 0 h: 0
+11-28 02:55:35.608  4340  6056 I ActivityTaskManager: Add Task{1f9b297 #20 type=standard A=10209:com.example.deviceauth} to hidden list because adding Task{288e121 #21 type=standard A=10209:com.example.deviceauth}
+11-28 02:55:35.618  4340  6056 I ActivityTaskManager: START u0 {flg=0x10000000 cmp=com.example.deviceauth/com.longbridge.nsh.AppActivity} with LAUNCH_MULTIPLE from uid 0 (BAL_ALLOW_ALLOWLISTED_UID) result code=0
+11-28 02:55:35.623  4340  4364 W system_server: Long monitor contention with owner binder:4340_15 (6056) at int com.android.server.wm.ActivityStarter.execute()(ActivityStarter.java:825) waiters=0 in void com.android.server.wm.WindowSurfacePlacer$Traverser.run() for 369ms
+11-28 02:55:35.719  4340  4724 W system_server: Long monitor contention with owner binder:4340_15 (6056) at int com.android.server.wm.ActivityStarter.execute()(ActivityStarter.java:825) waiters=1 in void com.android.server.wm.ActivityClientController.activityIdle(android.os.IBinder, android.content.res.Configuration, boolean) for 367ms
+11-28 02:55:35.748  4340  6056 I AppsFilter: interaction: PackageSetting{3f995e5 com.android.microdroid.empty_payload/10190} -> PackageSetting{df16e5d com.example.deviceauth/10209} BLOCKED
+11-28 02:55:35.879  4340  4561 I AppWidgetServiceImpl: Received broadcast: android.intent.action.PACKAGE_UNSTOPPED on user 0
+11-28 02:55:35.882  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:35.888  4340  4561 I AppWidgetServiceImpl: Updating package stopped masked state for uid 10209 package com.example.deviceauth isStopped false
+--------- beginning of kernel
+11-28 02:55:35.825     0     0 I logd    : logdr: UID=0 GID=0 PID=9471 n tail=0 logMask=99 pid=0 start=0ns deadline=0ns
+11-28 02:55:36.061  4340  4364 W ActivityTaskManager: Unable to send transaction to client proc com.example.deviceauth: no app thread
+11-28 02:55:36.067  4606  4606 E OverviewProxyService: Failed to get overview proxy for system bar attr change.
+11-28 02:55:36.127  4340  4363 W system_server: Long monitor contention with owner android.imms2 (4499) at void com.android.server.inputmethod.InputMethodManagerService$MyPackageMonitor.onFinishPackageChangesInternal()(InputMethodManagerService.java:1060) waiters=0 in void com.android.server.inputmethod.InputMethodManagerService$LocalServiceImpl.reportImeControl(android.os.IBinder) for 754ms
+11-28 02:55:36.143  4340  4363 V WindowManager: Unknown focus tokens, dropping reportFocusChanged
+11-28 02:55:36.158  4340  4499 W InputMethodInfoUtils: Found no fallback locale. imis=[InputMethodInfo{com.google.android.tts/com.google.android.apps.speech.tts.googletts.settings.asr.voiceime.VoiceInputMethodService, settings: com.google.android.apps.speech.tts.googletts.settings.asr.voiceime.ui.VoiceImeSettingsActivity, languageSettings: null}]
+11-28 02:55:36.160  4340  4499 W InputMethodInfoUtils: No software keyboard is found. imis=[InputMethodInfo{com.google.android.tts/com.google.android.apps.speech.tts.googletts.settings.asr.voiceime.VoiceInputMethodService, settings: com.google.android.apps.speech.tts.googletts.settings.asr.voiceime.ui.VoiceImeSettingsActivity, languageSettings: null}] systemLocale=en_US fallbackLocale=null
+11-28 02:55:36.186  4340  4363 V GrammaticalInflectionUtils: AttributionSource: AttributionSource { uid = 10209, packageName = null, attributionTag = null, token = android.os.Binder@7a33c2b, deviceId = 0, next = null } does not have READ_SYSTEM_GRAMMATICAL_GENDER permission.
+11-28 02:55:36.239  4340  4363 W ActivityManager: Slow operation: 63ms so far, now at startProcess: done creating new process record
+11-28 02:55:36.240  4340  4363 W ActivityManager: Slow operation: 64ms so far, now at startProcess: stepping in to startProcess
+11-28 02:55:36.280  4275  4275 I netd    : tetherGetStats() -> {[]} <11.76ms>
+11-28 02:55:36.284  4340  4363 W ActivityManager: Slow operation: 108ms so far, now at startProcess: done starting proc!
+11-28 02:55:36.303  4606  4623 W Looper  : Drained
+11-28 02:55:36.315  4830  4914 D EGL_emulation: app_time_stats: avg=60.89ms min=13.93ms max=102.20ms count=15
+11-28 02:55:36.354  4271  4271 D Zygote  : Forked child process 9474
+11-28 02:55:36.374  4340  4363 D ContentCapturePerUserService: onActivityEvent(): remote service is dead or unbound
+11-28 02:55:36.392  4340  4384 W ActivityManager: Slow operation: 137ms so far, now at startProcess: returned from zygote!
+11-28 02:55:36.400  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:36.412  4340  4384 W ActivityManager: Slow operation: 157ms so far, now at startProcess: done updating battery stats
+11-28 02:55:36.439  9474  9474 I mple.deviceauth: Using CollectorTypeCMC GC.
+11-28 02:55:36.446  4606  4623 W Looper  : Slow dispatch took 51ms wmshell.main h=android.os.Handler c=null m=1
+11-28 02:55:36.447  9474  9474 W mple.deviceauth: Unexpected CPU variant for x86: x86_64.
+11-28 02:55:36.447  9474  9474 W mple.deviceauth: Known variants: atom, sandybridge, silvermont, goldmont, goldmont-plus, goldmont-without-sha-xsaves, tremont, kabylake, default
+11-28 02:55:36.450  4340  4384 W ActivityManager: Slow operation: 178ms so far, now at startProcess: building log message
+11-28 02:55:36.452  4340  4384 I ActivityManager: Start proc 9474:com.example.deviceauth/u0a209 for next-top-activity {com.example.deviceauth/com.longbridge.nsh.AppActivity}
+11-28 02:55:36.454  4340  4384 W ActivityManager: Slow operation: 199ms so far, now at startProcess: starting to update pids map
+11-28 02:55:36.464  4340  4361 W Looper  : Slow dispatch took 116ms android.ui h=com.android.server.am.ActivityManagerService$UiHandler c=com.android.server.am.UidObserverController$$ExternalSyntheticLambda0@5de2077 m=0
+11-28 02:55:36.467  9474  9474 E mple.deviceauth: Not starting debugger since process cannot load the jdwp agent.
+11-28 02:55:36.507  4340  4384 W ActivityManager: Slow operation: 251ms so far, now at startProcess: done updating pids map
+11-28 02:55:36.522  9474  9474 D nativeloader: Load libframework-connectivity-tiramisu-jni.so using APEX ns com_android_tethering for caller /apex/com.android.tethering/javalib/framework-connectivity-t.jar: ok
+11-28 02:55:36.618  4340  4724 W ActivityManager: Slow operation: 60ms so far, now at attachApplicationLocked: after updateOomAdjLocked
+11-28 02:55:36.636  9474  9474 D nativeloader: Load libstats_jni.so using APEX ns com_android_os_statsd for caller /apex/com.android.os.statsd/javalib/framework-statsd.jar: ok
+11-28 02:55:36.756  9474  9474 D nativeloader: Configuring clns-7 for other apk /data/app/~~1790qIGs8ELYEZ_BNo7NGg==/com.example.deviceauth-ztNGl2Iz0RyRrlx5LmRiyg==/base.apk. target_sdk_version=35, uses_libraries=, library_path=/data/app/~~1790qIGs8ELYEZ_BNo7NGg==/com.example.deviceauth-ztNGl2Iz0RyRrlx5LmRiyg==/lib/x86_64:/data/app/~~1790qIGs8ELYEZ_BNo7NGg==/com.example.deviceauth-ztNGl2Iz0RyRrlx5LmRiyg==/base.apk!/lib/x86_64, permitted_path=/data:/mnt/expand:/data/user/0/com.example.deviceauth
+11-28 02:55:36.765  9474  9474 D CompatChangeReporter: Compat change id reported: 202956589; UID 10209; state: ENABLED
+11-28 02:55:36.788  4340  4361 W Looper  : Slow dispatch took 171ms android.ui h=com.android.server.am.ActivityManagerService$UiHandler c=com.android.server.am.UidObserverController$$ExternalSyntheticLambda0@5de2077 m=0
+11-28 02:55:36.907  9474  9474 V GraphicsEnvironment: Currently set values for:
+11-28 02:55:36.911  9474  9474 V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+11-28 02:55:36.936  9474  9474 V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+11-28 02:55:36.942  9474  9474 V GraphicsEnvironment: Global.Settings values are invalid: number of packages: 0, number of values: 0
+11-28 02:55:36.956  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:36.978  9474  9474 V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+11-28 02:55:37.057     0     0 I logd    : logdr: UID=0 GID=0 PID=9488 n tail=0 logMask=99 pid=0 start=0ns deadline=0ns
+11-28 02:55:37.111  4340  8080 W OptProp : Cannot read opt property android.window.PROPERTY_COMPAT_ENABLE_FAKE_FOCUS
+11-28 02:55:37.131  4340  8080 D CompatChangeReporter: Compat change id reported: 324203798; UID 10209; state: ENABLED
+11-28 02:55:37.264  4340  8080 W ActivityManager: Slow operation: 187ms so far, now at finishAttachApplicationInner: after mServices.attachApplicationLocked
+11-28 02:55:37.269  4340  8080 W ActivityManager: Slow operation: 194ms so far, now at finishAttachApplicationInner: after dispatching broadcasts
+11-28 02:55:37.287  4606  4615 V WindowManagerShell: onTransitionReady(transaction=18640158066173)
+11-28 02:55:37.319  4606  4623 V WindowManagerShell: onTransitionReady (#31) android.os.BinderProxy@ff47060: {id=31 t=CLOSE f=0x0 trk=0 r=[0@Point(0, 0)] c=[{WCT{android.window.IWindowContainerToken$Stub$Proxy@cffe6ec} m=OPEN f=MOVE_TO_TOP leash=Surface(name=Task=21)/@0x85f9ec0 sb=Rect(0, 0 - 720, 1280) eb=Rect(0, 0 - 720, 1280) d=0 taskParent=-1},{WCT{android.window.IWindowContainerToken$Stub$Proxy@7d96ab5} m=CLOSE f=NONE leash=Surface(name=Task=20)/@0xb9547f9 sb=Rect(0, 0 - 720, 1280) eb=Rect(0, 0 - 720, 1280) d=0 taskParent=-1},{null m=TO_FRONT f=IS_WALLPAPER leash=Surface(name=WallpaperWindowToken{50297e7 token=android.os.Binder@fdda1a6})/@0xe13b33e sb=Rect(0, 0 - 720, 1280) eb=Rect(0, 0 - 720, 1280) d=0}]}
+11-28 02:55:37.322  4606  4623 V WindowManagerShell: Playing animation for (#31) android.os.BinderProxy@ff47060@0
+11-28 02:55:37.322  4340  4363 D ContentCapturePerUserService: onActivityEvent(): remote service is dead or unbound
+11-28 02:55:37.330  4606  4623 V WindowManagerShell:  try handler com.android.wm.shell.transition.DefaultMixedHandler@7e71a7c
+11-28 02:55:37.331  4606  4623 V WindowManagerShell:  try handler com.android.wm.shell.keyguard.KeyguardTransitionHandler@f603f05
+11-28 02:55:37.341  4340  4363 D ContentCapturePerUserService: onActivityEvent(): remote service is dead or unbound
+11-28 02:55:37.344  4606  4623 V WindowManagerShell:  try handler com.android.wm.shell.pip.PipTransition@a85fe1e
+11-28 02:55:37.345  4606  4623 V WindowManagerShell:  try handler com.android.wm.shell.activityembedding.ActivityEmbeddingController@7ae86ff
+11-28 02:55:37.351  4606  4623 V WindowManagerShell:  try handler com.android.wm.shell.recents.RecentsTransitionHandler@aab5ccc
+11-28 02:55:37.362  4606  4623 V ShellRecents: RecentsTransitionHandler.startAnimation: no controller found
+11-28 02:55:37.364  4606  4623 V WindowManagerShell:  try handler com.android.wm.shell.splitscreen.StageCoordinator@304db15
+11-28 02:55:37.365  4606  4623 V WindowManagerShell:  try handler com.android.wm.shell.transition.RemoteTransitionHandler@b0fde2a
+11-28 02:55:37.368  4606  4623 V WindowManagerShell: Transition doesn't have explicit remote, search filters for match for {id=31 t=CLOSE f=0x0 trk=0 r=[0@Point(0, 0)] c=[{WCT{android.window.IWindowContainerToken$Stub$Proxy@cffe6ec} m=OPEN f=MOVE_TO_TOP leash=Surface(name=Task=21)/@0x85f9ec0 sb=Rect(0, 0 - 720, 1280) eb=Rect(0, 0 - 720, 1280) d=0 taskParent=-1},{WCT{android.window.IWindowContainerToken$Stub$Proxy@7d96ab5} m=CLOSE f=NONE leash=Surface(name=Task=20)/@0xb9547f9 sb=Rect(0, 0 - 720, 1280) eb=Rect(0, 0 - 720, 1280) d=0 taskParent=-1},{null m=TO_FRONT f=IS_WALLPAPER leash=Surface(name=WallpaperWindowToken{50297e7 token=android.os.Binder@fdda1a6})/@0xe13b33e sb=Rect(0, 0 - 720, 1280) eb=Rect(0, 0 - 720, 1280) d=0}]}
+11-28 02:55:37.372  4606  4623 V WindowManagerShell:  Delegate animation for (#31) to null
+11-28 02:55:37.374  4606  4623 V WindowManagerShell:  try handler com.android.wm.shell.transition.DefaultTransitionHandler@9ee941b
+11-28 02:55:37.375  4606  4623 V WindowManagerShell: start default transition animation, info = {id=31 t=CLOSE f=0x0 trk=0 r=[0@Point(0, 0)] c=[{WCT{android.window.IWindowContainerToken$Stub$Proxy@cffe6ec} m=OPEN f=MOVE_TO_TOP leash=Surface(name=Task=21)/@0x85f9ec0 sb=Rect(0, 0 - 720, 1280) eb=Rect(0, 0 - 720, 1280) d=0 taskParent=-1},{WCT{android.window.IWindowContainerToken$Stub$Proxy@7d96ab5} m=CLOSE f=NONE leash=Surface(name=Task=20)/@0xb9547f9 sb=Rect(0, 0 - 720, 1280) eb=Rect(0, 0 - 720, 1280) d=0 taskParent=-1},{null m=TO_FRONT f=IS_WALLPAPER leash=Surface(name=WallpaperWindowToken{50297e7 token=android.os.Binder@fdda1a6})/@0xe13b33e sb=Rect(0, 0 - 720, 1280) eb=Rect(0, 0 - 720, 1280) d=0}]}
+11-28 02:55:37.375  4830  4914 D EGL_emulation: app_time_stats: avg=53.15ms min=24.95ms max=98.97ms count=16
+11-28 02:55:37.400  4340  4361 W Looper  : Slow dispatch took 107ms android.ui h=com.android.server.wm.DisplayPolicy$PolicyHandler c=com.android.server.wm.DisplayPolicy$2$$ExternalSyntheticLambda0@ea60cd0 m=0
+11-28 02:55:37.436  4606  4623 V WindowManagerShell: loadAnimation: anim=android.view.animation.AnimationSet@87a85d8 animAttr=0xb type=CLOSE isEntrance=false
+11-28 02:55:37.472  4340  4360 V WindowManager: Sent Transition (#31) createdAt=11-28 02:55:34.667 via request=TransitionRequestInfo { type = CLOSE, triggerTask = TaskInfo{userId=0 taskId=20 displayId=0 isRunning=false baseIntent=Intent { flg=0x10000000 cmp=com.example.deviceauth/com.longbridge.nsh.AppActivity } baseActivity=null topActivity=null origActivity=null realActivity=ComponentInfo{com.example.deviceauth/com.longbridge.nsh.AppActivity} numActivities=0 lastActiveTime=3062471 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{RemoteToken{7966f87 Task{1f9b297 #20 type=standard A=10209:com.example.deviceauth}}} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=null topActivityInfo=null launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=true isVisible=true isVisibleRequested=true isSleeping=false locusId=null displayAreaFeatureId=1 isTopActivityTransparent=false appCompatTaskInfo=AppCompatTaskInfo { topActivityInSizeCompat=false topActivityEligibleForLetterboxEducation= falseisLetterboxEducationEnabled= false isLetterboxDoubleTapEnabled= false topActivityEligibleForUserAspectRatioButton= false topActivityBoundsLetterboxed= false isFromLetterboxDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 isUserFullscreenOverrideEnabled=false isSystemFullscreenOverrideEnabled=false cameraCompatTaskInfo=CameraCompatTaskInfo { cameraCompatControlState=hidden freeformCameraCompatMode=inactive}}}, pipTask = null, remoteTransition = null, displayChange = null, flags = 0, debugId = 31 }
+11-28 02:55:37.523  4606  4623 V WindowManagerShell: loadAnimation: anim=android.view.animation.AnimationSet@267b3a2 animAttr=0xa type=CLOSE isEntrance=true
+11-28 02:55:37.599  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:37.638  4606  4623 V WindowManagerShell:  animated by com.android.wm.shell.transition.DefaultTransitionHandler@9ee941b
+11-28 02:55:37.638  4606  4623 W Looper  : Slow dispatch took 319ms wmshell.main h=android.os.Handler c=com.android.wm.shell.transition.Transitions$TransitionPlayerImpl$$ExternalSyntheticLambda0@33167ee m=0
+11-28 02:55:37.649  4606  4623 W Looper  : Slow delivery took 209ms wmshell.main h=android.os.Handler c=null m=2
+11-28 02:55:37.671   451   451 I RanchuHwc: logCompositionFallbackIfChanged: layer 109 CompositionType fallback from 2 to 1
+11-28 02:55:37.672   451   451 I RanchuHwc: logCompositionFallbackIfChanged: layer 110 CompositionType fallback from 3 to 1
+11-28 02:55:37.675  4606  4629 W Looper  : Slow dispatch took 37ms wmshell.anim h=android.os.Handler c=com.android.wm.shell.transition.DefaultTransitionHandler$$ExternalSyntheticLambda1@9c7f48f m=0
+11-28 02:55:37.680  4340  6056 W UserManagerService: Requested status bar icon for non-badged user 0
+11-28 02:55:37.720  4606  4629 W Looper  : Slow delivery took 39ms wmshell.anim h=android.view.Choreographer$FrameHandler c=android.view.Choreographer$FrameDisplayEventReceiver@295d227 m=0
+11-28 02:55:37.720  4340  4360 V WindowManager:     startWCT=WindowContainerTransaction { changes = {} hops = [] errorCallbackToken=null taskFragmentOrganizer=null }
+11-28 02:55:37.721  4606  4629 W Looper  : Slow dispatch took 38ms wmshell.anim h=android.view.Choreographer$FrameHandler c=android.view.Choreographer$FrameDisplayEventReceiver@295d227 m=0
+11-28 02:55:37.721  4340  4360 V WindowManager:     info={id=31 t=CLOSE f=0x0 trk=0 r=[0@Point(0, 0)] c=[
+11-28 02:55:37.721  4340  4360 V WindowManager:         {WCT{RemoteToken{da62485 Task{288e121 #21 type=standard A=10209:com.example.deviceauth}}} m=OPEN f=MOVE_TO_TOP leash=Surface(name=Task=21)/@0xe8fa8cd sb=Rect(0, 0 - 720, 1280) eb=Rect(0, 0 - 720, 1280) d=0 taskParent=-1},
+11-28 02:55:37.721  4340  4360 V WindowManager:         {WCT{RemoteToken{7966f87 Task{1f9b297 #20 type=standard A=10209:com.example.deviceauth}}} m=CLOSE f=NONE leash=Surface(name=Task=20)/@0x80943ab sb=Rect(0, 0 - 720, 1280) eb=Rect(0, 0 - 720, 1280) d=0 taskParent=-1},
+11-28 02:55:37.721  4340  4360 V WindowManager:         {null m=TO_FRONT f=IS_WALLPAPER leash=Surface(name=WallpaperWindowToken{50297e7 token=android.os.Binder@fdda1a6})/@0xfc7dd37 sb=Rect(0, 0 - 720, 1280) eb=Rect(0, 0 - 720, 1280) d=0}
+11-28 02:55:37.721  4340  4360 V WindowManager:     ]}
+11-28 02:55:37.727  4340  4360 W Looper  : Slow dispatch took 301ms android.fg h=android.os.Handler c=com.android.server.wm.TransitionController$Logger@2bc42da m=0
+11-28 02:55:37.776  9474  9474 D CompatChangeReporter: Compat change id reported: 279646685; UID 10209; state: ENABLED
+11-28 02:55:37.804  9474  9474 D CompatChangeReporter: Compat change id reported: 309578419; UID 10209; state: ENABLED
+11-28 02:55:37.836  4606  4629 W Looper  : Slow dispatch took 36ms wmshell.anim h=android.view.Choreographer$FrameHandler c=android.view.Choreographer$FrameDisplayEventReceiver@295d227 m=0
+11-28 02:55:37.872  9474  9474 D nativeloader: Load /data/app/~~1790qIGs8ELYEZ_BNo7NGg==/com.example.deviceauth-ztNGl2Iz0RyRrlx5LmRiyg==/base.apk!/lib/x86_64/libnsh.so using ns clns-7 from class loader (caller=/data/app/~~1790qIGs8ELYEZ_BNo7NGg==/com.example.deviceauth-ztNGl2Iz0RyRrlx5LmRiyg==/base.apk): ok
+11-28 02:55:38.011  4606  4629 W Looper  : Slow dispatch took 79ms wmshell.anim h=android.view.Choreographer$FrameHandler c=android.view.Choreographer$FrameDisplayEventReceiver@295d227 m=0
+11-28 02:55:38.086  9474  9474 W HWUI    : Unknown dataspace 0
+11-28 02:55:38.108  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:38.156  4606  4629 W Looper  : Drained
+11-28 02:55:38.172  4606  4629 W Looper  : Slow dispatch took 53ms wmshell.anim h=android.view.Choreographer$FrameHandler c=android.view.Choreographer$FrameDisplayEventReceiver@295d227 m=0
+11-28 02:55:38.353  4606  4629 W Looper  : Slow dispatch took 166ms wmshell.anim h=android.view.Choreographer$FrameHandler c=android.view.Choreographer$FrameDisplayEventReceiver@295d227 m=0
+11-28 02:55:38.376  4340  8080 D CoreBackPreview: Window{74c3894 u0 com.example.deviceauth/com.longbridge.nsh.AppActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@dac707e, mPriority=-1, mIsAnimationCallback=false}
+11-28 02:55:38.373     0     0 I logd    : logdr: UID=0 GID=0 PID=9494 n tail=0 logMask=99 pid=0 start=0ns deadline=0ns
+11-28 02:55:38.398  4606  4623 V WindowManagerShell: Transition animation finished (aborted=false), notifying core (#31) android.os.BinderProxy@ff47060@0
+11-28 02:55:38.415  4830  4914 D EGL_emulation: app_time_stats: avg=87.63ms min=15.29ms max=185.22ms count=10
+11-28 02:55:38.434  4340  4360 V WindowManager: Finish Transition (#31): created at 11-28 02:55:34.667 collect-started=0.829ms request-sent=2.965ms started=142.899ms ready=2591.121ms sent=2617.178ms finished=3756.11ms
+11-28 02:55:38.448  4340  6056 D BiometricService: canAuthenticate: User=0, Caller=0, Authenticators=15
+11-28 02:55:38.470  4340  6056 D BiometricService/PreAuthInfo: Package: com.example.deviceauth Sensor ID: 4 Modality: 8 Status: 7
+11-28 02:55:38.497  4340  6056 D BiometricService/PreAuthInfo: Package: com.example.deviceauth Sensor ID: 0 Modality: 2 Status: 1
+11-28 02:55:38.503  4340  6056 D BiometricService/PreAuthInfo: getCanAuthenticateInternal Modality: 2 AuthenticatorStatus: 1
+11-28 02:55:38.506  4340  6056 D AuthService: canAuthenticate, userId: 0, callingUserId: 0, authenticators: 15, result: 0
+11-28 02:55:38.557     0     0 I binder  : 4724:4340 cannot find target node
+11-28 02:55:38.574     0     0 I binder  : 4340:4724 transaction async to 0:0 failed 560506/29189/-22, size 64-0 line 3344
+11-28 02:55:38.638  4340  4724 E IPCThreadState: Binder transaction failure. id: 560506, BR_*: 29189, error: -22 (Invalid argument)
+11-28 02:55:38.643  4340  4724 W ActivityManager: pid 4340 system sent binder code 7 with flags 1 to frozen apps and got error -32
+11-28 02:55:38.643  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:38.654  4340  4724 W WindowManager: Exception thrown during dispatchAppVisibility Window{ec14ce4 u0 com.example.deviceauth/com.longbridge.nsh.AppActivity EXITING}
+11-28 02:55:38.654  4340  4724 W WindowManager: android.os.DeadObjectException
+11-28 02:55:38.654  4340  4724 W WindowManager: 	at android.os.BinderProxy.transactNative(Native Method)
+11-28 02:55:38.654  4340  4724 W WindowManager: 	at android.os.BinderProxy.transact(BinderProxy.java:586)
+11-28 02:55:38.654  4340  4724 W WindowManager: 	at android.view.IWindow$Stub$Proxy.dispatchAppVisibility(IWindow.java:553)
+11-28 02:55:38.654  4340  4724 W WindowManager: 	at com.android.server.wm.WindowState.sendAppVisibilityToClients(WindowState.java:3253)
+11-28 02:55:38.654  4340  4724 W WindowManager: 	at com.android.server.wm.WindowContainer.sendAppVisibilityToClients(WindowContainer.java:1289)
+11-28 02:55:38.654  4340  4724 W WindowManager: 	at com.android.server.wm.WindowToken.setClientVisible(WindowToken.java:403)
+11-28 02:55:38.654  4340  4724 W WindowManager: 	at com.android.server.wm.ActivityRecord.setClientVisible(ActivityRecord.java:7166)
+11-28 02:55:38.654  4340  4724 W WindowManager: 	at com.android.server.wm.ActivityRecord.postApplyAnimation(ActivityRecord.java:5881)
+11-28 02:55:38.654  4340  4724 W WindowManager: 	at com.android.server.wm.ActivityRecord.commitVisibility(ActivityRecord.java:5823)
+11-28 02:55:38.654  4340  4724 W WindowManager: 	at com.android.server.wm.Transition.finishTransition(Transition.java:1286)
+11-28 02:55:38.654  4340  4724 W WindowManager: 	at com.android.server.wm.TransitionController.finishTransition(TransitionController.java:937)
+11-28 02:55:38.654  4340  4724 W WindowManager: 	at com.android.server.wm.WindowOrganizerController.finishTransition(WindowOrganizerController.java:494)
+11-28 02:55:38.654  4340  4724 W WindowManager: 	at android.window.IWindowOrganizerController$Stub.onTransact(IWindowOrganizerController.java:289)
+11-28 02:55:38.654  4340  4724 W WindowManager: 	at com.android.server.wm.WindowOrganizerController.onTransact(WindowOrganizerController.java:204)
+11-28 02:55:38.654  4340  4724 W WindowManager: 	at android.os.Binder.execTransactInternal(Binder.java:1505)
+11-28 02:55:38.654  4340  4724 W WindowManager: 	at android.os.Binder.execTransact(Binder.java:1444)
+11-28 02:55:38.655  4340  4724 W Process : Unable to open /proc/9422/status
+11-28 02:55:38.806  4606  4623 V WindowManagerShell: Track 0 became idle
+11-28 02:55:38.808  4606  4623 V WindowManagerShell: All active transition animations finished
+11-28 02:55:38.816  4606  4623 W Looper  : Slow dispatch took 435ms wmshell.main h=android.os.Handler c=com.android.wm.shell.transition.DefaultTransitionHandler$$ExternalSyntheticLambda0@2d014fa m=0
+11-28 02:55:38.996  4340  5818 W system_server: Long monitor contention with owner binder:4340_6 (4724) at void com.android.server.wm.WindowManagerService.notifyWindowRemovedListeners(android.os.IBinder)(WindowManagerService.java:5339) waiters=2 in void com.android.server.wm.TaskPersister$TaskWriteQueueItem.process() for 330ms
+11-28 02:55:39.007  9474  9490 I EGL_emulation: Opening libGLESv1_CM_emulation.so
+11-28 02:55:39.008  9474  9490 I EGL_emulation: Opening libGLESv2_emulation.so
+11-28 02:55:39.008  4340  8080 W system_server: Long monitor contention with owner binder:4340_6 (4724) at void com.android.server.wm.WindowManagerService.notifyWindowRemovedListeners(android.os.IBinder)(WindowManagerService.java:5339) waiters=4 in int com.android.server.wm.ActivityTaskManagerService.getLastResumedActivityUserId() for 301ms
+11-28 02:55:39.051  4340  6056 D BiometricService: canAuthenticate: User=0, Caller=0, Authenticators=15
+11-28 02:55:39.066  4340  6056 D BiometricService/PreAuthInfo: Package: com.example.deviceauth Sensor ID: 4 Modality: 8 Status: 7
+11-28 02:55:39.107  4340  4364 W system_server: Long monitor contention with owner binder:4340_6 (4724) at void com.android.server.wm.WindowManagerService.notifyWindowRemovedListeners(android.os.IBinder)(WindowManagerService.java:5339) waiters=1 in void com.android.server.wm.InputMonitor$UpdateInputWindows.run() for 548ms
+11-28 02:55:39.127  4340  6056 D BiometricService/PreAuthInfo: Package: com.example.deviceauth Sensor ID: 0 Modality: 2 Status: 1
+11-28 02:55:39.164  9474  9490 W HWUI    : Failed to initialize 101010-2 format, error = EGL_SUCCESS
+11-28 02:55:39.169  4340  8080 W UserManagerService: Requested status bar icon for non-badged user 0
+11-28 02:55:39.206  9474  9497 I nsh     : js: NSHDEVAUTH available biometric
+11-28 02:55:39.206  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:39.216  4340  6056 D BiometricService/PreAuthInfo: getCanAuthenticateInternal Modality: 2 AuthenticatorStatus: 1
+11-28 02:55:39.219  4340  6056 D AuthService: canAuthenticate, userId: 0, callingUserId: 0, authenticators: 15, result: 0
+11-28 02:55:39.226  4340  4364 I Choreographer: Skipped 36 frames!  The application may be doing too much work on its main thread.
+11-28 02:55:39.236  4340  6056 W UserManagerService: Requested status bar icon for non-badged user 0
+11-28 02:55:39.255  4340  4724 W UserManagerService: Requested status bar icon for non-badged user 0
+11-28 02:55:39.279  4606  4623 W Looper  : Drained
+11-28 02:55:39.307  4606  4623 W Looper  : Slow delivery took 34ms wmshell.main h=android.os.Handler c=null m=11
+11-28 02:55:39.367   484   484 E BpTransactionCompletedListener: Failed to transact (-32)
+11-28 02:55:39.450  4830  4914 D EGL_emulation: app_time_stats: avg=75.28ms min=34.86ms max=132.61ms count=11
+11-28 02:55:39.567   195   195 I hwservicemanager: getTransport: Cannot find entry android.hardware.graphics.mapper@4.0::IMapper/default in either framework or device VINTF manifest.
+11-28 02:55:39.570  9474  9490 I Gralloc4: mapper 4.x is not supported
+11-28 02:55:39.505     0     0 I servicemanager: Caller(pid=9474,uid=10209,sid=u:r:untrusted_app:s0:c209,c256,c512,c768) Could not find android.hardware.graphics.allocator.IAllocator/default in the VINTF manifest. No alternative instances declared in VINTF.
+11-28 02:55:39.555     0     0 I logd    : logdr: UID=0 GID=0 PID=9503 n tail=0 logMask=99 pid=0 start=0ns deadline=0ns
+11-28 02:55:39.726  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:39.910  4606  4623 W Looper  : Drained
+11-28 02:55:39.971  9474  9482 I HWUI    : Davey! duration=1674ms; Flags=1, FrameTimelineVsyncId=153166, IntendedVsync=3114996461764, Vsync=3115096461760, InputEventId=0, HandleInputStart=3115107700500, AnimationStart=3115144293300, PerformTraversalsStart=3115144649600, DrawStart=3116475044600, FrameDeadline=3115013128430, FrameInterval=3115101491500, FrameStartTime=16666666, SyncQueued=3116486757500, SyncStart=3116500773100, IssueDrawCommandsStart=3116536775100, SwapBuffers=3116619355000, FrameCompleted=3116684546200, DequeueBufferDuration=141200, QueueBufferDuration=8276900, GpuCompleted=3116683738500, SwapBuffersCompleted=3116684546200, DisplayPresentTime=72904454231359566, CommandSubmissionCompleted=3116619355000, 
+11-28 02:55:39.986  4340  4360 I ActivityTaskManager: Displayed com.example.deviceauth/com.longbridge.nsh.AppActivity for user 0: +4s714ms
+11-28 02:55:40.212  4340  4525 D BiometricService/PreAuthInfo: Package: com.example.deviceauth Sensor ID: 4 Modality: 8 Status: 7
+11-28 02:55:40.231  4340  4525 D BiometricService/PreAuthInfo: Package: com.example.deviceauth Sensor ID: 0 Modality: 2 Status: 1
+11-28 02:55:40.236  4340  4525 D BiometricService/PreAuthInfo: getCanAuthenticateInternal Modality: 2 AuthenticatorStatus: 1
+11-28 02:55:40.243  4340  4525 D BiometricService: handleAuthenticate: modality(2), status(0), preAuthInfo: BiometricRequested: true, StrengthRequested: 15, CredentialRequested: false, Eligible:{0 }, Ineligible:{ID(4), oemStrength: 15, updatedStrength: 15, modality 8, state: 0, cookie: 0:7 }, CredentialAvailable: true,  requestId: 10 promptInfo.isIgnoreEnrollmentState: false
+11-28 02:55:40.257  4340  4525 D BiometricService: Creating authSession with authRequest: BiometricRequested: true, StrengthRequested: 15, CredentialRequested: false, Eligible:{0 }, Ineligible:{ID(4), oemStrength: 15, updatedStrength: 15, modality 8, state: 0, cookie: 0:7 }, CredentialAvailable: true, 
+11-28 02:55:40.258  4340  4525 D BiometricService/AuthSession: Creating AuthSession with: BiometricRequested: true, StrengthRequested: 15, CredentialRequested: false, Eligible:{0 }, Ineligible:{ID(4), oemStrength: 15, updatedStrength: 15, modality 8, state: 0, cookie: 0:7 }, CredentialAvailable: true, 
+11-28 02:55:40.260  4340  4525 V BiometricService/AuthSession: set to unknown state sensor: 0
+11-28 02:55:40.267  4340  4525 V BiometricService/AuthSession: waiting for cooking for sensor: 0
+11-28 02:55:40.273  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:40.301  4340  4498 I ImeTracker: com.example.deviceauth:ba12cdb7: onRequestHide at ORIGIN_SERVER reason HIDE_UNSPECIFIED_WINDOW fromUser false
+11-28 02:55:40.303  4340  4498 I ImeTracker: com.example.deviceauth:ba12cdb7: onCancelled at PHASE_SERVER_SHOULD_HIDE
+11-28 02:55:40.318  4340  4571 D BiometricScheduler: [Added] {[29] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth, cookie=157354906, requestId=10, userId=0}, new queue size: 1
+11-28 02:55:40.319  4340  4571 D BiometricScheduler: [Polled] {[29] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth, cookie=157354906, requestId=10, userId=0}, State: 0
+11-28 02:55:40.337  4340  4571 D GestureAvailabilityTracker: Notifying gesture availability, active=false
+11-28 02:55:40.367  4340  4571 D BiometricScheduler: Waiting for cookie before starting: {[29] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth, cookie=157354906, requestId=10, userId=0}, State: 4
+11-28 02:55:40.418  4340  4525 D BiometricService/Sensor: Sensor(0) matched cookie: 157354906
+11-28 02:55:40.419  4340  4525 D BiometricService/AuthSession: Remaining cookies: 0
+11-28 02:55:40.431  4606  4606 D AuthController: showAuthenticationDialog, authenticators: 15, sensorIds: 0 , credentialAllowed: false, requireConfirmation: false, operationId: 0, requestId: 10
+11-28 02:55:40.518  4606  4606 E ThemeUtils: View class com.android.systemui.biometrics.BiometricPromptLottieViewWrapper is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+11-28 02:55:40.537  4606  4606 E ThemeUtils: View class com.android.systemui.biometrics.BiometricPromptLottieViewWrapper is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+11-28 02:55:40.539  4606  4606 D AuthController: userId: 0 mCurrentDialog: null newDialog: com.android.systemui.biometrics.AuthContainerView{804e026 VFE...... .F....I. 0,0-0,0}
+11-28 02:55:40.667  4275  4275 I netd    : tetherGetStats() -> {[]} <31.59ms>
+11-28 02:55:40.699  4340  5818 E TaskPersister: File error accessing recents directory (directory doesn't exist?).
+11-28 02:55:40.724  4340  4724 W InputManager-JNI: Input channel object '9204ca3 Splash Screen com.example.deviceauth (client)' was disposed without first being removed with the input manager!
+11-28 02:55:40.750  4340  4361 W Looper  : Slow dispatch took 144ms android.ui h=com.android.server.am.ActivityManagerService$UiHandler c=com.android.server.am.UidObserverController$$ExternalSyntheticLambda0@5de2077 m=0
+11-28 02:55:40.761  4340  8080 W system_server: Long monitor contention with owner android.anim (4364) at void com.android.server.wm.WindowAnimator.lambda$new$1(long)(WindowAnimator.java:103) waiters=1 in java.util.List com.android.server.wm.ActivityTaskManagerService.getTasks(int, boolean, boolean, int) for 177ms
+11-28 02:55:40.787  4606  4641 W FrameTracker: Missed App frame:UNKNOWN: 10, 153430, 0, CUJ=J<SPLASHSCREEN_EXIT_ANIM>
+11-28 02:55:40.787  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:40.788  4606  4641 W FrameTracker: Missed SF frame:UNKNOWN: 10, 153430, 0, CUJ=J<SPLASHSCREEN_EXIT_ANIM>
+11-28 02:55:40.789  4606  4641 W FrameTracker: Missing HWUI jank callback for vsyncId: 153430, CUJ=J<SPLASHSCREEN_EXIT_ANIM>
+11-28 02:55:40.790  4606  4641 W FrameTracker: Missed App frame:UNKNOWN: 74, 153452, 206741376, CUJ=J<SPLASHSCREEN_EXIT_ANIM>
+11-28 02:55:40.791  4606  4641 W FrameTracker: Missed SF frame:UNKNOWN: 74, 153452, 206741376, CUJ=J<SPLASHSCREEN_EXIT_ANIM>
+11-28 02:55:40.799  4606  4641 W FrameTracker: Missed App frame:UNKNOWN: 74, 153468, 336539078, CUJ=J<SPLASHSCREEN_EXIT_ANIM>
+11-28 02:55:40.802  4606  4641 W FrameTracker: Missed SF frame:UNKNOWN: 74, 153468, 336539078, CUJ=J<SPLASHSCREEN_EXIT_ANIM>
+11-28 02:55:40.803  4340  4363 D ContentCapturePerUserService: onActivityEvent(): remote service is dead or unbound
+11-28 02:55:40.858  4606  4626 V PerfettoTrigger: Not triggering com.android.telemetry.interaction-jank-monitor-39 - not enough time since last trigger
+11-28 02:55:41.010  4340  8080 W AppOps  : Noting op not finished: uid 10181 pkg com.android.systemui code 24 startTime of in progress event=1795832624862
+11-28 02:55:41.205  4340  8080 D CoreBackPreview: Window{f1f8442 u0 BiometricPrompt}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@f5d599a, mPriority=0, mIsAnimationCallback=false}
+11-28 02:55:41.361  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:41.567  4606  4606 E OverviewProxyService: Failed to get overview proxy for system bar attr change.
+11-28 02:55:41.754  4340  4498 I ImeTracker: com.android.systemui:2fd72f52: onRequestHide at ORIGIN_SERVER reason HIDE_UNSPECIFIED_WINDOW fromUser false
+11-28 02:55:41.793  4340  4498 I ImeTracker: com.android.systemui:2fd72f52: onCancelled at PHASE_SERVER_SHOULD_HIDE
+11-28 02:55:41.887  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:41.938  4340  4525 D BiometricService: handleOnDialogAnimatedIn
+11-28 02:55:41.945  4340  4525 V BiometricService/AuthSession: Starting sensor: 0
+11-28 02:55:41.950  4340  4571 D BiometricScheduler: [Started] {[29] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth, cookie=157354906, requestId=10, userId=0}
+11-28 02:55:41.972  4340  4571 D BiometricStateCallback: State updated from 0 to 3, client {[29] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth, cookie=157354906, requestId=10, userId=0}
+11-28 02:55:41.984  4340  4571 D Biometrics/AuthenticationClient: Requesting auth for com.example.deviceauth
+11-28 02:55:42.007  4606  4679 D BiometricStatusRepositoryImpl: authenticationState updated: Started(biometricSourceType=FINGERPRINT, requestReason=BiometricPromptAuthentication)
+11-28 02:55:42.066  4576  4576 D fingerprint-service.ranchu: 0x7eb2a10994a0:authenticate:229: AUTHENTICATING operationId=0
+11-28 02:55:42.091  4340  4571 V ALSProbe: Enable ALS: 175051005
+11-28 02:55:42.091  4606  4606 E OverviewProxyService: Failed to get overview proxy for system bar attr change.
+11-28 02:55:42.154  4340  4571 V BiometricSchedulerOperation: started: {[29] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth, cookie=157354906, requestId=10, userId=0}, State: 2
+11-28 02:55:42.156  4340  4571 D BiometricScheduler: [Started] Prepared client: {[29] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth, cookie=157354906, requestId=10, userId=0}, State: 2
+11-28 02:55:42.288  4606  4676 D EGL_emulation: app_time_stats: avg=4662.79ms min=25.90ms max=23120.82ms count=5
+11-28 02:55:42.393  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:42.398  4606  4606 W FrameTracker: Missed App frame:UNKNOWN: 10, 153801, 130095440, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 02:55:42.429  4606  4606 W FrameTracker: Missed SF frame:UNKNOWN: 10, 153801, 130095440, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 02:55:42.459  4606  4606 W FrameTracker: Missed App frame:UNKNOWN: 74, 153817, 0, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 02:55:42.460  4606  4606 W FrameTracker: Missed SF frame:UNKNOWN: 74, 153817, 0, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 02:55:42.470  4606  4606 W FrameTracker: Missing HWUI jank callback for vsyncId: 153817, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 02:55:42.494  4606  4606 W FrameTracker: Missed App frame:UNKNOWN: 74, 153864, 134572318, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 02:55:42.498  4606  4606 W FrameTracker: Missed SF frame:UNKNOWN: 74, 153864, 134572318, CUJ=J<BIOMETRIC_PROMPT_TRANSITION::show>
+11-28 02:55:42.503  4606  4626 V PerfettoTrigger: Not triggering com.android.telemetry.interaction-jank-monitor-56 - not enough time since last trigger
+11-28 02:55:42.770  4606  4676 D EGL_emulation: app_time_stats: avg=214.40ms min=90.03ms max=372.59ms count=6
+11-28 02:55:42.925  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:43.443  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:43.963  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:44.071  4606  4676 D EGL_emulation: app_time_stats: avg=430.25ms min=172.53ms max=850.99ms count=3
+11-28 02:55:44.480  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:45.026  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:45.546  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:46.069  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:46.581  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:47.094  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:47.623  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:48.133  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:48.642  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:49.158  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:49.684  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:50.203  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:50.719  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:51.227  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:51.742  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:52.258  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:52.779  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:53.294  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:53.826  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:54.340  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:54.622  4576  4581 D fingerprint-service.ranchu: 0x7eb2a10994a0:onSensorEventOn:400: onAcquired(GOOD, 0)
+11-28 02:55:54.638  4340  4571 V Biometrics/AcquisitionClient: Acquired: 0 0, shouldSend: true
+11-28 02:55:54.655  4606  4679 D BiometricStatusRepositoryImpl: authenticationState updated: Acquired(biometricSourceType=FINGERPRINT, requestReason=BiometricPromptAuthentication, acquiredInfo=0)
+11-28 02:55:54.663  4576  4581 D fingerprint-service.ranchu: 0x7eb2a10994a0:onSensorEventOn:410: onAuthenticationSucceeded(enrollmentId=1, hat={ .challenge=0, .userId=1, .authenticatorId=1 })
+11-28 02:55:54.679  4340  4525 D BiometricService/AuthSession: sensorId: 0 acquiredInfo: 0 message: null
+11-28 02:55:54.691  4340  4571 V BiometricLogger: Authentication latency: -1
+11-28 02:55:54.699  4340  4571 W BiometricFrameworkStatsLogger: found a negative latency : -1
+11-28 02:55:54.700  4340  4571 V Biometrics/AuthenticationClient: onAuthenticated(true), ID:1, Owner: com.example.deviceauth, isBP: true, listener: com.android.server.biometrics.sensors.ClientMonitorCallbackConverter@78b336d, requireConfirmation: false, user: 0, clientMonitor: {[29] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth, cookie=157354906, requestId=10, userId=0}
+11-28 02:55:54.707  4340  4571 V BiometricUtils: Checking if the authenticating is in background, clientPackage:com.example.deviceauth
+11-28 02:55:54.713  4340  4571 D BaseClientMonitor: marking operation as done: {[29] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth, cookie=157354906, requestId=10, userId=0}
+11-28 02:55:54.718  4340  4571 D Biometrics/AuthenticationClient: Skipping addAuthToken
+11-28 02:55:54.731  4340  4571 D BiometricStateCallback: Client finished, state updated to 0, client {[29] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth, cookie=157354906, requestId=10, userId=0}
+11-28 02:55:54.740  4340  4571 D BiometricSchedulerOperation: [Finished / destroy]: {[29] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth, cookie=157354906, requestId=10, userId=0}
+11-28 02:55:54.717     0     0 I logd    : logdr: UID=0 GID=0 PID=9525 n tail=0 logMask=99 pid=0 start=0ns deadline=0ns
+11-28 02:55:54.743  4340  4525 V BiometricService: handleAuthenticationSucceeded(), sensorId: 0
+11-28 02:55:54.752  4606  4606 D AuthController: onBiometricAuthenticated: 
+11-28 02:55:54.754  4340  4571 V ALSProbe: Disable ALS: 175051005
+11-28 02:55:54.756  4340  4571 D FingerprintAuthenticationClient: Lockout is implemented by the HAL
+11-28 02:55:54.774  4606  8913 D BiometricStatusRepositoryImpl: authenticationState updated: Succeeded(biometricSourceType=FINGERPRINT, isStrongBiometric=true, requestReason=BiometricPromptAuthentication, userId=0)
+11-28 02:55:54.774  4606  8913 D BiometricStatusRepositoryImpl: authenticationState updated: Stopped(biometricSourceType=FINGERPRINT, requestReason=NotRunning)
+11-28 02:55:54.778  4340  4571 D BiometricScheduler: [Finishing] {[29] com.android.server.biometrics.sensors.fingerprint.aidl.FingerprintAuthenticationClient, proto=3, owner=com.example.deviceauth, cookie=157354906, requestId=10, userId=0}, success: true
+11-28 02:55:54.779  4340  4571 D GestureAvailabilityTracker: Notifying gesture availability, active=true
+11-28 02:55:54.786  4340  4571 D BiometricScheduler: No operations, returning to idle
+11-28 02:55:54.875  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:54.927  4606  4676 D EGL_emulation: app_time_stats: avg=3613.64ms min=53.22ms max=10730.64ms count=3
+11-28 02:55:55.357  9474  9478 I mple.deviceauth: Background concurrent mark compact GC freed 1041KB AllocSpace bytes, 2(40KB) LOS objects, 49% free, 2016KB/4032KB, paused 45.978ms,34.897ms total 220.814ms
+11-28 02:55:55.397  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:55.907  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:55.965     0     0 I logd    : logdr: UID=0 GID=0 PID=9530 n tail=0 logMask=99 pid=0 start=0ns deadline=0ns
+11-28 02:55:56.116  4606  4606 D AuthContainerView: pendingCallback: 4
+11-28 02:55:56.119  4606  4606 D AuthController: onDialogDismissed: 4
+11-28 02:55:56.125  4340  4525 V BiometricService/AuthSession: Dismissed! Modality: 1, User: 0, IsCrypto: false, Action: 2, Client: 2, Reason: 4, Error: 0, Latency: 15700, SessionId: 1047061
+11-28 02:55:56.127  4606  4606 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=com.android.systemui.biometrics.AuthContainerView$$ExternalSyntheticLambda4@eced8b2
+11-28 02:55:56.130  4340  8080 D CoreBackPreview: Window{f1f8442 u0 BiometricPrompt}: Setting back callback null
+11-28 02:55:56.137   219   219 I keystore2: system/security/keystore2/src/authorization.rs:114 - add_auth_token(challenge=0, userId=1, authId=1, authType=0x2, timestamp=3131510ms)
+11-28 02:55:56.140  4340  4525 D BiometricService/AuthSession: addAuthToken: 0
+11-28 02:55:56.142  4340  4525 D BiometricService: resetLockout from: 0, for: 4, userId: 0
+11-28 02:55:56.149  4340  4525 D BiometricService/AuthSession: Cancelling sensorId: 0
+11-28 02:55:56.152  4340  4525 D FingerprintService: cancelAuthenticationFromService, sensorId: 0
+11-28 02:55:56.152  9474  9497 I nsh     : js: NSHDEVAUTH result yes
+11-28 02:55:56.156  4340  4572 D BiometricScheduler: [Added] {[30] com.android.server.biometrics.sensors.face.aidl.FaceResetLockoutClient, proto=12, owner=android, cookie=0, requestId=-1, userId=0}, new queue size: 1
+11-28 02:55:56.158  4340  4572 D BiometricScheduler: [Polled] {[30] com.android.server.biometrics.sensors.face.aidl.FaceResetLockoutClient, proto=12, owner=android, cookie=0, requestId=-1, userId=0}, State: 0
+11-28 02:55:56.158  4340  4572 D BiometricScheduler: [Started] {[30] com.android.server.biometrics.sensors.face.aidl.FaceResetLockoutClient, proto=12, owner=android, cookie=0, requestId=-1, userId=0}
+11-28 02:55:56.161   869   869 I FaceVirtualHalSession: resetLockout
+11-28 02:55:56.162  4340  4571 D BiometricScheduler: cancelAuthenticationOrDetection, requestId: 10
+11-28 02:55:56.163   869  4580 I FaceVirtualHalEngine: resetLockoutImpl
+11-28 02:55:56.168  4340  4572 V BiometricSchedulerOperation: started: {[30] com.android.server.biometrics.sensors.face.aidl.FaceResetLockoutClient, proto=12, owner=android, cookie=0, requestId=-1, userId=0}, State: 2
+11-28 02:55:56.180  4340  4572 D LockoutCache: Lockout for user: 0 is 0
+11-28 02:55:56.226  4340  4572 D BiometricSchedulerOperation: [Finished / destroy]: {[30] com.android.server.biometrics.sensors.face.aidl.FaceResetLockoutClient, proto=12, owner=android, cookie=0, requestId=-1, userId=0}
+11-28 02:55:56.227  4340  4572 D BiometricScheduler: [Finishing] {[30] com.android.server.biometrics.sensors.face.aidl.FaceResetLockoutClient, proto=12, owner=android, cookie=0, requestId=-1, userId=0}, success: true
+11-28 02:55:56.230  4340  4572 D BiometricScheduler: No operations, returning to idle
+11-28 02:55:56.249  9474  9490 D EGL_emulation: app_time_stats: avg=8200.57ms min=486.84ms max=15914.30ms count=2
+11-28 02:55:56.343  4606  4606 I AuthDialogPanelInteractionDetector: Disable detector
+11-28 02:55:56.360  4340  8080 W InputManager-JNI: Input channel object 'f1f8442 BiometricPrompt (client)' was disposed without first being removed with the input manager!
+11-28 02:55:56.391  4340  4364 W WindowManager: container Window{f1f8442 u0 BiometricPrompt}does not have a surface
+11-28 02:55:56.426  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:56.483  4340  4363 V WindowManager: Unknown focus tokens, dropping reportFocusChanged
+11-28 02:55:56.483  4606  4606 I Choreographer: Skipped 33 frames!  The application may be doing too much work on its main thread.
+11-28 02:55:56.493  4340  4498 I ImeTracker: com.example.deviceauth:5cb515f9: onRequestHide at ORIGIN_SERVER reason HIDE_UNSPECIFIED_WINDOW fromUser false
+11-28 02:55:56.500  4340  4498 I ImeTracker: com.example.deviceauth:5cb515f9: onCancelled at PHASE_SERVER_SHOULD_HIDE
+11-28 02:55:56.801  4606  4606 E OverviewProxyService: Failed to get overview proxy for system bar attr change.
+11-28 02:55:56.807  4606  4606 E OverviewProxyService: Failed to get overview proxy for system bar attr change.
+11-28 02:55:56.859  4606  4676 D EGL_emulation: app_time_stats: avg=3634.77ms min=55.41ms max=14227.93ms count=4
+11-28 02:55:56.940  4830  4830 D FallbackHome: User unlocked but no home; let's hope someone enables one soon?
+11-28 02:55:57.172     0     0 I logd    : logdr: UID=0 GID=0 PID=9535 n tail=0 logMask=99 pid=0 start=0ns deadline=0ns
+11-28 02:55:57.330     0     0 I logd    : logdr: UID=0 GID=0 PID=9539 n tail=0 logMask=99 pid=0 start=0ns deadline=0ns

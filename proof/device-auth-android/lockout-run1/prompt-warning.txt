@@ -1,0 +1,1 @@
+prompt not drawn before capture
