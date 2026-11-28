@@ -6,6 +6,9 @@
 import { Text, View, signal } from "nsh";
 import { deviceAuth, deviceAuthAvailable, horizontalSizeClass, verticalSizeClass, colorScheme, fontScale, lifecycle, localeSettings, openUrl, pixelRatio, platform, setColorScheme, wakeCount, windowSize } from "nsh";
 
+// Compile-time shape of the prompt options; the case does not prompt.
+if (false) void deviceAuth("", { allowDeviceCredential: false });
+
 // Whether `Intl`'s local time is in the zone it names: formatting in that zone
 // writes what local time does (in 1970, a summer and a winter), on a machine in
 // any zone.

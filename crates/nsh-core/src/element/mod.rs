@@ -143,7 +143,9 @@ pub use self::{
         HOST_PROPS, Method, MethodSpec, Methods, NoEvent, Param, PropDecode, PropKind, PropSpec,
         Props, Registry, Root, ScrollbarSource, declarations,
     },
-    device_auth::{DeviceAuthKind, DeviceAuthResult, device_auth, device_auth_available},
+    device_auth::{
+        DeviceAuthKind, DeviceAuthOptions, DeviceAuthResult, device_auth, device_auth_available,
+    },
     element_ref::{
         ComponentRef, ElementRef, ElementTarget, EvaluateOptions, Evaluation, FollowTarget,
     },

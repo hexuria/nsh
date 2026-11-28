@@ -6,7 +6,7 @@ function App() {
     const available = deviceAuthAvailable();
     console.log(`NSHDEVAUTH available ${available}`);
     status.set(`available: ${available}`);
-    const result = await deviceAuth("Unlock the example", false);
+    const result = await deviceAuth("Unlock the example");
     console.log(`NSHDEVAUTH result ${result}`);
     status.set(`available: ${available}; result: ${result}`);
   };

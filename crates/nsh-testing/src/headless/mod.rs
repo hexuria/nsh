@@ -3437,7 +3437,7 @@ mod tests {
     fn Unlocking() -> impl IntoElement {
         let result = signal(String::from("nothing"));
         let unlock = move |_: &()| {
-            let answer = device_auth("Unlock the test", false);
+            let answer = device_auth("Unlock the test", DeviceAuthOptions::default());
             spawn(async move { result.set(answer.await.as_str().to_owned()) });
         };
         view()

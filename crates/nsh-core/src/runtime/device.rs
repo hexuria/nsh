@@ -12,6 +12,15 @@ pub(crate) struct OpenUrlResult {
     pub(crate) opened: bool,
 }
 
+/// Options for `deviceAuth`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, JsObject)]
+#[prop(exact)]
+pub(crate) struct DeviceAuthOptions {
+    /// Offer the device's screen-lock credential where the system can combine
+    /// it with biometrics (Android API 30 and later; false: biometrics only).
+    allow_device_credential: Option<bool>,
+}
+
 /// How `deviceAuth` ended.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PropEnum)]
 pub(crate) enum DeviceAuthResult {
@@ -67,10 +76,12 @@ impl Device {
     }
 
     /// Asks the user to unlock for `reason`. Biometrics are the only
-    /// accepted device authentication unless `allowDeviceCredential` is
-    /// true; the app handles its own PIN fallback. On Android API 28-29 the
-    /// system default biometric strength applies; `BIOMETRIC_STRONG` can be
-    /// requested only on API 30 and later. Call this on the engine (UI)
+    /// accepted device authentication unless `options.allowDeviceCredential`
+    /// is true; the app handles its own PIN fallback. Android offers the
+    /// device credential in the system prompt from API 30. On API 28-29 the
+    /// prompt is biometric-only and Use PIN resolves `"no"`; the system
+    /// default biometric strength applies there because `BIOMETRIC_STRONG`
+    /// can be requested only on API 30 and later. Call this on the engine (UI)
     /// thread; a call from another thread resolves `"notAvailable"`.
     /// Resolves with `"yes"` when the device accepts the user, `"no"` when
     /// the user chooses the app's PIN fallback, `"notAvailable"` when the
@@ -80,14 +91,14 @@ impl Device {
     /// not match keeps the system prompt waiting.
     pub(crate) fn device_auth(
         reason: String,
-        allow_device_credential: Option<bool>,
+        options: Option<DeviceAuthOptions>,
     ) -> Later<DeviceAuthResult> {
         Later::new(async move {
-            Ok::<_, JsError>(
-                crate::prelude::device_auth(&reason, allow_device_credential.unwrap_or(false))
-                    .await
-                    .into(),
-            )
+            let mut rust = crate::prelude::DeviceAuthOptions::default();
+            rust.allow_device_credential = options
+                .and_then(|options| options.allow_device_credential)
+                .unwrap_or(false);
+            Ok::<_, JsError>(crate::prelude::device_auth(&reason, rust).await.into())
         })
     }
 }

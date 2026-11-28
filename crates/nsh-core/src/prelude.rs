@@ -258,10 +258,10 @@ pub use crate::element::{
     load_sound,
 };
 pub use crate::element::{
-    Delay, Each, If, IntoElements, IntoReactive, KeyOptions, Memo, Owner, Prop, Reactive,
-    ReadSignal, Resource, ResourceInfo, ResourceState, Scope, Signal, SignalEquals, Spawned,
-    Stored, after_answer, animate_layout, animated_value, announce_for_accessibility, app_url,
-    apple_keys, batch, can_pick_screen_color, catch_error, cleanup, clipboard_files,
+    Delay, DeviceAuthOptions, Each, If, IntoElements, IntoReactive, KeyOptions, Memo, Owner, Prop,
+    Reactive, ReadSignal, Resource, ResourceInfo, ResourceState, Scope, Signal, SignalEquals,
+    Spawned, Stored, after_answer, animate_layout, animated_value, announce_for_accessibility,
+    app_url, apple_keys, batch, can_pick_screen_color, catch_error, cleanup, clipboard_files,
     clipboard_has_image, clipboard_has_string, clipboard_image, clipboard_string,
     close_all_notifications, close_auth_session, close_notification, color, component,
     component_ref, computed, dark, data_dir, device_auth, device_auth_available, dismiss_keyboard,

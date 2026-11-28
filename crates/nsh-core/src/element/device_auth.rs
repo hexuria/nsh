@@ -17,6 +17,15 @@ pub enum DeviceAuthKind {
     DeviceCredentialOnly,
 }
 
+/// Options for a device-authentication prompt.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct DeviceAuthOptions {
+    /// Offer the device's screen-lock credential where the system can combine
+    /// it with biometrics (Android API 30 and later). False: biometrics only.
+    pub allow_device_credential: bool,
+}
+
 /// How a device-authentication prompt ended.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum DeviceAuthResult {
@@ -98,7 +107,7 @@ pub fn device_auth_available() -> DeviceAuthKind {
 /// API 30 and later. Call this on the engine (UI) thread and await
 /// the answer in a task; a call from another thread and unsupported
 /// platforms answer [`DeviceAuthResult::NotAvailable`] at once.
-pub fn device_auth(reason: &str, allow_device_credential: bool) -> Answer<DeviceAuthResult> {
+pub fn device_auth(reason: &str, options: DeviceAuthOptions) -> Answer<DeviceAuthResult> {
     let (answer, slot) = Answer::new();
     let Some(available) = super::ambient::try_device_auth_available() else {
         log::warn!("device_auth called outside the engine thread; answering notAvailable");
@@ -111,7 +120,7 @@ pub fn device_auth(reason: &str, allow_device_credential: bool) -> Answer<Device
     }
     if !super::ambient::act_if_running(Action::DeviceAuth {
         reason: reason.to_owned(),
-        allow_device_credential,
+        allow_device_credential: options.allow_device_credential,
         answer: slot.clone(),
     }) {
         log::warn!("device_auth called outside the engine thread; answering notAvailable");
@@ -158,7 +167,7 @@ mod tests {
     fn a_prompt_outside_the_engine_answers_not_available_instead_of_panicking() {
         let result = std::thread::spawn(|| {
             use std::{pin::Pin, task::Context};
-            let mut answer = device_auth("Unlock the test", false);
+            let mut answer = device_auth("Unlock the test", DeviceAuthOptions::default());
             Pin::new(&mut answer).poll(&mut Context::from_waker(std::task::Waker::noop()))
         })
         .join()
