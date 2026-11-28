@@ -123,7 +123,19 @@ impl WindowsNative {
         let target = self.target.load(Ordering::Relaxed) as NodeId;
         // A press in a window activates it, as a click does.
         self.on_main(move |s| activate(s, target));
-        // A real pointer arrives before it presses (hover state).
+        // A real pointer arrives before it presses (hover state). Down
+        // and up are one main-thread turn for a click: activating the
+        // press's window posts a real mouse move where the cursor is,
+        // which a turn in between would deliver as a move of the press,
+        // cancelling it (a move out of the pressed view).
+        if single_turn(hold) {
+            self.in_target(move |s| {
+                synth::pointer(s, PointerKind::Move, x, y, 0, 0);
+                synth::pointer(s, PointerKind::Down, x, y, button, 1 << button);
+                synth::pointer(s, PointerKind::Up, x, y, button, 0);
+            });
+            return;
+        }
         self.in_target(move |s| {
             synth::pointer(s, PointerKind::Move, x, y, 0, 0);
             synth::pointer(s, PointerKind::Down, x, y, button, 1 << button);
@@ -131,6 +143,15 @@ impl WindowsNative {
         std::thread::sleep(hold);
         self.in_target(move |s| synth::pointer(s, PointerKind::Up, x, y, button, 0));
     }
+}
+
+/// Whether a click's down and up go in one main-thread turn. They must
+/// for a press: activating the press's window makes Windows post a mouse
+/// move where the real cursor is, and a turn between the down and the up
+/// delivers it as a move of the press — a move out of the pressed view,
+/// which cancels it. A hold's up is later by definition.
+fn single_turn(hold: Duration) -> bool {
+    hold <= CLICK
 }
 
 impl Native for WindowsNative {
@@ -432,4 +453,22 @@ fn mapped_bounds(
         point(Points(x0), Points(y0)),
         Size::new(Points(x1 - x0), Points(y1 - y0)),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A press's down and up are one main-thread turn: a turn between
+    /// them delivers the mouse move Windows posts where the real cursor
+    /// is when the press's window activates, which moves the press out
+    /// of its view and cancels it (presses on a second window never
+    /// completed). A longer hold's up is a turn of its own.
+    #[test]
+    fn a_presss_down_and_up_are_one_main_thread_turn() {
+        assert!(single_turn(Duration::ZERO));
+        assert!(single_turn(CLICK));
+        assert!(!single_turn(CLICK + Duration::from_millis(1)));
+        assert!(!single_turn(Duration::from_millis(500)));
+    }
 }
