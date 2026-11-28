@@ -23,8 +23,8 @@ pub enum DeviceAuthResult {
     /// The device accepted the user.
     Yes,
     /// The user was not accepted. On Android this is the negative button
-    /// (`Use PIN`) where the device credential is not allowed; a rejected
-    /// biometric sample itself keeps the system prompt waiting.
+    /// (`Use PIN`) on API 28-29, or where the device credential is not
+    /// allowed; a rejected biometric sample itself keeps the system prompt waiting.
     No,
     /// The device cannot authenticate here.
     #[default]
@@ -91,9 +91,11 @@ pub fn device_auth_available() -> DeviceAuthKind {
 /// Asks the user to unlock for `reason`. Biometrics are the only accepted
 /// device authentication unless `allow_device_credential` is set: the
 /// phone's screen lock is never offered by default, and the app's own PIN
-/// remains the app's separate fallback. On Android API 28-29 the system
-/// default biometric strength applies; `BIOMETRIC_STRONG` can be requested
-/// only on API 30 and later. Call this on the engine (UI) thread and await
+/// remains the app's separate fallback. Android offers the device credential
+/// in the system prompt from API 30. On API 28-29 the prompt is biometric-only
+/// and "Use PIN" answers [`DeviceAuthResult::No`]; the system default biometric
+/// strength applies there because `BIOMETRIC_STRONG` can be requested only on
+/// API 30 and later. Call this on the engine (UI) thread and await
 /// the answer in a task; a call from another thread and unsupported
 /// platforms answer [`DeviceAuthResult::NotAvailable`] at once.
 pub fn device_auth(reason: &str, allow_device_credential: bool) -> Answer<DeviceAuthResult> {

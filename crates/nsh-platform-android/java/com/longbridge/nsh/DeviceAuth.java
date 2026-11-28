@@ -9,8 +9,8 @@ import android.os.Looper;
 /**
  * Device-authentication prompts ({@code nsh_core::element::device_auth}). The first implementation is Android's
  * framework biometric prompt: biometrics only by default, with the device credential added only when the app allows
- * it. The user cancel action answers {@code cancelled}; the API 28-29 negative button ("Use PIN", where the device
- * credential is not allowed) answers {@code no}. A failed biometric sample keeps the system prompt waiting rather
+ * it from API 30. The user cancel action answers {@code cancelled}; the API 28-29 negative button ("Use PIN")
+ * answers {@code no}. A failed biometric sample keeps the system prompt waiting rather
  * than answering {@code no}; five failed samples answer {@code lockedOut} through the prompt's lockout error.
  */
 final class DeviceAuth {
@@ -101,10 +101,12 @@ final class DeviceAuth {
                 authenticators |= android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL;
             }
             builder.setAllowedAuthenticators(authenticators);
-        } else if (Build.VERSION.SDK_INT == 29 && allowDeviceCredential) {
-            builder.setDeviceCredentialAllowed(true);
         }
-        boolean credentialOffered = allowDeviceCredential && Build.VERSION.SDK_INT >= 29;
+        // Only API 30 can combine biometrics and the device credential in one
+        // system prompt. API 29's ConfirmDeviceCredential hand-off can lose the
+        // outer authentication session, so 28-29 use the biometric-only prompt
+        // and its negative button even when the credential is allowed.
+        boolean credentialOffered = allowDeviceCredential && Build.VERSION.SDK_INT >= 30;
         if (!credentialOffered) {
             builder.setNegativeButton("Use PIN", executor,
                     (dialog, which) -> answerOnce(answered, handler, timeout[0], mounter, id, "no"));
@@ -132,17 +134,7 @@ final class DeviceAuth {
                         answerOnce(answered, handler, timeout[0], mounter, id, "notAvailable");
                         break;
                     default:
-                        // API 29 reports ERROR_CANCELED (and on some builds the hidden
-                        // negative-button error 13) while the system is only moving from the
-                        // biometric sheet to the device-credential screen. Those are not final
-                        // answers: the same callback still receives the credential result. Real
-                        // user cancellation keeps ERROR_USER_CANCELED and answers cancelled.
-                        boolean credentialTransition = errorCode
-                                == android.hardware.biometrics.BiometricPrompt.BIOMETRIC_ERROR_CANCELED
-                                || errorCode == 13;
-                        if (!(credentialOffered && credentialTransition)) {
-                            answerOnce(answered, handler, timeout[0], mounter, id, "cancelled");
-                        }
+                        answerOnce(answered, handler, timeout[0], mounter, id, "cancelled");
                 }
             }
 
