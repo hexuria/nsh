@@ -63,7 +63,7 @@ TSX app adds its entry (`nsh package App.tsx --target …`).
 
 `nsh.json` also holds `rust` and `root` (the app's crates and its root component, [Building with Rust](./rust.md)),
 `theme` and `appearance`, `tailwind` (see [Tailwind](./tailwind.md)), `capabilities` (see
-[Sandbox and capabilities](./sandbox-and-capabilities.md)), `android` (`targetSdk`, `usesCleartextTraffic`, `allowBackup` and `adaptiveIcon`, [below](#target-api-level)), `ios` and `macos` (the `Info.plist` keys and entitlements
+[Sandbox and capabilities](./sandbox-and-capabilities.md)), `android` (`targetSdk`, `biometric`, `usesCleartextTraffic`, `allowBackup` and `adaptiveIcon`, [below](#target-api-level)), `ios` and `macos` (the `Info.plist` keys and entitlements
 of their packages, [below](#infoplist-keys-and-entitlements); `macos.activationPolicy`, a [menu bar app](./macos.md#menu-bar-apps)) and `updater`, which makes desktop packages update themselves
 (see [App Updates](./app-updates.md)) and every native package take [OTA updates](./ota-updates.md); [Project structure](./project-structure.md#nshjson) lists
 every key. A key or value NSH cannot read is reported as a warning and left out, so an app written for a newer NSH
@@ -186,6 +186,18 @@ against that level, so the SDK needs its platform (`sdkmanager "platforms;androi
   "android": { "targetSdk": 36 }
 }
 ```
+
+### Device authentication
+
+An app that uses `deviceAuth` declares Android's biometric permission with `android.biometric`:
+
+```json
+{
+  "android": { "biometric": true }
+}
+```
+
+The permission is off by default. Without it the app still launches and `deviceAuth` answers `notAvailable`, but Android does not let it ask for biometrics.
 
 ### Plain HTTP
 

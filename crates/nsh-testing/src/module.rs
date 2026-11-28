@@ -18,8 +18,8 @@ use std::{
 use nsh_core::{
     JsonValue,
     element::{
-        Arg, Exception, JsClass, JsError, JsHost, JsIn, JsKind, JsOwned, JsValue, PropError,
-        Registry, TsTypes,
+        Arg, Exception, JsClass, JsError, JsHost, JsIn, JsKind, JsOwned, JsValue, PropEnum,
+        PropError, Registry, TsTypes,
     },
     host_channel::ModuleFake,
     prelude::*,
@@ -1776,6 +1776,34 @@ fn stub_response(value: &JsonValue) -> Result<StubResponse, PropError> {
     })
 }
 
+/// The answer `answerDeviceAuth` scripts (`deviceAuth`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PropEnum)]
+pub enum DeviceAuthResult {
+    /// The device accepted the user.
+    Yes,
+    /// The user was not accepted.
+    No,
+    /// The device cannot authenticate here.
+    #[default]
+    NotAvailable,
+    /// The user dismissed the prompt.
+    Cancelled,
+    /// Too many attempts; the user waits or unlocks the device first.
+    LockedOut,
+}
+
+impl From<DeviceAuthResult> for nsh_core::element::DeviceAuthResult {
+    fn from(result: DeviceAuthResult) -> Self {
+        match result {
+            DeviceAuthResult::Yes => Self::Yes,
+            DeviceAuthResult::No => Self::No,
+            DeviceAuthResult::NotAvailable => Self::NotAvailable,
+            DeviceAuthResult::Cancelled => Self::Cancelled,
+            DeviceAuthResult::LockedOut => Self::LockedOut,
+        }
+    }
+}
+
 /// The app a test opened (`open`), on a headless engine of its
 /// own: its steps (`press`, `type`, `scroll`, ...) take the views a
 /// selector names, `id:<testID>`, `label:<accessibilityLabel>`,
@@ -2323,6 +2351,17 @@ impl App {
     /// (`ERR_NSH_TEST_UNSUPPORTED`).
     pub async fn forward(this: Instance<Self>) -> Result<(), JsError> {
         step(&this, |app| app.forward()).await
+    }
+
+    /// Scripts the device-authentication prompt's answer: headless runs
+    /// report a biometric and answer every `deviceAuth` prompt with
+    /// `result`. Without this a prompt fails the step loudly rather than
+    /// hanging. Headless runs only.
+    pub async fn answer_device_auth(
+        this: Instance<Self>,
+        result: DeviceAuthResult,
+    ) -> Result<(), JsError> {
+        step(&this, move |app| app.answer_device_auth(result.into())).await
     }
 
     /// Answers the dialogs the app shows from now on (`AlertDialog.show`, action

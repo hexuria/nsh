@@ -5422,6 +5422,7 @@
 			fields.colorScheme.set(scheme === "system" ? systemScheme : scheme);
 		};
 		const device = {
+			deviceAuthAvailable: () => "none",
 			horizontalSizeClass: () => fields.horizontalSizeClass(),
 			verticalSizeClass: () => fields.verticalSizeClass(),
 			windowSize: () => fields.window(),

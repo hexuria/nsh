@@ -352,6 +352,7 @@ pub struct Headless {
     /// How the user ends the web sign-in sessions
     /// ([`Headless::on_auth_session`]); `None`: never.
     auth_session: Option<nsh_core::auth_session::AuthSessionOutcome>,
+    device_auth: Option<nsh_core::element::DeviceAuthResult>,
     /// The paths the user picks in the open dialog
     /// ([`Headless::on_pick_paths`]).
     picked_paths: Vec<std::path::PathBuf>,
@@ -505,6 +506,7 @@ impl Headless {
             screen_color: None,
             share: Some(nsh_core::share::ShareOutcome::dismissed()),
             auth_session: Some(nsh_core::auth_session::AuthSessionOutcome::Cancelled),
+            device_auth: None,
             picked_paths: Vec::new(),
             save_path: None,
             failing_images: Vec::new(),
@@ -811,6 +813,20 @@ impl Headless {
     pub fn answer_dialog(&mut self, answer: DialogAnswer) -> Result<(), String> {
         self.answer(answer)?;
         self.done()
+    }
+
+    /// Scripts the device-authentication prompt's answer: the harness
+    /// reports biometrics and answers every prompt with `result`. Without
+    /// this a prompt fails the step loudly rather than hanging.
+    pub fn answer_device_auth(
+        &mut self,
+        result: nsh_core::element::DeviceAuthResult,
+    ) -> Result<(), String> {
+        let what = format!("answerDeviceAuth({result:?})");
+        self.device_auth = Some(result);
+        self.set_environment(&what, |env| {
+            env.device_auth = nsh_core::element::DeviceAuthKind::Biometric;
+        })
     }
 
     /// Answers the picks steps ask for (`Picker.pickImages`, `Picker.pickFiles`) with
@@ -1191,6 +1207,14 @@ impl Headless {
             if let Some(outcome) = &self.auth_session {
                 control.dispatch_event(ROOT_ID, EventKind::AuthSession, outcome.payload(id));
                 self.screen.auth_session_ended(id);
+            }
+        }
+        for id in self.screen.take_device_auth_answers() {
+            match self.device_auth {
+                Some(result) => {
+                    control.dispatch_event(ROOT_ID, EventKind::DeviceAuth, result.payload(id));
+                }
+                None => self.screen.unsupported_device_auth(),
             }
         }
         for (id, request) in self.screen.take_file_answers() {
@@ -3406,6 +3430,56 @@ mod tests {
         app.press("Share").unwrap();
         app.wait_for("text:shared mail").unwrap();
         assert_eq!(app.screen().shares().len(), 3);
+    }
+
+    /// Asks the device to unlock and shows the answer.
+    #[component]
+    fn Unlocking() -> impl IntoElement {
+        let result = signal(String::from("nothing"));
+        let unlock = move |_: &()| {
+            let answer = device_auth("Unlock the test", DeviceAuthOptions::default());
+            spawn(async move { result.set(answer.await.as_str().to_owned()) });
+        };
+        view()
+            .child(text(move || result.get()))
+            .child(text("Unlock").on_press(unlock))
+    }
+
+    #[test]
+    fn a_test_scripts_every_device_authentication_answer() {
+        use nsh_core::element::DeviceAuthResult;
+        for answer in [
+            DeviceAuthResult::Yes,
+            DeviceAuthResult::No,
+            DeviceAuthResult::NotAvailable,
+            DeviceAuthResult::Cancelled,
+            DeviceAuthResult::LockedOut,
+        ] {
+            let mut app = Headless::start(EngineConfig::new(Root::of::<Unlocking>())).unwrap();
+            app.first_render().unwrap();
+            app.answer_device_auth(answer).unwrap();
+            app.press("Unlock").unwrap();
+            app.wait_for(&format!("text:{}", answer.as_str())).unwrap();
+            assert_eq!(
+                app.screen().device_auths(),
+                [(1, "Unlock the test".to_owned(), false)]
+            );
+        }
+    }
+
+    #[test]
+    fn an_unscripted_device_authentication_prompt_fails_loudly() {
+        let mut app = Headless::start(EngineConfig::new(Root::of::<Unlocking>())).unwrap();
+        app.first_render().unwrap();
+        app.set_environment("deviceAuth", |env| {
+            env.device_auth = nsh_core::element::DeviceAuthKind::Biometric;
+        })
+        .unwrap();
+        let error = app.press("Unlock").unwrap_err();
+        assert!(
+            error.contains("answering a device-authentication prompt"),
+            "{error}"
+        );
     }
 
     /// Opens a sign-in session ending with a `demo:` callback (closes it)

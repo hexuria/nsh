@@ -82,6 +82,8 @@ pub struct Environment {
     /// The platform shows web sign-in sessions
     /// ([`crate::platform::Environment::auth_session`]).
     pub auth_session: bool,
+    /// What the device can unlock with.
+    pub device_auth: crate::element::DeviceAuthKind,
     /// The platform shows file dialogs and opens, reveals and trashes local
     /// paths ([`crate::platform::Environment::file_requests`]).
     pub file_requests: bool,
@@ -164,6 +166,7 @@ impl Default for Environment {
             canvas_render: false,
             share: false,
             auth_session: false,
+            device_auth: crate::element::DeviceAuthKind::None,
             file_requests: false,
             speech: false,
             notifications: false,

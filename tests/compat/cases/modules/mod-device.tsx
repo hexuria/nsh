@@ -4,7 +4,10 @@
 // `openUrl`: a promise for a URL it opens (the headless runtime answers none), one rejected with a `TypeError` for
 // a URL it never opens (it never throws). Its script checks each.
 import { Text, View, signal } from "nsh";
-import { horizontalSizeClass, verticalSizeClass, colorScheme, fontScale, lifecycle, localeSettings, openUrl, pixelRatio, platform, setColorScheme, wakeCount, windowSize } from "nsh";
+import { deviceAuth, deviceAuthAvailable, horizontalSizeClass, verticalSizeClass, colorScheme, fontScale, lifecycle, localeSettings, openUrl, pixelRatio, platform, setColorScheme, wakeCount, windowSize } from "nsh";
+
+// Compile-time shape of the prompt options; the case does not prompt.
+if (false) void deviceAuth("", { allowDeviceCredential: false });
 
 // Whether `Intl`'s local time is in the zone it names: formatting in that zone
 // writes what local time does (in 1970, a summer and a winter), on a machine in
@@ -40,6 +43,7 @@ function App() {
       <Text>{`Intl local time: ${intlLocalTime()}`}</Text>
       <Text>{`Languages: ${localeSettings().languages.join(", ")}`}</Text>
       <Text>{`Regional: ${localeSettings().hourCycle}, week from ${localeSettings().firstDayOfWeek}, ${localeSettings().measurementSystem}, ${localeSettings().temperatureUnit}`}</Text>
+      <Text>{`Device auth: ${deviceAuthAvailable()} ${typeof deviceAuth}`}</Text>
       <View testID="dark" onPress={() => setColorScheme("dark")}>
         <Text>Go dark</Text>
       </View>

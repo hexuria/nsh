@@ -287,16 +287,20 @@ pub(super) fn executor() -> Rc<Executor> {
     with_data(|d| d.ambient.executor.clone()).expect("the core sets the executor")
 }
 
-fn act(action: Action) {
+pub(super) fn act(action: Action) {
     executor().act(action);
 }
 
 /// [`act`] while the engine runs Rust code, else nothing: for cleanups and
-/// handles that may outlive it.
-pub(super) fn act_if_running(action: Action) {
+/// handles that may outlive it. Returns whether the action was handed to
+/// the engine.
+pub(super) fn act_if_running(action: Action) -> bool {
     if let Some(executor) = super::reactive::try_with_data(|d| d.ambient.executor.clone()).flatten()
     {
         executor.act(action);
+        true
+    } else {
+        false
     }
 }
 
@@ -474,6 +478,20 @@ pub(crate) fn has_tab_bar() -> bool {
     with_data(|d| d.ambient.env.as_ref().map(|e| e.env))
         .expect("the core sets the environment")
         .with_untracked(|e| matches!(e.os, Os::Ios | Os::Android) && e.tab_bar)
+}
+
+/// What the device can unlock with now, without subscribing.
+pub(crate) fn device_auth_available() -> crate::element::DeviceAuthKind {
+    with_data(|d| d.ambient.env.as_ref().map(|e| e.env))
+        .expect("the core sets the environment")
+        .with_untracked(|e| e.device_auth)
+}
+
+/// [`device_auth_available`] where an engine runs, else `None`.
+pub(crate) fn try_device_auth_available() -> Option<crate::element::DeviceAuthKind> {
+    super::reactive::try_with_data(|d| d.ambient.env.as_ref().map(|e| e.env))
+        .flatten()
+        .map(|env| env.with_untracked(|e| e.device_auth))
 }
 
 /// [`os`] where an engine runs (its thread, while it runs Rust code),

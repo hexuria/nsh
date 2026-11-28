@@ -102,6 +102,7 @@ final class Native {
     static final int SHARE = 90;
     static final int DETENT_CHANGE = 91;
     static final int AUTH_SESSION = 92;
+    static final int DEVICE_AUTH = 93;
 
     /**
      * Draws the SVG {@code bytes} for a view {@code maxPx} pixels on its longer side, with its shorter side that long

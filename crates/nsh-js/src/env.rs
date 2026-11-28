@@ -57,11 +57,12 @@ enum Part {
     WakeCount,
     HorizontalSizeClass,
     VerticalSizeClass,
+    DeviceAuth,
     GlobalMenu,
     Tray,
 }
 
-const PARTS: usize = 22;
+const PARTS: usize = 23;
 
 /// The environment's part of a context's state.
 pub(crate) struct Env {
@@ -204,6 +205,9 @@ pub(crate) fn init(cx: *mut JsContext) {
         } else if i == Part::GlobalMenu as usize || i == Part::Tray as usize {
             // Booleans from the start: false until the platform reports.
             boolean(false)
+        } else if i == Part::DeviceAuth as usize {
+            // No device authentication until the platform reports otherwise.
+            string(cx, "none")
         } else {
             UNDEFINED
         };
@@ -515,6 +519,9 @@ pub(crate) fn set_environment(cx: *mut JsContext, next: &Environment) -> Result<
             Part::VerticalSizeClass,
             string(cx, next.vertical_size_class().name()),
         ));
+    }
+    if changed(&|p| p.device_auth == next.device_auth) {
+        writes.push((Part::DeviceAuth, string(cx, next.device_auth.as_str())));
     }
     if changed(&|p| p.safe_area == next.safe_area) {
         writes.push((Part::SafeArea, object(cx, &insets(&next.safe_area))));
@@ -978,6 +985,16 @@ unsafe extern "C" fn platform_select(
 
 /// The exports of `nsh/device`.
 pub(crate) const DEVICE_EXPORTS: &[Item] = &[
+    (
+        "deviceAuthAvailable",
+        Export::Value(|cx| accessor(cx, Part::DeviceAuth)),
+        Ts::value(
+            "What the device can unlock with now (reactive, sync and cheap):
+`\"none\"`, `\"biometric\"` or `\"deviceCredentialOnly\"`. Linux,
+the web, terminals, macOS, iOS and Windows report `\"none\"` for now. Read it on the engine (UI) thread.",
+            "Accessor<\"none\" | \"biometric\" | \"deviceCredentialOnly\">",
+        ),
+    ),
     (
         "horizontalSizeClass",
         Export::Value(|cx| accessor(cx, Part::HorizontalSizeClass)),

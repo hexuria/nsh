@@ -56,6 +56,7 @@ export function createEnvironment(reactive, invoke, dom) {
   // serves under those names (`modules`) are the same values as `nsh`'s.
   // `environment.test.mjs` holds both to `env.rs`.
   const device = {
+    deviceAuthAvailable: () => "none",
     horizontalSizeClass: () => fields.horizontalSizeClass(),
     verticalSizeClass: () => fields.verticalSizeClass(),
     windowSize: () => fields.window(), colorScheme: () => fields.colorScheme(), setColorScheme,

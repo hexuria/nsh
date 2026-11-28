@@ -282,6 +282,10 @@ pub(crate) struct AndroidConfig {
     /// as Android has it; `false` also writes the rules that keep the data
     /// out of both on Android 12 and later.
     pub(crate) allow_backup: Option<bool>,
+    /// The app may ask the user to unlock with biometrics
+    /// (`android.permission.USE_BIOMETRIC`): `deviceAuth`. Off by default.
+    #[serde(default)]
+    pub(crate) biometric: bool,
     /// The launcher icon in layers ([`AdaptiveIcon`]), which each launcher
     /// masks to its own shape. Without it, a launcher shrinks
     /// `icon.android` into its mask.
@@ -1530,6 +1534,7 @@ fn package_android(
             notifications: config.notifications(),
             microphone: config.web_media("microphone"),
             camera: config.web_media("camera"),
+            biometric: config.android.biometric,
             schemes: &config.schemes,
             rust: built.rust_root,
             dark: config.appearance.as_deref() == Some("dark"),

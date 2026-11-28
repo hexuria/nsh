@@ -126,6 +126,14 @@ pub(crate) trait Driver: Send {
     /// The oldest dialog not answered yet.
     fn pending_dialog(&mut self) -> Option<Dialog>;
     fn answer_dialog(&mut self, answer: DialogAnswer) -> Result<(), String>;
+    /// Scripts the device-authentication prompt's answer (`answerDeviceAuth`).
+    fn answer_device_auth(
+        &mut self,
+        result: nsh_core::element::DeviceAuthResult,
+    ) -> Result<(), String> {
+        let _ = result;
+        Err(headless_only("answerDeviceAuth"))
+    }
     /// The oldest pick (`Picker.pickImages`, `Picker.pickFiles`) not answered yet; a real
     /// platform shows its picker and has none to answer.
     fn pending_pick(&mut self) -> Option<nsh_core::picker::Pick> {
@@ -332,6 +340,12 @@ impl Driver for Headless {
     }
     fn answer_dialog(&mut self, answer: DialogAnswer) -> Result<(), String> {
         Headless::answer_dialog(self, answer)
+    }
+    fn answer_device_auth(
+        &mut self,
+        result: nsh_core::element::DeviceAuthResult,
+    ) -> Result<(), String> {
+        Headless::answer_device_auth(self, result)
     }
     fn pending_pick(&mut self) -> Option<nsh_core::picker::Pick> {
         Headless::pending_pick(self)

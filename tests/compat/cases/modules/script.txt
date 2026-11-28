@@ -247,6 +247,7 @@ expect Time zone: UTC
 expect Intl local time: its zone
 expect Languages: en-US
 expect Regional: h12, week from 7, us, fahrenheit
+expect Device auth: none function
 tap id:dark
 expect Scheme: dark
 absent Scheme: light
@@ -268,6 +269,8 @@ covers [nsh] horizontalSizeClass
 covers [nsh] verticalSizeClass
 covers [nsh] lifecycle
 covers [nsh] wakeCount
+covers [nsh] deviceAuthAvailable
+covers [nsh] deviceAuth
 covers [nsh] localeSettings
 # mod-host-channel
 tap id:case-mod-host-channel

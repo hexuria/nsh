@@ -280,6 +280,7 @@ events! {
     Share = "onShare": "A [`Command::Share`] request finished (root only; payload: `id`, then `action` (`\"shared\"` with the `target` where the platform names it, or `\"dismissed\"`), or `error` with its `code`; [`crate::share`]).",
     DetentChange = "onDetentChange": "The user moved an iOS sheet dialog to another of its `detents` (dragging it, its grabber, a scroll at its edge, a screen reader; payload: [`EventPayload::Json`], `{ detent }`, [`SheetDetent::change_payload`]).",
     AuthSession = "onAuthSession" as "": "A [`Command::AuthSession`] request finished (root only; payload: `id`, then the callback `url`, `action` `\"cancelled\"`, or `error` with its `code`; [`crate::auth_session`]; never reaches a listener).",
+    DeviceAuth = "onDeviceAuth" as "": "A [`Command::DeviceAuth`] request finished (root only; payload: `id`, `result`; [`crate::element::DeviceAuthResult`]; never reaches a listener).",
 }
 
 /// What an input holds, for the system's autofill and suggestions
@@ -2792,6 +2793,17 @@ pub enum Command {
     /// ([`crate::element::close_auth_session`]), and the core has answered
     /// it as cancelled already. A session no longer showing is left alone.
     CloseAuthSession(u32),
+    /// Show the device-authentication prompt (on the root) and report its
+    /// result as [`EventKind::DeviceAuth`] `id` (`result`: `yes`, `no`,
+    /// `notAvailable`, `cancelled` or `lockedOut`).
+    DeviceAuth {
+        /// The request.
+        id: u32,
+        /// Why the app asks, shown by the system.
+        reason: String,
+        /// Whether the device credential may be offered besides biometrics.
+        allow_device_credential: bool,
+    },
     /// Let the user pick a color anywhere on the screen (on the root; a
     /// color picker's eyedropper, [`crate::element::ambient::pick_screen_color`]):
     /// the system's color sampler or the browser's `EyeDropper`. Report it

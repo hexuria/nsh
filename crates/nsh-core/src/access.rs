@@ -2588,8 +2588,6 @@ mod tests {
             ]
         );
     }
-    use std::cell::Cell;
-
     use super::*;
 
     fn caps(json: &str) -> Capabilities {
@@ -3885,7 +3883,7 @@ mod tests {
             granted: None,
         };
         let files = MediaFiles::new(&access, None, &TrustedPaths::default(), true);
-        let resolves = || RESOLVES.with(Cell::get);
+        let resolves = || RESOLVES.with(std::cell::Cell::get);
         let before = resolves();
         for outside in [
             root.join("elsewhere/x.png"),

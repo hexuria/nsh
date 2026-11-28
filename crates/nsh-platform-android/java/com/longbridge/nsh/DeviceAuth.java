@@ -1,0 +1,165 @@
+package com.longbridge.nsh;
+
+import android.app.Activity;
+import android.content.Context;
+import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
+
+/**
+ * Device-authentication prompts ({@code nsh_core::element::device_auth}). The first implementation is Android's
+ * framework biometric prompt: biometrics only by default, with the device credential added only when the app allows
+ * it from API 30. The user cancel action answers {@code cancelled}; the API 28-29 negative button ("Use PIN")
+ * answers {@code no}. A failed biometric sample keeps the system prompt waiting rather
+ * than answering {@code no}; five failed samples answer {@code lockedOut} through the prompt's lockout error.
+ */
+final class DeviceAuth {
+    private DeviceAuth() {}
+
+    /** What the device can unlock with: 0 none, 1 biometric, 2 device credential only. */
+    static int availability(Context context) {
+        try {
+            return availabilityUnchecked(context);
+        } catch (SecurityException e) {
+            return 0;
+        } catch (RuntimeException e) {
+            return 0;
+        }
+    }
+
+    private static int availabilityUnchecked(Context context) {
+        if (Build.VERSION.SDK_INT < 28) return 0;
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.hardware.biometrics.BiometricManager manager =
+                    context.getSystemService(android.hardware.biometrics.BiometricManager.class);
+            if (manager == null) return 0;
+            int strong = manager.canAuthenticate(
+                    android.hardware.biometrics.BiometricManager.Authenticators.BIOMETRIC_STRONG);
+            if (strong == android.hardware.biometrics.BiometricManager.BIOMETRIC_SUCCESS) return 1;
+            int credential = manager.canAuthenticate(
+                    android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL);
+            return credential == android.hardware.biometrics.BiometricManager.BIOMETRIC_SUCCESS ? 2 : 0;
+        }
+        if (Build.VERSION.SDK_INT == 29) {
+            android.hardware.biometrics.BiometricManager manager =
+                    context.getSystemService(android.hardware.biometrics.BiometricManager.class);
+            if (manager != null && manager.canAuthenticate()
+                    == android.hardware.biometrics.BiometricManager.BIOMETRIC_SUCCESS) return 1;
+        }
+        android.hardware.fingerprint.FingerprintManager fingerprints =
+                context.getSystemService(android.hardware.fingerprint.FingerprintManager.class);
+        try {
+            if (fingerprints != null && fingerprints.isHardwareDetected() && fingerprints.hasEnrolledFingerprints()) {
+                return 1;
+            }
+        } catch (SecurityException e) {
+            return 0;
+        }
+        android.app.KeyguardManager keyguard =
+                (android.app.KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
+        return keyguard != null && keyguard.isDeviceSecure() ? 2 : 0;
+    }
+
+    /** Shows prompt {@code id} on the activity's main thread and answers it through {@code mounter}. */
+    static void prompt(Context context, Mounter mounter, int id, String reason, boolean allowDeviceCredential) {
+        Handler main = new Handler(Looper.getMainLooper());
+        main.post(() -> show(context, mounter, id, reason, allowDeviceCredential));
+    }
+
+    private static void show(Context context, Mounter mounter, int id, String reason, boolean allowDeviceCredential) {
+        boolean[] answered = new boolean[] {false};
+        try {
+            showUnchecked(context, mounter, id, reason, allowDeviceCredential, answered);
+        } catch (SecurityException e) {
+            answerOnce(answered, null, null, mounter, id, "notAvailable");
+        } catch (RuntimeException e) {
+            answerOnce(answered, null, null, mounter, id, "notAvailable");
+        } catch (Error e) {
+            answerOnce(answered, null, null, mounter, id, "notAvailable");
+        }
+    }
+
+    private static void showUnchecked(Context context, Mounter mounter, int id, String reason,
+            boolean allowDeviceCredential, boolean[] answered) {
+        Activity activity = SystemUi.activity(context);
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()
+                || Build.VERSION.SDK_INT < 28) {
+            answerOnce(answered, null, null, mounter, id, "notAvailable");
+            return;
+        }
+        java.util.concurrent.Executor executor = command -> new Handler(Looper.getMainLooper()).post(command);
+        Handler handler = new Handler(Looper.getMainLooper());
+        Runnable[] timeout = new Runnable[1];
+        android.os.CancellationSignal cancellation = new android.os.CancellationSignal();
+        android.hardware.biometrics.BiometricPrompt.Builder builder =
+                new android.hardware.biometrics.BiometricPrompt.Builder(activity)
+                        .setTitle("Unlock")
+                        .setDescription(reason);
+        if (Build.VERSION.SDK_INT >= 30) {
+            int authenticators = android.hardware.biometrics.BiometricManager.Authenticators.BIOMETRIC_STRONG;
+            if (allowDeviceCredential) {
+                authenticators |= android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL;
+            }
+            builder.setAllowedAuthenticators(authenticators);
+        }
+        // Only API 30 can combine biometrics and the device credential in one
+        // system prompt. API 29's ConfirmDeviceCredential hand-off can lose the
+        // outer authentication session, so 28-29 use the biometric-only prompt
+        // and its negative button even when the credential is allowed.
+        boolean credentialOffered = allowDeviceCredential && Build.VERSION.SDK_INT >= 30;
+        if (!credentialOffered) {
+            builder.setNegativeButton("Use PIN", executor,
+                    (dialog, which) -> answerOnce(answered, handler, timeout[0], mounter, id, "no"));
+        }
+        android.hardware.biometrics.BiometricPrompt prompt = builder.build();
+        if (!credentialOffered) {
+            // Apple and Windows do not time a credential prompt out. A biometric-only
+            // prompt still settles: its timeout cancels the prompt and answers itself.
+            timeout[0] = () -> {
+                cancellation.cancel();
+                answerOnce(answered, handler, timeout[0], mounter, id, "cancelled");
+            };
+        }
+        prompt.authenticate(cancellation, executor,
+                new android.hardware.biometrics.BiometricPrompt.AuthenticationCallback() {
+            @Override public void onAuthenticationError(int errorCode, CharSequence error) {
+                switch (errorCode) {
+                    case android.hardware.biometrics.BiometricPrompt.BIOMETRIC_ERROR_LOCKOUT:
+                    case android.hardware.biometrics.BiometricPrompt.BIOMETRIC_ERROR_LOCKOUT_PERMANENT:
+                        answerOnce(answered, handler, timeout[0], mounter, id, "lockedOut");
+                        break;
+                    case android.hardware.biometrics.BiometricPrompt.BIOMETRIC_ERROR_NO_BIOMETRICS:
+                    case android.hardware.biometrics.BiometricPrompt.BIOMETRIC_ERROR_HW_NOT_PRESENT:
+                    case android.hardware.biometrics.BiometricPrompt.BIOMETRIC_ERROR_NO_DEVICE_CREDENTIAL:
+                        answerOnce(answered, handler, timeout[0], mounter, id, "notAvailable");
+                        break;
+                    default:
+                        answerOnce(answered, handler, timeout[0], mounter, id, "cancelled");
+                }
+            }
+
+            @Override public void onAuthenticationSucceeded(
+                    android.hardware.biometrics.BiometricPrompt.AuthenticationResult result) {
+                answerOnce(answered, handler, timeout[0], mounter, id, "yes");
+            }
+
+            @Override public void onAuthenticationFailed() {
+                // The system prompt keeps waiting after a non-match; the core gets one final answer only.
+            }
+                });
+        if (!credentialOffered) handler.postDelayed(timeout[0], 30_000);
+    }
+
+    private static void answerOnce(boolean[] answered, Handler timeoutHandler, Runnable timeout,
+            Mounter mounter, int id, String result) {
+        if (!answered[0]) {
+            answered[0] = true;
+            if (timeoutHandler != null && timeout != null) timeoutHandler.removeCallbacks(timeout);
+            answer(mounter, id, result);
+        }
+    }
+
+    private static void answer(Mounter mounter, int id, String result) {
+        mounter.eventMap(1, Native.DEVICE_AUTH, new String[] {"id", "result"}, new Object[] {(double) id, result});
+    }
+}

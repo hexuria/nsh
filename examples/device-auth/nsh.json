@@ -1,0 +1,5 @@
+{
+  "name": "Device Auth",
+  "id": "com.example.deviceauth",
+  "android": { "biometric": true }
+}
