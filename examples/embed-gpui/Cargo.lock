@@ -3451,7 +3451,7 @@ dependencies = [
  "smallvec",
  "spin 0.10.1",
  "strum",
- "taffy",
+ "taffy 0.15.0",
  "thiserror 2.0.21",
  "ttf-parser",
  "unicode-segmentation",
@@ -3793,7 +3793,7 @@ dependencies = [
  "smallvec",
  "spin 0.10.1",
  "strum",
- "taffy",
+ "taffy 0.15.0",
  "thiserror 2.0.21",
  "ttf-parser",
  "unicode-segmentation",
@@ -6137,7 +6137,7 @@ dependencies = [
  "sha2 0.10.9",
  "simplecss",
  "slab",
- "taffy",
+ "taffy 0.16.0",
  "tokio",
  "tokio-tungstenite",
  "ttf-parser",
@@ -10638,6 +10638,17 @@ name = "taffy"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c8480887e8803986d96a7173729565520d4bbb721ad6b7ad6941a22897207aa"
+dependencies = [
+ "serde",
+ "slotmap",
+ "smallvec",
+]
+
+[[package]]
+name = "taffy"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cae92eb1b204bfd239b5c463e1bd2c3ce4913d2d3abfb5c64f5cfee9d65e5c68"
 dependencies = [
  "serde",
  "slotmap",
