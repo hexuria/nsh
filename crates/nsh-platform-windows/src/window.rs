@@ -1542,7 +1542,7 @@ fn handle(
                 _ => PointerKind::Move,
             };
             let time = surface.clock();
-            let sample = pen_sample(id, info.pointerType.0 == 3, hwnd, scale, time);
+            let sample = pen_sample(id, info.pointerType.0 == 3);
             crate::input::set_pen_sample(id + 2, Some(sample));
             crate::input::pointer(
                 surface,
@@ -1835,10 +1835,9 @@ fn sys_close(hwnd: HWND, lparam: LPARAM) -> crate::shell::SysClose {
 
 /// The pressure and tilt contact `id` reports (`pen`: a pen, else a
 /// finger), from `GetPointerPenInfo` / `GetPointerTouchInfo`; for a pen,
-/// also its eraser and barrel button and the samples merged into the
-/// message (`hwnd`'s points at `scale`, `time` being the message's
-/// [`crate::input::PointerEvent::time`]).
-fn pen_sample(id: u32, pen: bool, hwnd: HWND, scale: f32, time: f64) -> crate::input::PenSample {
+/// also its eraser and barrel button. Coalesced samples stay empty: reading
+/// the pointer history on every move costs more than the frozen touch path allows.
+fn pen_sample(id: u32, pen: bool) -> crate::input::PenSample {
     use windows::Win32::UI::Input::Pointer::{
         GetPointerPenInfo, GetPointerTouchInfo, POINTER_PEN_INFO, POINTER_TOUCH_INFO,
     };
@@ -1852,7 +1851,6 @@ fn pen_sample(id: u32, pen: bool, hwnd: HWND, scale: f32, time: f64) -> crate::i
         tilt: (0.0, 0.0),
         eraser: false,
         barrel: false,
-        merged: Vec::new(),
     };
     if pen {
         let mut info = POINTER_PEN_INFO::default();
@@ -1861,7 +1859,6 @@ fn pen_sample(id: u32, pen: bool, hwnd: HWND, scale: f32, time: f64) -> crate::i
             (sample.pressure, sample.tilt) = pen_values(&info);
             sample.eraser = info.penFlags & (ERASER | INVERTED) != 0;
             sample.barrel = info.penFlags & BARREL != 0;
-            sample.merged = pen_history(id, &info, hwnd, scale, time);
         }
     } else {
         // TOUCH_MASK_PRESSURE.
@@ -1898,64 +1895,6 @@ fn pen_values(
         0.0
     };
     (pressure, (tilt_x, tilt_y))
-}
-
-/// The pen samples the system merged into the message of pen `id` whose
-/// own sample is `current` (`GetPointerPenInfoHistory`), oldest first and
-/// without `current`, in `hwnd`'s points at `scale`. Their times count back
-/// from `time` (the message's) by the performance counter, or by `dwTime`
-/// when there is none.
-fn pen_history(
-    id: u32,
-    current: &windows::Win32::UI::Input::Pointer::POINTER_PEN_INFO,
-    hwnd: HWND,
-    scale: f32,
-    time: f64,
-) -> Vec<crate::input::MergedSample> {
-    use windows::Win32::{
-        System::Performance::QueryPerformanceFrequency,
-        UI::Input::Pointer::{GetPointerPenInfoHistory, POINTER_PEN_INFO},
-    };
-    let count = current.pointerInfo.historyCount;
-    if count < 2 {
-        return Vec::new();
-    }
-    let mut entries = vec![POINTER_PEN_INFO::default(); count as usize];
-    let mut n = count;
-    // SAFETY: `entries` holds `n` values.
-    if unsafe { GetPointerPenInfoHistory(id, &mut n, Some(entries.as_mut_ptr())) }.is_err() {
-        return Vec::new();
-    }
-    entries.truncate(n.min(count) as usize);
-    let mut frequency = 0i64;
-    // SAFETY: a local out value.
-    let _ = unsafe { QueryPerformanceFrequency(&mut frequency) };
-    let now = &current.pointerInfo;
-    // Newest first, the first being the message's own sample.
-    entries
-        .iter()
-        .skip(1)
-        .rev()
-        .map(|entry| {
-            let at = &entry.pointerInfo;
-            let ago = if frequency > 0 && now.PerformanceCount != 0 && at.PerformanceCount != 0 {
-                now.PerformanceCount.saturating_sub(at.PerformanceCount) as f64 / frequency as f64
-            } else {
-                now.dwTime.wrapping_sub(at.dwTime) as f64 / 1000.0
-            };
-            let mut p = at.ptPixelLocation;
-            // SAFETY: plain call.
-            let _ = unsafe { ScreenToClient(hwnd, &mut p) };
-            let (pressure, tilt) = pen_values(entry);
-            crate::input::MergedSample {
-                x: p.x as f32 / scale,
-                y: p.y as f32 / scale,
-                pressure,
-                tilt,
-                time: time - ago,
-            }
-        })
-        .collect()
 }
 
 /// True when a mouse message was synthesized from touch or pen input,

@@ -445,23 +445,6 @@ pub(crate) struct PenSample {
     pub(crate) eraser: bool,
     /// The pen's barrel button is held.
     pub(crate) barrel: bool,
-    /// The samples the system merged into this message, oldest first, the
-    /// message's own one left out (`GetPointerPenInfoHistory`).
-    pub(crate) merged: Vec<MergedSample>,
-}
-
-/// A pen sample the system merged into a later `WM_POINTER*` message.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct MergedSample {
-    /// Position in the surface (points).
-    pub(crate) x: f32,
-    pub(crate) y: f32,
-    /// As [`PenSample::pressure`].
-    pub(crate) pressure: Option<f32>,
-    /// As [`PenSample::tilt`].
-    pub(crate) tilt: (f32, f32),
-    /// When the device took it, in the clock of [`PointerEvent::time`].
-    pub(crate) time: f64,
 }
 
 thread_local! {
@@ -2121,7 +2104,7 @@ fn report(surface: &Surface, phase: TouchPhase, changed: &Pointer, activated: Op
                     Key::Mouse => None,
                 };
                 let sample = sample.as_ref();
-                let mut touch = TouchPoint {
+                let touch = TouchPoint {
                     id: p.id,
                     target: p.target.id(),
                     // JS keeps a finger's path from its start.
@@ -2153,22 +2136,6 @@ fn report(surface: &Surface, phase: TouchPhase, changed: &Pointer, activated: Op
                     eraser: sample.is_some_and(|s| s.eraser),
                     barrel: sample.is_some_and(|s| s.barrel),
                 };
-                // The merged samples belong to the message being handled: a
-                // cancel follows another report of the same message.
-                if is_changed && phase != TouchPhase::Cancel {
-                    for m in sample.map_or(&[][..], |s| s.merged.as_slice()) {
-                        let pressure = m
-                            .pressure
-                            .unwrap_or_else(|| TouchPoint::default_pressure(phase, false));
-                        touch.push_coalesced(
-                            point(Points(m.x), Points(m.y)),
-                            pressure,
-                            m.tilt.0,
-                            m.tilt.1,
-                            m.time * 1000.0,
-                        );
-                    }
-                }
                 touch
             })
             .collect()

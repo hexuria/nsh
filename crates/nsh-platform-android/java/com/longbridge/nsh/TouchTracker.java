@@ -297,38 +297,16 @@ final class TouchTracker {
         t.eraser = tool == MotionEvent.TOOL_TYPE_ERASER;
         t.barrel = pen && (e.getButtonState() & MotionEvent.BUTTON_STYLUS_PRIMARY) != 0;
         t.pressure = Math.max(0f, Math.min(1f, e.getPressure(i)));
-        t.tiltX = pen ? tilt(e, i, -1, false) : 0;
-        t.tiltY = pen ? tilt(e, i, -1, true) : 0;
+        t.tiltX = pen ? tilt(e, i, false) : 0;
+        t.tiltY = pen ? tilt(e, i, true) : 0;
     }
 
-    /**
-     * The DOM's tiltX ({@code y} false) or tiltY of pen pointer {@code i} of {@code e} at its historical sample
-     * {@code h}, or now when {@code h} is negative (degrees).
-     */
-    private static float tilt(MotionEvent e, int i, int h, boolean y) {
+    /** The DOM's tiltX ({@code y} false) or tiltY of pen pointer {@code i} of {@code e} (degrees). */
+    private static float tilt(MotionEvent e, int i, boolean y) {
         // AXIS_TILT: radians from the perpendicular; AXIS_ORIENTATION: radians clockwise from up.
-        double tan = Math.tan(h < 0 ? e.getAxisValue(MotionEvent.AXIS_TILT, i)
-                : e.getHistoricalAxisValue(MotionEvent.AXIS_TILT, i, h));
-        double o = h < 0 ? e.getAxisValue(MotionEvent.AXIS_ORIENTATION, i)
-                : e.getHistoricalAxisValue(MotionEvent.AXIS_ORIENTATION, i, h);
+        double tan = Math.tan(e.getAxisValue(MotionEvent.AXIS_TILT, i));
+        double o = e.getAxisValue(MotionEvent.AXIS_ORIENTATION, i);
         return (float) Math.toDegrees(Math.atan(y ? -Math.cos(o) * tan : Math.sin(o) * tan));
-    }
-
-    /** The samples a move of {@code e} merged before its own for pointer {@code i}, as {@link Tracked#history}. */
-    private static double[] history(Tracked t, MotionEvent e, int i) {
-        int n = e.getHistorySize();
-        if (n == 0) return NO_HISTORY;
-        boolean pen = t.kind == 1;
-        double[] h = new double[n * SAMPLE];
-        for (int k = 0; k < n; k++) {
-            h[k * SAMPLE] = e.getHistoricalX(i, k);
-            h[k * SAMPLE + 1] = e.getHistoricalY(i, k);
-            h[k * SAMPLE + 2] = Math.max(0f, Math.min(1f, e.getHistoricalPressure(i, k)));
-            h[k * SAMPLE + 3] = pen ? tilt(e, i, k, false) : 0;
-            h[k * SAMPLE + 4] = pen ? tilt(e, i, k, true) : 0;
-            h[k * SAMPLE + 5] = e.getHistoricalEventTime(k);
-        }
-        return h;
     }
 
     /** Positions of the tracked fingers; false if none moved. */
@@ -344,7 +322,7 @@ final class TouchTracker {
             t.y = y;
             pointer(t, e, i);
             // Only a finger that moved sends the samples merged into its move.
-            t.history = own && e.getActionMasked() == MotionEvent.ACTION_MOVE ? history(t, e, i) : NO_HISTORY;
+            t.history = NO_HISTORY;
         }
         return moved;
     }

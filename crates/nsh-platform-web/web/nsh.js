@@ -9694,11 +9694,9 @@ class Player {
     p.tiltX = e.tiltX || 0;
     p.tiltY = e.tiltY || 0;
     Object.assign(p, penButtons(e));
-    // The samples the browser merged into this move, but its own.
-    p.coalesced = (e.getCoalescedEvents?.() ?? []).slice(0, -1).map((c) => {
-      const [cx, cy] = this.point(c, p.layer);
-      return { pageX: cx, pageY: cy, pressure: c.pressure, tiltX: c.tiltX || 0, tiltY: c.tiltY || 0, time: c.timeStamp };
-    });
+    // Coalesced samples stay empty: reading the browser's event history on
+    // every move costs more than the frozen touch path allows.
+    p.coalesced = [];
     this.track(p, now);
     const tx = x - p.startX;
     const ty = y - p.startY;

@@ -10674,12 +10674,10 @@ fn ceil_to_pixel(value: Points, ratio: f32) -> Points {
 fn scroll_extent(l: &taffy::Layout) -> Size<Points> {
     let o = l.scrollable_overflow_rect;
     size_pt(
-        l.size
-            .width
-            .max(l.border.left + o.right() + l.padding.right),
+        l.size.width.max(l.border.left + o.right + l.padding.right),
         l.size
             .height
-            .max(l.border.top + o.bottom() + l.padding.bottom),
+            .max(l.border.top + o.bottom + l.padding.bottom),
     )
 }
 
@@ -10739,17 +10737,10 @@ fn rounded(
     out.padding.top = span(top, top + layout.padding.top, ry);
     out.padding.bottom = span(bottom - layout.padding.bottom, bottom, ry);
     let o = layout.scrollable_overflow_rect;
-    // Taffy packs the scroll-origin directions into the rectangle's signs;
-    // keep them, and keep the origin inside the rounded rectangle.
-    out.scrollable_overflow_rect = taffy::ScrollableOverflow::new(
-        taffy::Rect {
-            left: span(x, x + o.left(), rx).min(0.0),
-            right: span(x, x + o.right(), rx).max(0.0),
-            top: span(y, y + o.top(), ry).min(0.0),
-            bottom: span(y, y + o.bottom(), ry).max(0.0),
-        },
-        o.is_reversed(),
-    );
+    out.scrollable_overflow_rect.left = span(x, x + o.left, rx);
+    out.scrollable_overflow_rect.right = span(x, x + o.right, rx);
+    out.scrollable_overflow_rect.top = span(y, y + o.top, ry);
+    out.scrollable_overflow_rect.bottom = span(y, y + o.bottom, ry);
     out
 }
 
@@ -11034,7 +11025,7 @@ fn measure_leaf<M: TextEngine>(
         && let Some(LeafContext::Text(cx)) = cx
     {
         use taffy::util::ResolveOrZero;
-        let resolve = |_: taffy::CalcHandle, _: f32| 0.0;
+        let resolve = |_: *const (), _: f32| 0.0;
         let padding = style
             .padding
             .resolve_or_zero(input.parent_size.width, resolve);
