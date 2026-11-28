@@ -279,7 +279,15 @@ pub fn Sheet(props: SheetProps, cx: Scope<SheetEvent>) -> impl IntoElement {
                 // presented surface may be taller than the window), or its
                 // largest detent's.
                 .style_with(move |s| {
-                    let lift = keyboard_lift();
+                    // An Android sheet is already in a dialog whose logical height ends at the keyboard
+                    // (ModalHost shrinks it there, since centered cards need it too). Counting the
+                    // keyboard here as well lifts a bottom sheet a second time; other platforms size
+                    // no separate dialog surface that way.
+                    let lift = if os() == nsh_core::platform::Os::Android {
+                        Points::ZERO
+                    } else {
+                        keyboard_lift()
+                    };
                     let above = Length::from(lift);
                     let s = match props.side.get() {
                         Placement::Bottom if lift > Points::ZERO => s

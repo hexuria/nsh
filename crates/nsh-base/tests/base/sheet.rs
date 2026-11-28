@@ -673,6 +673,57 @@ fn KeyboardSheet() -> impl IntoElement {
     )
 }
 
+/// An Android dialog window is already shorter by its IME inset: the sheet must not count that keyboard again.
+#[test]
+fn an_android_sheet_is_lifted_once_when_its_modal_shrinks() {
+    use std::sync::{Arc, Mutex};
+
+    use nsh_core::platform::{Idiom, Os};
+    use nsh_core::{EdgeInsets, MountItem, ViewKind};
+
+    let mut config = EngineConfig {
+        viewport: Size::new(px(390.0), px(844.0)),
+        clock: nsh_engine::Clock::manual(std::time::SystemTime::now()),
+        ..EngineConfig::new(Root::of::<KeyboardSheet>())
+    };
+    config.environment.os = Os::Android;
+    config.environment.idiom = Idiom::Phone;
+    config.environment.safe_area.top = px(47.0);
+    config.environment.safe_area.bottom = px(34.0);
+    let mut app = Headless::start(config).unwrap();
+    let modal = Arc::new(Mutex::new(None));
+    let seen = modal.clone();
+    app.observe(move |_, batch| {
+        for item in &batch.items {
+            if let MountItem::Create {
+                id,
+                kind: ViewKind::Modal,
+            } = item
+            {
+                *seen.lock().unwrap() = Some(*id);
+            }
+        }
+    });
+    app.first_render().unwrap();
+    app.run_for(std::time::Duration::from_millis(400)).unwrap();
+    app.wait_for("Last").unwrap();
+    keyboard(&mut app, 336.0);
+    let modal = modal.lock().unwrap().expect("the sheet's modal");
+    // Android reports the dialog's logical height less the IME above the navigation bar and less the status strip:
+    // 844 - (336 - 34) - 47. That shrink already puts the bottom at the keyboard.
+    app.engine().control().set_root_size(
+        modal,
+        Size::new(px(390.0), px(495.0)),
+        EdgeInsets::default(),
+    );
+    app.run_for(std::time::Duration::from_millis(400)).unwrap();
+    assert_eq!(
+        bounds_of(&app, "last").bottom(),
+        px(461.0),
+        "the modal shrink is the one lift"
+    );
+}
+
 #[test]
 fn a_bottom_sheet_stays_above_the_keyboard() {
     use std::sync::{Arc, Mutex};
