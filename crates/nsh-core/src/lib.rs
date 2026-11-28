@@ -131,9 +131,9 @@ pub use crate::{
         VideoProps, ViewKind, WebProps,
     },
     ops::{
-        AutoCapitalize, AutoFill, CellSlot, CoalescedSample, Command, ContextMenuEvent, Dialog,
-        DialogButton, DialogButtonStyle, EditAction, EventKind, EventMask, EventPayload, FpsMode,
-        Haptic, HapticImpact, HapticNotification, HeaderItem, HeaderItemContent, HeaderSlot,
+        AutoCapitalize, AutoFill, CellSlot, Command, ContextMenuEvent, Dialog, DialogButton,
+        DialogButtonStyle, EditAction, EventKind, EventMask, EventPayload, FpsMode, Haptic,
+        HapticImpact, HapticNotification, HeaderItem, HeaderItemContent, HeaderSlot,
         HeaderSystemItem, IMAGE_SCALES, ImageProp, ImageScales, ImageSource, KeyboardAppearance,
         KeyboardDismissMode, KeyboardTaps, KeyboardType, ListAlignment, ListContentStyle,
         ListViewport, ModalAnimation, ModalPresentation, ModalProp, MouseButton, MouseEvent,

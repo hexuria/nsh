@@ -2038,10 +2038,7 @@ pub(crate) fn compute(
         right: grid.x(padding.l + content.w),
         bottom: grid.y(padding.t + content.h),
     };
-    LayoutOutput::from_sizes(
-        grid.size(size),
-        taffy::ScrollableOverflow::new(overflow, taffy::Point { x: false, y: false }),
-    )
+    LayoutOutput::from_sizes(grid.size(size), overflow)
 }
 
 /// How a container splits its children.
