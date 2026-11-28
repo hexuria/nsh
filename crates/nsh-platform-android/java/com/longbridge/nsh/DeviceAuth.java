@@ -132,16 +132,15 @@ final class DeviceAuth {
                         answerOnce(answered, handler, timeout[0], mounter, id, "notAvailable");
                         break;
                     default:
-                        if (credentialOffered) {
-                            // Moving from biometrics to the device credential can surface as a
-                            // cancellation on API 29 even though the same callback still receives
-                            // the credential result. Settle cancellation only after a short grace
-                            // period; success removes this runnable through answerOnce.
-                            if (timeout[0] == null) {
-                                timeout[0] = () -> answerOnce(answered, handler, timeout[0], mounter, id, "cancelled");
-                                handler.postDelayed(timeout[0], 2_500);
-                            }
-                        } else {
+                        // API 29 reports ERROR_CANCELED (and on some builds the hidden
+                        // negative-button error 13) while the system is only moving from the
+                        // biometric sheet to the device-credential screen. Those are not final
+                        // answers: the same callback still receives the credential result. Real
+                        // user cancellation keeps ERROR_USER_CANCELED and answers cancelled.
+                        boolean credentialTransition = errorCode
+                                == android.hardware.biometrics.BiometricPrompt.BIOMETRIC_ERROR_CANCELED
+                                || errorCode == 13;
+                        if (!(credentialOffered && credentialTransition)) {
                             answerOnce(answered, handler, timeout[0], mounter, id, "cancelled");
                         }
                 }
