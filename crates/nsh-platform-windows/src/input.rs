@@ -2104,7 +2104,7 @@ fn report(surface: &Surface, phase: TouchPhase, changed: &Pointer, activated: Op
                     Key::Mouse => None,
                 };
                 let sample = sample.as_ref();
-                let touch = TouchPoint {
+                TouchPoint {
                     id: p.id,
                     target: p.target.id(),
                     // JS keeps a finger's path from its start.
@@ -2135,8 +2135,7 @@ fn report(surface: &Surface, phase: TouchPhase, changed: &Pointer, activated: Op
                     coalesced: Vec::new(),
                     eraser: sample.is_some_and(|s| s.eraser),
                     barrel: sample.is_some_and(|s| s.barrel),
-                };
-                touch
+                }
             })
             .collect()
     };
