@@ -83,7 +83,7 @@ impl DeviceAuthResult {
 /// one is enrolled, the device credential where it alone is available,
 /// none elsewhere. Android refreshes this with the environment (including
 /// on resume); Linux, the web, terminals, macOS, iOS and Windows report
-/// [`DeviceAuthKind::None`] for now.
+/// [`DeviceAuthKind::None`] for now. Read it on the engine (UI) thread.
 pub fn device_auth_available() -> DeviceAuthKind {
     super::ambient::device_auth_available()
 }
@@ -91,20 +91,30 @@ pub fn device_auth_available() -> DeviceAuthKind {
 /// Asks the user to unlock for `reason`. Biometrics are the only accepted
 /// device authentication unless `allow_device_credential` is set: the
 /// phone's screen lock is never offered by default, and the app's own PIN
-/// remains the app's separate fallback. Await the answer in a task;
-/// unsupported platforms answer
-/// [`DeviceAuthResult::NotAvailable`] at once.
+/// remains the app's separate fallback. On Android API 28-29 the system
+/// default biometric strength applies; `BIOMETRIC_STRONG` can be requested
+/// only on API 30 and later. Call this on the engine (UI) thread and await
+/// the answer in a task; a call from another thread and unsupported
+/// platforms answer [`DeviceAuthResult::NotAvailable`] at once.
 pub fn device_auth(reason: &str, allow_device_credential: bool) -> Answer<DeviceAuthResult> {
     let (answer, slot) = Answer::new();
-    if device_auth_available() == DeviceAuthKind::None {
+    let Some(available) = super::ambient::try_device_auth_available() else {
+        log::warn!("device_auth called outside the engine thread; answering notAvailable");
+        slot.borrow_mut().deliver(DeviceAuthResult::NotAvailable);
+        return answer;
+    };
+    if available == DeviceAuthKind::None {
         slot.borrow_mut().deliver(DeviceAuthResult::NotAvailable);
         return answer;
     }
-    super::ambient::act(Action::DeviceAuth {
+    if !super::ambient::act_if_running(Action::DeviceAuth {
         reason: reason.to_owned(),
         allow_device_credential,
-        answer: slot,
-    });
+        answer: slot.clone(),
+    }) {
+        log::warn!("device_auth called outside the engine thread; answering notAvailable");
+        slot.borrow_mut().deliver(DeviceAuthResult::NotAvailable);
+    }
     answer
 }
 
@@ -140,5 +150,20 @@ mod tests {
         ] {
             assert_eq!(answer_from_payload(&result.payload(42)), Some((42, result)));
         }
+    }
+
+    #[test]
+    fn a_prompt_outside_the_engine_answers_not_available_instead_of_panicking() {
+        let result = std::thread::spawn(|| {
+            use std::{pin::Pin, task::Context};
+            let mut answer = device_auth("Unlock the test", false);
+            Pin::new(&mut answer).poll(&mut Context::from_waker(std::task::Waker::noop()))
+        })
+        .join()
+        .unwrap();
+        assert!(matches!(
+            result,
+            std::task::Poll::Ready(DeviceAuthResult::NotAvailable)
+        ));
     }
 }

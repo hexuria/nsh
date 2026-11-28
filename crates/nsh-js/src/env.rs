@@ -991,7 +991,7 @@ pub(crate) const DEVICE_EXPORTS: &[Item] = &[
         Ts::value(
             "What the device can unlock with now (reactive, sync and cheap):
 `\"none\"`, `\"biometric\"` or `\"deviceCredentialOnly\"`. Linux,
-the web, terminals, macOS, iOS and Windows report `\"none\"` for now.",
+the web, terminals, macOS, iOS and Windows report `\"none\"` for now. Read it on the engine (UI) thread.",
             "Accessor<\"none\" | \"biometric\" | \"deviceCredentialOnly\">",
         ),
     ),

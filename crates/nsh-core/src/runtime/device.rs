@@ -68,12 +68,16 @@ impl Device {
 
     /// Asks the user to unlock for `reason`. Biometrics are the only
     /// accepted device authentication unless `allowDeviceCredential` is
-    /// true; the app handles its own PIN fallback. Resolves with `"yes"`
-    /// when the device accepts the user, `"no"` when the user chooses the
-    /// app's PIN fallback, `"notAvailable"` when the device cannot
-    /// authenticate here, `"cancelled"` when the user dismisses the prompt
-    /// or it times out, or `"lockedOut"` after too many attempts. A
-    /// biometric sample that does not match keeps the system prompt waiting.
+    /// true; the app handles its own PIN fallback. On Android API 28-29 the
+    /// system default biometric strength applies; `BIOMETRIC_STRONG` can be
+    /// requested only on API 30 and later. Call this on the engine (UI)
+    /// thread; a call from another thread resolves `"notAvailable"`.
+    /// Resolves with `"yes"` when the device accepts the user, `"no"` when
+    /// the user chooses the app's PIN fallback, `"notAvailable"` when the
+    /// device cannot authenticate here, `"cancelled"` when the user
+    /// dismisses the prompt or a biometric-only prompt times out, or
+    /// `"lockedOut"` after too many attempts. A biometric sample that does
+    /// not match keeps the system prompt waiting.
     pub(crate) fn device_auth(
         reason: String,
         allow_device_credential: Option<bool>,
