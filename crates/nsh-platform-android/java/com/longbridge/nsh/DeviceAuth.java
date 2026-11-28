@@ -132,7 +132,13 @@ final class DeviceAuth {
                         answerOnce(answered, handler, timeout[0], mounter, id, "notAvailable");
                         break;
                     default:
-                        answerOnce(answered, handler, timeout[0], mounter, id, "cancelled");
+                        // API 29's credential fallback reports the hidden negative-button error (13)
+                        // while the system moves to the PIN screen. That is not a final answer: the
+                        // same callback still receives the credential result. Real cancellation keeps
+                        // its own error codes and answers cancelled.
+                        if (!(credentialOffered && errorCode == 13)) {
+                            answerOnce(answered, handler, timeout[0], mounter, id, "cancelled");
+                        }
                 }
             }
 
