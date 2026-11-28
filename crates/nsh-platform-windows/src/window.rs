@@ -1541,6 +1541,7 @@ fn handle(
                 WM_POINTERCAPTURECHANGED => PointerKind::Cancel,
                 _ => PointerKind::Move,
             };
+            let time = surface.clock();
             let sample = pen_sample(id, info.pointerType.0 == 3);
             crate::input::set_pen_sample(id + 2, Some(sample));
             crate::input::pointer(
@@ -1554,7 +1555,7 @@ fn handle(
                     pointer: id + 2,
                     touch: info.pointerType.0 == 2,
                     pen: info.pointerType.0 == 3,
-                    time: surface.clock(),
+                    time,
                     modifiers: modifiers(),
                     clicks: 1,
                 },
@@ -1833,37 +1834,35 @@ fn sys_close(hwnd: HWND, lparam: LPARAM) -> crate::shell::SysClose {
 }
 
 /// The pressure and tilt contact `id` reports (`pen`: a pen, else a
-/// finger), from `GetPointerPenInfo` / `GetPointerTouchInfo`.
+/// finger), from `GetPointerPenInfo` / `GetPointerTouchInfo`; for a pen,
+/// also its eraser and barrel button. Coalesced samples stay empty: reading
+/// the pointer history on every move costs more than the frozen touch path allows.
 fn pen_sample(id: u32, pen: bool) -> crate::input::PenSample {
     use windows::Win32::UI::Input::Pointer::{
         GetPointerPenInfo, GetPointerTouchInfo, POINTER_PEN_INFO, POINTER_TOUCH_INFO,
     };
-    // PEN_MASK_PRESSURE, PEN_MASK_TILT_X, PEN_MASK_TILT_Y; TOUCH_MASK_PRESSURE.
-    const PRESSURE: u32 = 0x1;
-    const TILT_X: u32 = 0x4;
-    const TILT_Y: u32 = 0x8;
-    const TOUCH_PRESSURE: u32 = 0x4;
+    // PEN_FLAG_BARREL, PEN_FLAG_INVERTED, PEN_FLAG_ERASER.
+    const BARREL: u32 = 0x1;
+    const INVERTED: u32 = 0x2;
+    const ERASER: u32 = 0x4;
     let mut sample = crate::input::PenSample {
         pen,
         pressure: None,
         tilt: (0.0, 0.0),
+        eraser: false,
+        barrel: false,
     };
     if pen {
         let mut info = POINTER_PEN_INFO::default();
         // SAFETY: a local out value.
         if unsafe { GetPointerPenInfo(id, &mut info) }.is_ok() {
-            let mask = info.penMask;
-            if mask & PRESSURE != 0 {
-                sample.pressure = Some((info.pressure as f32 / 1024.0).clamp(0.0, 1.0));
-            }
-            if mask & TILT_X != 0 {
-                sample.tilt.0 = info.tiltX as f32;
-            }
-            if mask & TILT_Y != 0 {
-                sample.tilt.1 = info.tiltY as f32;
-            }
+            (sample.pressure, sample.tilt) = pen_values(&info);
+            sample.eraser = info.penFlags & (ERASER | INVERTED) != 0;
+            sample.barrel = info.penFlags & BARREL != 0;
         }
     } else {
+        // TOUCH_MASK_PRESSURE.
+        const TOUCH_PRESSURE: u32 = 0x4;
         let mut info = POINTER_TOUCH_INFO::default();
         // SAFETY: a local out value.
         if unsafe { GetPointerTouchInfo(id, &mut info) }.is_ok()
@@ -1873,6 +1872,29 @@ fn pen_sample(id: u32, pen: bool) -> crate::input::PenSample {
         }
     }
     sample
+}
+
+/// The pressure (0 to 1, when sensed) and tilt (degrees) of a pen sample.
+fn pen_values(
+    info: &windows::Win32::UI::Input::Pointer::POINTER_PEN_INFO,
+) -> (Option<f32>, (f32, f32)) {
+    // PEN_MASK_PRESSURE, PEN_MASK_TILT_X, PEN_MASK_TILT_Y.
+    const PRESSURE: u32 = 0x1;
+    const TILT_X: u32 = 0x4;
+    const TILT_Y: u32 = 0x8;
+    let mask = info.penMask;
+    let pressure = (mask & PRESSURE != 0).then(|| (info.pressure as f32 / 1024.0).clamp(0.0, 1.0));
+    let tilt_x = if mask & TILT_X != 0 {
+        info.tiltX as f32
+    } else {
+        0.0
+    };
+    let tilt_y = if mask & TILT_Y != 0 {
+        info.tiltY as f32
+    } else {
+        0.0
+    };
+    (pressure, (tilt_x, tilt_y))
 }
 
 /// True when a mouse message was synthesized from touch or pen input,

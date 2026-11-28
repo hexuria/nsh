@@ -259,6 +259,9 @@ impl TouchTracker {
                     },
                     tilt_x: tilt.0,
                     tilt_y: tilt.1,
+                    coalesced: Vec::new(),
+                    eraser: false,
+                    barrel: false,
                 }
             })
             .collect();

@@ -433,7 +433,7 @@ impl Item {
 
 /// What a touch or pen contact last reported besides its position
 /// (`WM_POINTER*`).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct PenSample {
     /// A pen rather than a finger.
     pub(crate) pen: bool,
@@ -441,6 +441,10 @@ pub(crate) struct PenSample {
     pub(crate) pressure: Option<f32>,
     /// A pen's tilt in degrees (x, y).
     pub(crate) tilt: (f32, f32),
+    /// The pen's eraser end (or inverted pen) touches.
+    pub(crate) eraser: bool,
+    /// The pen's barrel button is held.
+    pub(crate) barrel: bool,
 }
 
 thread_local! {
@@ -463,7 +467,7 @@ fn pen_sample(pointer: u32) -> Option<PenSample> {
         samples
             .iter()
             .find(|(id, _)| *id == pointer)
-            .map(|(_, s)| *s)
+            .map(|(_, s)| s.clone())
     })
 }
 
@@ -2099,7 +2103,8 @@ fn report(surface: &Surface, phase: TouchPhase, changed: &Pointer, activated: Op
                     Key::Touch(id) => pen_sample(id),
                     Key::Mouse => None,
                 };
-                TouchPoint {
+                let sample = sample.as_ref();
+                let touch = TouchPoint {
                     id: p.id,
                     target: p.target.id(),
                     // JS keeps a finger's path from its start.
@@ -2127,13 +2132,18 @@ fn report(surface: &Surface, phase: TouchPhase, changed: &Pointer, activated: Op
                     },
                     tilt_x: sample.map_or(0.0, |s| s.tilt.0),
                     tilt_y: sample.map_or(0.0, |s| s.tilt.1),
-                }
+                    coalesced: Vec::new(),
+                    eraser: sample.is_some_and(|s| s.eraser),
+                    barrel: sample.is_some_and(|s| s.barrel),
+                };
+                touch
             })
             .collect()
     };
     let event = TouchEvent {
         phase,
-        timestamp: changed.time,
+        // `PointerEvent::time` is in seconds, a touch's in milliseconds.
+        timestamp: changed.time * 1000.0,
         points,
         modifiers: changed.modifiers.core(),
         activated,

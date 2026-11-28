@@ -9479,7 +9479,10 @@ class Player {
         changed: id === changedId,
         pointerType: p.pointerType,
         pressure: p.pressure, tiltX: p.tiltX, tiltY: p.tiltY,
+        eraser: !!p.eraser, barrel: !!p.barrel,
+        coalesced: id === changedId ? p.coalesced ?? [] : [],
       });
+      if (id === changedId) p.coalesced = [];
     }
     if (!points.length) return;
     // The keys held when the changed pointer went down, as its press's.
@@ -9539,6 +9542,7 @@ class Player {
       x, y, layer, startX: x, startY: y, t: performance.now(), vx: 0, vy: 0,
       pointerType: e.pointerType,
       pressure: e.pressure, tiltX: e.tiltX || 0, tiltY: e.tiltY || 0,
+      ...penButtons(e),
       touchPath: chain.filter((v) => v._events.has("onTouch")).map((v) => v._id),
       ...(isField ? { press: null } : link ? { press: link } : this.pickPress(chain)),
       // What presses report: the modifier keys at the press and its clicks.
@@ -9689,6 +9693,10 @@ class Player {
     p.pressure = e.pressure;
     p.tiltX = e.tiltX || 0;
     p.tiltY = e.tiltY || 0;
+    Object.assign(p, penButtons(e));
+    // Coalesced samples stay empty: reading the browser's event history on
+    // every move costs more than the frozen touch path allows.
+    p.coalesced = [];
     this.track(p, now);
     const tx = x - p.startX;
     const ty = y - p.startY;
@@ -10006,4 +10014,11 @@ class Player {
     if (t.el._gestures?.rotation) this.call((w) => w.nsh_transform_gesture(t.el._id, 1, 2, rotation));
     this.pointers.clear();
   }
+}
+
+/** A pen's eraser end (the DOM's eraser button, `buttons & 32`) and held
+ * barrel button (`buttons & 2`) in pointer event `e`. */
+function penButtons(e) {
+  const pen = e.pointerType === "pen";
+  return { eraser: pen && (e.buttons & 32) !== 0, barrel: pen && (e.buttons & 2) !== 0 };
 }
