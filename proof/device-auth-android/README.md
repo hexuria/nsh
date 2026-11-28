@@ -1,6 +1,6 @@
-driver: adb emu screenrecord + framework biometric prompts; app examples/device-auth copies; kit nsh commit dd3366e12004e73faacc7612f297e6feec62a9fc; taffy 0.15.0
+driver: adb emu screenrecord + framework biometric prompts; app examples/device-auth copies; final kit nsh commit 021543a64216817e5b408204458e8bc089814391; taffy 0.15.0
 
-Android biometric device-authentication emulator proof on the reverted tree: Taffy is 0.15.0; no Taffy 0.16 code is present. The credential example copy guards against re-entering a request already in flight when the activity lifecycle resumes; the platform behavior under test is unchanged.
+Android biometric device-authentication emulator proof on the reverted tree: Taffy is 0.15.0; no Taffy 0.16 code is present. The first matrix ran at dd3366e12004e73faacc7612f297e6feec62a9fc. The options-object rerun rows are under `options-367594128/`; those packaged apps were built at 3675941284d2c8cf36c12abfee65dd98e369ce64, and the final head adds only a clippy-driven construction refactor in the same Rust call path. The credential example copy guards against re-entering a request already in flight when the activity lifecycle resumes; the platform behavior under test is unchanged.
 
 | API | exact expected rows |
 |---|---|
