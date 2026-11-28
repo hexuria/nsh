@@ -2725,6 +2725,53 @@ fn scroll_reports_content_size() {
     )));
 }
 
+/// The bottom margin of a scroll view's last direct child adds scroll room:
+/// Taffy 0.16 counts a scroll container's direct children's trailing
+/// margins in its content size (its `scrollable_overflow`), as upstream's
+/// kit does. This pins that, so a later layout engine that drops the margin
+/// again is seen here, not first in an app whose last row stops short.
+#[test]
+fn a_last_direct_child_s_bottom_margin_adds_scroll_room() {
+    let mut c = core();
+    let mut ops = vec![
+        Op::Create {
+            id: 2,
+            tag: Tag::Scroll,
+        },
+        style_op(2, &[("height", StyleValue::Number(200.0))]),
+        Op::Insert {
+            parent: ROOT_ID,
+            child: 2,
+            before: None,
+        },
+    ];
+    for i in 0..3u32 {
+        ops.push(Op::Create {
+            id: 10 + i,
+            tag: Tag::View,
+        });
+        let mut style = vec![("height", StyleValue::Number(100.0))];
+        if i == 2 {
+            style.push(("marginBottom", StyleValue::Number(30.0)));
+        }
+        ops.push(style_op(10 + i, &style));
+        ops.push(Op::Insert {
+            parent: 2,
+            child: 10 + i,
+            before: None,
+        });
+    }
+    apply(&mut c, ops);
+    let batch = c.commit().unwrap();
+    let content = batch.items.iter().find_map(|i| match i {
+        MountItem::ScrollContent { id: 2, size } => Some(*size),
+        _ => None,
+    });
+    // Three 100pt rows and the last one's 30pt margin. Taffy 0.15 gave
+    // 320 × 300 here: it dropped the margin.
+    assert_eq!(content, Some(size_pt(320.0, 330.0)));
+}
+
 /// `scrollsToTop` reaches the scroll view's mounted behavior (iOS sets
 /// `UIScrollView.scrollsToTop` from it): on by default, off when the app
 /// says so, and on again.
