@@ -112,10 +112,10 @@ jobs:
           repository: longbridge/nsh-compat
           path: nsh-compat
           # nsh-compat's main follows longbridge/nsh's main. A fork that is
-          # behind it checks against the last nsh-compat commit its NSH
-          # builds (0.6.1: before Taffy 0.16, text-pretty and the new
+          # behind it checks against the nsh-compat commit whose NSH it
+          # builds (this one takes Taffy 0.16, text-pretty and the new
           # TouchPoint fields). Move the pin when the fork takes upstream.
-          ref: ${{ github.repository != 'longbridge/nsh' && '0e1387b3c12585d4fa27dff7593fe18afe0df1b9' || '' }}
+          ref: ${{ github.repository != 'longbridge/nsh' && '0d67fb650d5891797c95f121126ba6ee14894899' || '' }}
 
       # QuickJS is C (bindgen needs libclang).
       - name: Install clang
