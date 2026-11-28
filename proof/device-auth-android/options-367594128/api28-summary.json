@@ -1,0 +1,11 @@
+[
+  {
+    "row": "cred-use-pin-negative",
+    "app": "cred",
+    "action": "negative",
+    "availability": "biometric",
+    "result": "no",
+    "crash": false,
+    "expected": "no"
+  }
+]

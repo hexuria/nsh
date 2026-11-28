@@ -12,3 +12,7 @@ Android biometric device-authentication emulator proof on the reverted tree: Taf
 API 29 `cred-pin` is a measured failure, not a crash: the correct PIN is entered, but the request never settles. Logcat shows the API 29 system service dropping the authentication session while `ConfirmDeviceCredential` moves from its inner biometric prompt to the PIN (`onCDCASuccess null!`). Verdicts are parsed only from the most recently started app process because the emulator log buffers can retain earlier rows.
 
 Per-API tables are in `apiNN-README.md`; recordings, prompt screenshots and logcat output are under `apiNN/<row>/`.
+
+## Options-object rerun
+
+The rerun rows for commit 3675941284d2c8cf36c12abfee65dd98e369ce64 are under `options-367594128/`: API 29 6/6, API 28 regression 1/1, and API 35 3/3 exact passes. Taffy remains 0.15.0.

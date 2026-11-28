@@ -1,0 +1,382 @@
+--------- beginning of main
+11-28 09:57:05.311  7537  7559 D EGL_emulation: eglMakeCurrent: 0x71f6bb80a2a0: ver 3 1 (tinfo 0x71f6bb934ee0)
+11-28 09:57:05.313  1947  6798 W OpenGLRenderer: Failed to choose config with EGL_SWAP_BEHAVIOR_PRESERVED, retrying without...
+11-28 09:57:05.344  1947  6798 D EGL_emulation: eglCreateContext: 0x71f65fe0ea80: maj 3 min 1 rcv 4
+11-28 09:57:05.345  1947  6798 D EGL_emulation: eglMakeCurrent: 0x71f65fe0ea80: ver 3 1 (tinfo 0x71f66d0f5300)
+11-28 09:57:05.350  1947  6798 E eglCodecCommon: glUtilsParamSize: unknow param 0x000082da
+11-28 09:57:05.359  1947  6798 E eglCodecCommon: glUtilsParamSize: unknow param 0x000082da
+11-28 09:57:05.359  2105  7489 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:57:05.359  2128  2351 D EGL_emulation: eglMakeCurrent: 0x71f66fd9a6e0: ver 3 1 (tinfo 0x71f66fe20900)
+11-28 09:57:05.361  2105  2105 I GeofencerStateMachine: removeGeofences: removeRequest=RemoveGeofencingRequest[REMOVE_BY_PENDING_INTENT pendingIntent=PendingIntent[creatorPackage=com.google.android.gms], packageName=com.google.android.gms]
+11-28 09:57:05.361  2128  2128 I Choreographer: Skipped 33 frames!  The application may be doing too much work on its main thread.
+11-28 09:57:05.378  1752  1752 E Layer   : [Surface(name=AppWindowToken{f6a2a43 token=Token{a90d3f2 ActivityRecord{c6afd u0 com.google.android.apps.nexuslauncher/.NexusLauncherActivity t5}}})/@0x7b6a4f0 - animation-leash#0] No local sync point found
+11-28 09:57:05.379  1752  1752 E Layer   : [Surface(name=AppWindowToken{86accca token=Token{291e035 ActivityRecord{522c26c u0 com.example.deviceauth.cred/com.longbridge.nsh.AppActivity t11}}})/@0xfb92534 - animation-leash#0] No local sync point found
+11-28 09:57:05.385  2105  7622 I PlacesLogger: [PlaceInferenceEngine]: [anon] Changed inference mode: 0 [CONTEXT service_id=253 ]
+11-28 09:57:05.408  2105  7015 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:57:05.432  7606  7606 D AndroidRuntime: Shutting down VM
+--------- beginning of system
+11-28 09:57:05.442  1947  1974 D AutofillManagerService: onBackKeyPressed()
+11-28 09:57:05.446  3146  3764 W earchbox:searc: Long monitor contention with owner NonUserFacing2 (3406) at boolean com.google.android.apps.gsa.staticplugins.ad.aw.d()(SourceFile:-1) waiters=0 in void com.google.android.apps.gsa.staticplugins.ad.aw.a(com.google.android.libraries.gcoreclient.f.h) for 153ms
+11-28 09:57:05.473  2105  2105 I GeofencerStateMachine: removeGeofences: removeRequest=RemoveGeofencingRequest[REMOVE_BY_PENDING_INTENT pendingIntent=PendingIntent[creatorPackage=com.google.android.gms], packageName=com.google.android.gms]
+11-28 09:57:05.504  7606  7606 W app_process: Suspending all threads took: 28.028ms
+11-28 09:57:05.681  2105  7586 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:57:05.682  2105  7015 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:57:05.688  2105  7015 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:57:05.710  2105  3439 W GCoreFlp: No location to return for getLastLocation()
+11-28 09:57:05.739  2105  7584 I ctxmgr  : [ProducerStatusImpl] updateStateForNewContextData: inactive, contextName=7 [CONTEXT service_id=47 ]
+11-28 09:57:05.740  2105  7586 E cklt    : *~*~*~ Channel {0} was not shutdown properly!!! ~*~*~*
+11-28 09:57:05.740  2105  7586 E cklt    :     Make sure to call shutdown()/shutdownNow() and wait until awaitTermination() returns true.
+11-28 09:57:05.740  2105  7586 E cklt    : java.lang.RuntimeException: ManagedChannel allocation site
+11-28 09:57:05.740  2105  7586 E cklt    : 	at ckls.<init>(:com.google.android.gms@202414023@20.24.14 (040800-319035315):3)
+11-28 09:57:05.740  2105  7586 E cklt    : 	at cklt.<init>(:com.google.android.gms@202414023@20.24.14 (040800-319035315):2)
+11-28 09:57:05.740  2105  7586 E cklt    : 	at ckfk.b(:com.google.android.gms@202414023@20.24.14 (040800-319035315):21)
+11-28 09:57:05.740  2105  7586 E cklt    : 	at sjo.a(:com.google.android.gms@202414023@20.24.14 (040800-319035315):29)
+11-28 09:57:05.740  2105  7586 E cklt    : 	at sjo.a(:com.google.android.gms@202414023@20.24.14 (040800-319035315):52)
+11-28 09:57:05.740  2105  7586 E cklt    : 	at bjxj.call(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:57:05.740  2105  7586 E cklt    : 	at bjvu.run(:com.google.android.gms@202414023@20.24.14 (040800-319035315):1)
+11-28 09:57:05.740  2105  7586 E cklt    : 	at soy.b(:com.google.android.gms@202414023@20.24.14 (040800-319035315):12)
+11-28 09:57:05.740  2105  7586 E cklt    : 	at soy.run(:com.google.android.gms@202414023@20.24.14 (040800-319035315):7)
+11-28 09:57:05.740  2105  7586 E cklt    : 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1167)
+11-28 09:57:05.740  2105  7586 E cklt    : 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:641)
+11-28 09:57:05.740  2105  7586 E cklt    : 	at sux.run(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:57:05.740  2105  7586 E cklt    : 	at java.lang.Thread.run(Thread.java:919)
+11-28 09:57:05.741  2105  7586 I chatty  : uid=10117(com.google.android.gms) lowpool[25] identical 1 line
+11-28 09:57:05.741  2105  7586 E cklt    : *~*~*~ Channel {0} was not shutdown properly!!! ~*~*~*
+11-28 09:57:05.741  2105  7586 E cklt    :     Make sure to call shutdown()/shutdownNow() and wait until awaitTermination() returns true.
+11-28 09:57:05.741  2105  7586 E cklt    : java.lang.RuntimeException: ManagedChannel allocation site
+11-28 09:57:05.741  2105  7586 E cklt    : 	at ckls.<init>(:com.google.android.gms@202414023@20.24.14 (040800-319035315):3)
+11-28 09:57:05.741  2105  7586 E cklt    : 	at cklt.<init>(:com.google.android.gms@202414023@20.24.14 (040800-319035315):2)
+11-28 09:57:05.741  2105  7586 E cklt    : 	at ckfk.b(:com.google.android.gms@202414023@20.24.14 (040800-319035315):21)
+11-28 09:57:05.741  2105  7586 E cklt    : 	at sjo.a(:com.google.android.gms@202414023@20.24.14 (040800-319035315):29)
+11-28 09:57:05.741  2105  7586 E cklt    : 	at sjo.a(:com.google.android.gms@202414023@20.24.14 (040800-319035315):52)
+11-28 09:57:05.741  2105  7586 E cklt    : 	at bjxj.call(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:57:05.741  2105  7586 E cklt    : 	at bjvu.run(:com.google.android.gms@202414023@20.24.14 (040800-319035315):1)
+11-28 09:57:05.741  2105  7586 E cklt    : 	at soy.b(:com.google.android.gms@202414023@20.24.14 (040800-319035315):12)
+11-28 09:57:05.741  2105  7586 E cklt    : 	at soy.run(:com.google.android.gms@202414023@20.24.14 (040800-319035315):7)
+11-28 09:57:05.741  2105  7586 E cklt    : 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1167)
+11-28 09:57:05.741  2105  7586 E cklt    : 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:641)
+11-28 09:57:05.741  2105  7586 E cklt    : 	at sux.run(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:57:05.741  2105  7586 E cklt    : 	at java.lang.Thread.run(Thread.java:919)
+11-28 09:57:05.788  2105  7015 W Conscrypt: Could not set socket write timeout: java.net.SocketException: Socket closed
+11-28 09:57:05.788  2105  7015 W Conscrypt: 	at com.google.android.gms.org.conscrypt.Platform.setSocketWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):2)
+11-28 09:57:05.788  2105  7015 W Conscrypt: 	at com.google.android.gms.org.conscrypt.ConscryptFileDescriptorSocket.setSoWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:57:05.867  2105  7015 W Conscrypt: Could not set socket write timeout: java.net.SocketException: Socket closed
+11-28 09:57:05.867  2105  7015 W Conscrypt: 	at com.google.android.gms.org.conscrypt.Platform.setSocketWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):2)
+11-28 09:57:05.867  2105  7015 W Conscrypt: 	at com.google.android.gms.org.conscrypt.ConscryptFileDescriptorSocket.setSoWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:57:05.988  2105  7622 W LogUtils: [Places]: ?: Failed to download inference model weights SLS
+11-28 09:57:05.988  2105  7622 W LogUtils: ckdr: NOT_FOUND: Requested entity was not found.
+11-28 09:57:05.988  2105  7622 W LogUtils: 	at ckdq.c(:com.google.android.gms@202414023@20.24.14 (040800-319035315):3)
+11-28 09:57:05.988  2105  7622 W LogUtils: 	at sjo.a(:com.google.android.gms@202414023@20.24.14 (040800-319035315):57)
+11-28 09:57:05.988  2105  7622 W LogUtils: 	at bjxj.call(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:57:05.988  2105  7622 W LogUtils: 	at bjvu.run(:com.google.android.gms@202414023@20.24.14 (040800-319035315):1)
+11-28 09:57:05.988  2105  7622 W LogUtils: 	at soy.b(:com.google.android.gms@202414023@20.24.14 (040800-319035315):12)
+11-28 09:57:05.988  2105  7622 W LogUtils: 	at soy.run(:com.google.android.gms@202414023@20.24.14 (040800-319035315):7)
+11-28 09:57:05.988  2105  7622 W LogUtils: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1167)
+11-28 09:57:05.988  2105  7622 W LogUtils: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:641)
+11-28 09:57:05.988  2105  7622 W LogUtils: 	at sux.run(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:57:05.988  2105  7622 W LogUtils: 	at java.lang.Thread.run(Thread.java:919)
+11-28 09:57:05.988  2105  7622 W LogUtils: 
+11-28 09:57:05.988  2105  7622 W LogUtils: [CONTEXT service_id=253 ]
+11-28 09:57:05.988  2105  7622 W PlacesLogger: [PlaceInferenceEngine]: Failed to download model weights. Status code: 7 [CONTEXT service_id=253 ]
+11-28 09:57:05.989  2105  7489 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:57:05.994  2105  7015 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:57:06.001  2105  2105 I BeaconBle: Scan : No clients left, canceling alarm. [CONTEXT service_id=111 ]
+11-28 09:57:06.021  2105  3439 W GCoreFlp: No location to return for getLastLocation()
+11-28 09:57:06.180  2105  7489 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:57:06.239  7628  7628 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 0 <<<<<<
+11-28 09:57:06.240  7628  7628 I AndroidRuntime: Using default boot image
+11-28 09:57:06.240  7628  7628 I AndroidRuntime: Leaving lock profiling enabled
+11-28 09:57:06.250  7628  7628 I app_process: Core platform API reporting enabled, enforcing=false
+11-28 09:57:06.296  2105  7622 I LogUtils: [Places]: ?: PlacesBleScanner start() with priority 2 [CONTEXT service_id=253 ]
+11-28 09:57:06.296  2105  7622 I PlacesLogger: [PlaceInferenceEngine]: [anon] Changed inference mode: 1 [CONTEXT service_id=253 ]
+11-28 09:57:06.302  1947  2246 D WificondControl: Scan result ready event
+11-28 09:57:06.374  2105  2105 E BeaconBle: Missing BluetoothAdapter [CONTEXT service_id=111 ]
+11-28 09:57:06.374  2105  2105 I BeaconBle: BLE 'KK+' software access layer enabled [CONTEXT service_id=111 ]
+11-28 09:57:06.399  2105  3439 W GCoreFlp: No location to return for getLastLocation()
+11-28 09:57:06.464  7628  7628 D ICU     : Time zone APEX file found: /apex/com.android.tzdata/etc/icu/icu_tzdata.dat
+11-28 09:57:06.483  7628  7628 W app_process: Unexpected CPU variant for X86 using defaults: x86_64
+11-28 09:57:06.532  7628  7628 I app_process: The ClassLoaderContext is a special shared library.
+11-28 09:57:06.559  2105  2105 I BeaconBle: Client requested scan, settings=BleSettings [scanMode=ZERO_POWER, callbackType=ALL_MATCHES, reportDelayMillis=0, 1 filters, 0 clients, callingClientName=Places] [CONTEXT service_id=111 ]
+11-28 09:57:06.559  2105  2105 I BeaconBle: Scan : No clients left, canceling alarm. [CONTEXT service_id=111 ]
+11-28 09:57:06.560  2105  2105 E BeaconBle: Scan couldn't start for Places [CONTEXT service_id=111 ]
+11-28 09:57:06.560  2105  2105 W Places  : BLE failure while scanning - code 5
+11-28 09:57:06.600  7628  7628 W app_process: JNI RegisterNativeMethods: attempt to register 0 native methods for android.media.AudioAttributes
+11-28 09:57:06.614  7628  7628 D AndroidRuntime: Calling main entry com.android.commands.input.Input
+11-28 09:57:06.622  1947  1967 I system_server: NativeAlloc concurrent copying GC freed 33490(1850KB) AllocSpace objects, 13(516KB) LOS objects, 34% free, 11MB/17MB, paused 939us total 383.084ms
+11-28 09:57:06.685  7628  7628 D AndroidRuntime: Shutting down VM
+11-28 09:57:07.245  7644  7644 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 0 <<<<<<
+11-28 09:57:07.246  7644  7644 I AndroidRuntime: Using default boot image
+11-28 09:57:07.246  7644  7644 I AndroidRuntime: Leaving lock profiling enabled
+11-28 09:57:07.247  7644  7644 I app_process: Core platform API reporting enabled, enforcing=false
+11-28 09:57:07.306  7644  7644 D ICU     : Time zone APEX file found: /apex/com.android.tzdata/etc/icu/icu_tzdata.dat
+11-28 09:57:07.308  7644  7644 W app_process: Unexpected CPU variant for X86 using defaults: x86_64
+11-28 09:57:07.355  7644  7644 I app_process: The ClassLoaderContext is a special shared library.
+11-28 09:57:07.439  7644  7644 W app_process: JNI RegisterNativeMethods: attempt to register 0 native methods for android.media.AudioAttributes
+11-28 09:57:07.442  7644  7644 D AndroidRuntime: Calling main entry com.android.commands.input.Input
+11-28 09:57:07.457  7644  7644 D AndroidRuntime: Shutting down VM
+11-28 09:57:06.682  1947  1974 D AutofillManagerService: onBackKeyPressed()
+11-28 09:57:07.493  1947  1974 I ActivityTaskManager: START u0 {act=android.intent.action.MAIN cat=[android.intent.category.HOME] flg=0x10000100 cmp=com.google.android.apps.nexuslauncher/.NexusLauncherActivity (has extras)} from uid 0
+11-28 09:57:07.504  1947  1973 D AutofillManagerService: Close system dialogs
+11-28 09:57:07.506  2128  2128 V StatusBar: mStatusBarWindow: com.android.systemui.statusbar.phone.StatusBarWindowView{e1eca0e V.E...... ........ 0,0-1080,63} canPanelBeCollapsed(): false
+11-28 09:57:07.509  1947  1947 W ActivityManager: Unable to start service Intent { act=android.service.appprediction.AppPredictionService cmp=com.google.android.as/com.google.android.apps.miphone.aiai.app.AiAiPredictionService } U=0: not found
+11-28 09:57:07.509  1947  1947 W RemoteAppPredictionService: could not bind to Intent { act=android.service.appprediction.AppPredictionService cmp=com.google.android.as/com.google.android.apps.miphone.aiai.app.AiAiPredictionService } using flags 67108865
+11-28 09:57:07.828  1947  1981 E memtrack: Couldn't load memtrack module
+11-28 09:57:07.828  1947  1981 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:57:08.238  1947  1971 I ActivityManager: Force stopping com.example.deviceauth.cred appid=10148 user=0: from pid 7660
+11-28 09:57:08.242  1947  1971 I ActivityManager: Killing 7537:com.example.deviceauth.cred/u0a148 (adj 900): stop com.example.deviceauth.cred
+11-28 09:57:08.295  2390  2390 D CarrierSvcBindHelper: No carrier app for: 0
+11-28 09:57:08.377  1702  1702 I Zygote  : Process 7537 exited due to signal 9 (Killed)
+11-28 09:57:08.378  1947  1976 W ActivityManager: setHasOverlayUi called on unknown pid: 7537
+11-28 09:57:08.415  1947  1984 I libprocessgroup: Successfully killed process cgroup uid 10148 pid 7537 in 150ms
+11-28 09:57:08.425  1883  1883 E wifi_forwarder: RemoteConnection failed to initialize: RemoteConnection failed to open pipe
+11-28 09:57:08.427  1947  1971 I ActivityTaskManager: START u0 {flg=0x10000000 cmp=com.example.deviceauth.cred/com.longbridge.nsh.AppActivity} from uid 0
+11-28 09:57:08.455  1865  1865 E netmgr  : Failed to open QEMU pipe 'qemud:network': Invalid argument
+11-28 09:57:08.513  1947  2246 W InputReader: Device has associated, but no associated display id.
+11-28 09:57:08.513  1947  2246 I chatty  : uid=1000(system) Binder:1947_6 identical 8 lines
+11-28 09:57:08.513  1947  2246 W InputReader: Device has associated, but no associated display id.
+11-28 09:57:08.529  1947  1977 E system_server: Invalid ID 0x00000000.
+11-28 09:57:08.567  2149  2166 W ssioncontrolle: Suspending all threads took: 12.861ms
+11-28 09:57:08.601  1702  1702 D Zygote  : Forked child process 7670
+11-28 09:57:08.602  1947  1983 W ActivityManager: Slow operation: 85ms so far, now at startProcess: returned from zygote!
+11-28 09:57:08.602  1947  1983 W ActivityManager: Slow operation: 85ms so far, now at startProcess: done updating battery stats
+11-28 09:57:08.605  1947  1983 W ActivityManager: Slow operation: 88ms so far, now at startProcess: building log message
+11-28 09:57:08.605  1947  1983 I ActivityManager: Start proc 7670:com.example.deviceauth.cred/u0a148 for activity {com.example.deviceauth.cred/com.longbridge.nsh.AppActivity}
+11-28 09:57:08.605  1947  1983 W ActivityManager: Slow operation: 88ms so far, now at startProcess: starting to update pids map
+11-28 09:57:08.688  7670  7670 W deviceauth.cre: Unexpected CPU variant for X86 using defaults: x86_64
+11-28 09:57:08.704  1947  1983 W ActivityManager: Slow operation: 187ms so far, now at startProcess: done updating pids map
+11-28 09:57:08.708  1734  1734 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 10371072
+11-28 09:57:08.747  2448  3479 I CastDatabase: Saving the database
+11-28 09:57:08.754  3146  3386 I MicroDetector: Keeping mic open: false
+11-28 09:57:08.754  3146  3446 I DeviceStateChecker: DeviceStateChecker cancelled
+11-28 09:57:08.758  3146  3725 I AudioController: internalShutdown
+11-28 09:57:08.764  3146  3706 I MicroRecognitionRunner: Stopping hotword detection.
+11-28 09:57:08.776  2448  3479 I SQLiteCastStore: [CastNetworkInfo] saved: 0, skipped: 0, [CastDeviceInfo]: saved 0, skipped 0, [Paired Guest Mode DeviceInfo] saved: 0, skipped: 0. [ProbedNetworks]: saved 0, skipped: 0, [ProbedSocketAddress]: saved 0, skipped: 0, [Network-Device pairs]: saved: 0
+11-28 09:57:08.819  3146  3725 I MicrophoneInputStream: mic_close  SR : 16000 CC : 16 SO : 1999
+11-28 09:57:08.819  3146  3725 E AudioSource: Stop listening is called on already closed AudioSource
+11-28 09:57:08.821  3146  7425 I MicroRecognitionRunner: Detection finished
+11-28 09:57:08.903  1947  2246 W InputReader: Device has associated, but no associated display id.
+11-28 09:57:08.933  1947  2246 I chatty  : uid=1000(system) Binder:1947_6 identical 28 lines
+11-28 09:57:08.933  1947  2246 W InputReader: Device has associated, but no associated display id.
+11-28 09:57:09.226  1947  1977 I Choreographer: Skipped 39 frames!  The application may be doing too much work on its main thread.
+11-28 09:57:09.275  1752  2049 E SurfaceFlinger: ro.sf.lcd_density must be defined as a build property
+11-28 09:57:09.275  1752  2049 E SurfaceFlinger: ro.sf.lcd_density must be defined as a build property
+11-28 09:57:09.271  7670  7670 W RenderThread: type=1400 audit(0.0:25): avc: denied { write } for name="property_service" dev="tmpfs" ino=6973 scontext=u:r:untrusted_app:s0:c148,c256,c512,c768 tcontext=u:object_r:property_socket:s0 tclass=sock_file permissive=0 app=com.example.deviceauth.cred
+11-28 09:57:09.286  7670  7693 D libEGL  : Emulator has host GPU support, qemu.gles is set to 1.
+11-28 09:57:09.287  7670  7693 W libc    : Unable to set property "qemu.gles" to "1": connection failed; errno=13 (Permission denied)
+11-28 09:57:09.290  1947  1977 W InputReader: Device has associated, but no associated display id.
+11-28 09:57:09.290  1947  1977 I chatty  : uid=1000(system) android.anim identical 8 lines
+11-28 09:57:09.290  1947  1977 W InputReader: Device has associated, but no associated display id.
+11-28 09:57:09.293  1734  1734 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 10371072
+11-28 09:57:09.306  7670  7693 D libEGL  : loaded /vendor/lib64/egl/libEGL_emulation.so
+11-28 09:57:09.307  7670  7693 D libEGL  : loaded /vendor/lib64/egl/libGLESv1_CM_emulation.so
+11-28 09:57:09.307  7670  7693 D libEGL  : loaded /vendor/lib64/egl/libGLESv2_emulation.so
+11-28 09:57:09.368  1947  5813 W ActivityManager: Slow operation: 106ms so far, now at getContentProviderImpl: after updateLruProcess
+11-28 09:57:09.368  1947  5813 W ActivityManager: Slow operation: 106ms so far, now at getContentProviderImpl: before updateOomAdj
+11-28 09:57:09.368  1947  5813 W ActivityManager: Slow operation: 106ms so far, now at getContentProviderImpl: after updateOomAdj
+11-28 09:57:09.368  1947  5813 W ActivityManager: Slow operation: 106ms so far, now at getContentProviderImpl: done!
+11-28 09:57:09.411  7670  7670 W deviceauth.cre: Accessing hidden method Landroid/view/Window;->getInsetsController()Landroid/view/WindowInsetsController; (blacklist, linking, denied)
+11-28 09:57:09.523  7670  7670 W deviceauth.cre: Accessing hidden method Landroid/view/WindowInsets$Type;->systemBars()I (blacklist, linking, denied)
+11-28 09:57:09.612  1947  1973 W Looper  : Slow dispatch took 141ms android.fg h=android.os.Handler c=com.android.server.Watchdog$HandlerChecker@4cf5f09 m=0
+11-28 09:57:09.533  7670  7670 W deviceauth.cre: Accessing hidden method Landroid/view/WindowInsets$Type;->systemBars()I (blacklist, linking, denied)
+11-28 09:57:09.852  3146  3520 D EGL_emulation: eglMakeCurrent: 0xd831bb60: ver 3 1 (tinfo 0xd830fe60)
+11-28 09:57:09.855  2645  3262 D EGL_emulation: eglMakeCurrent: 0x71f66fb18740: ver 3 1 (tinfo 0x71f6bb87bbe0)
+11-28 09:57:10.180  7670  7691 D HostConnection: HostConnection::get() New Host Connection established 0x71f6bbe63180, tid 7691
+11-28 09:57:10.194  7670  7691 D HostConnection: HostComposition ext ANDROID_EMU_CHECKSUM_HELPER_v1 ANDROID_EMU_native_sync_v2 ANDROID_EMU_dma_v1 ANDROID_EMU_direct_mem ANDROID_EMU_host_composition_v1 ANDROID_EMU_host_composition_v2 ANDROID_EMU_vulkan ANDROID_EMU_deferred_vulkan_commands ANDROID_EMU_vulkan_null_optional_strings ANDROID_EMU_vulkan_create_resources_with_requirements ANDROID_EMU_YUV_Cache ANDROID_EMU_vulkan_ignored_handles ANDROID_EMU_vulkan_free_memory_sync ANDROID_EMU_vulkan_shader_float16_int8 ANDROID_EMU_vulkan_async_queue_submit ANDROID_EMU_sync_buffer_data ANDROID_EMU_vulkan_async_qsri ANDROID_EMU_hwc_color_transform ANDROID_EMU_hwc_display_power_mode GL_OES_EGL_image_external_essl3 GL_OES_vertex_array_object GL_KHR_texture_compression_astc_ldr ANDROID_EMU_host_side_tracing ANDROID_EMU_gles_max_version_3_1 
+11-28 09:57:10.279  7670  7691 W OpenGLRenderer: Failed to choose config with EGL_SWAP_BEHAVIOR_PRESERVED, retrying without...
+11-28 09:57:10.279  7670  7691 D EGL_emulation: eglCreateContext: 0x71f6bbe63360: maj 3 min 1 rcv 4
+11-28 09:57:10.303  7670  7691 D EGL_emulation: eglMakeCurrent: 0x71f6bbe63360: ver 3 1 (tinfo 0x71f6bbe18dc0)
+11-28 09:57:10.319  7670  7694 I nsh     : js: NSHDEVAUTH available biometric
+11-28 09:57:10.325  7670  7691 E eglCodecCommon: glUtilsParamSize: unknow param 0x000082da
+11-28 09:57:10.325  7670  7691 E eglCodecCommon: glUtilsParamSize: unknow param 0x000082da
+11-28 09:57:10.332  1734  1734 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 10371072
+11-28 09:57:10.334  1608  1608 I hwservicemanager: getTransport: Cannot find entry android.hardware.graphics.mapper@3.0::IMapper/default in either framework or device manifest.
+11-28 09:57:10.334  7670  7691 W Gralloc3: mapper 3.x is not supported
+11-28 09:57:10.335  7670  7691 D HostConnection: createUnique: call
+11-28 09:57:10.336  7670  7691 D HostConnection: HostConnection::get() New Host Connection established 0x71f6bbe63540, tid 7691
+11-28 09:57:10.337  7670  7691 D HostConnection: HostComposition ext ANDROID_EMU_CHECKSUM_HELPER_v1 ANDROID_EMU_native_sync_v2 ANDROID_EMU_dma_v1 ANDROID_EMU_direct_mem ANDROID_EMU_host_composition_v1 ANDROID_EMU_host_composition_v2 ANDROID_EMU_vulkan ANDROID_EMU_deferred_vulkan_commands ANDROID_EMU_vulkan_null_optional_strings ANDROID_EMU_vulkan_create_resources_with_requirements ANDROID_EMU_YUV_Cache ANDROID_EMU_vulkan_ignored_handles ANDROID_EMU_vulkan_free_memory_sync ANDROID_EMU_vulkan_shader_float16_int8 ANDROID_EMU_vulkan_async_queue_submit ANDROID_EMU_sync_buffer_data ANDROID_EMU_vulkan_async_qsri ANDROID_EMU_hwc_color_transform ANDROID_EMU_hwc_display_power_mode GL_OES_EGL_image_external_essl3 GL_OES_vertex_array_object GL_KHR_texture_compression_astc_ldr ANDROID_EMU_host_side_tracing ANDROID_EMU_gles_max_version_3_1 
+11-28 09:57:10.338  7670  7691 D eglCodecCommon: allocate: Ask for block of size 0x1000
+11-28 09:57:10.338  7670  7691 D eglCodecCommon: allocate: ioctl allocate returned offset 0x3ffff8000 size 0x2000
+11-28 09:57:10.342  1734  1734 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 10371072
+11-28 09:57:10.384  7670  7691 D EGL_emulation: eglMakeCurrent: 0x71f6bbe63360: ver 3 1 (tinfo 0x71f6bbe18dc0)
+11-28 09:57:10.384  1734  7467 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 10371072
+11-28 09:57:10.541  7670  7691 I OpenGLRenderer: Davey! duration=710ms; Flags=1, IntendedVsync=129835308728, Vsync=129968642056, OldestInputEvent=9223372036854775807, NewestInputEvent=0, HandleInputStart=129974321683, AnimationStart=129974363883, PerformTraversalsStart=129974409763, DrawStart=130392226103, SyncQueued=130392549813, SyncStart=130433349123, IssueDrawCommandsStart=130437233903, SwapBuffers=130443725433, FrameCompleted=130586641113, DequeueBufferDuration=37000, QueueBufferDuration=6468000, 
+11-28 09:57:10.554  1947  1981 I ActivityTaskManager: Displayed com.example.deviceauth.cred/com.longbridge.nsh.AppActivity: +2s131ms
+11-28 09:57:10.587  7670  7670 W deviceauth.cre: Accessing hidden method Landroid/view/Window;->getInsetsController()Landroid/view/WindowInsetsController; (blacklist, linking, denied)
+11-28 09:57:10.663  1947  1947 D BiometricService: Creating auth session. Modality: 1, cookie: 1891380489
+11-28 09:57:10.587  7670  7670 W deviceauth.cre: Accessing hidden method Landroid/view/Window;->getInsetsController()Landroid/view/WindowInsetsController; (blacklist, linking, denied)
+11-28 09:57:10.682  1842  1842 D FingerprintHal: ----------------> fingerprint_get_auth_id ----------------->
+11-28 09:57:10.682  1842  1842 D FingerprintHal: ----------------> fingerprint_get_auth_id auth id 6b8b4567327b23c6----------------->
+11-28 09:57:10.698  1947  1947 V FingerprintService: startAuthentication(com.example.deviceauth.cred)
+11-28 09:57:10.698  1947  1947 V FingerprintService: Returning cookie: 1891380489
+11-28 09:57:10.743  1947  1947 D BiometricService: Matched cookie: 1891380489, 0 remaining
+11-28 09:57:10.744  1947  1947 V FingerprintService: starting client AuthenticationClientImpl(com.example.deviceauth.cred) cookie: 1891380489/1891380489
+11-28 09:57:10.745  1947  1947 W FingerprintService: client com.example.deviceauth.cred is authenticating...
+11-28 09:57:10.769  2128  2128 D BiometricDialogImpl: showBiometricDialog, type: 1, requireConfirmation: false
+11-28 09:57:10.862  3146  3732 I PBSessionCacheImpl: Deleted sessionId[86678074159] from persistence.
+11-28 09:57:10.864  3146  3386 W SearchServiceCore: Abort, client detached.
+11-28 09:57:10.875  2128  2128 D BiometricDialogImpl: handleShowDialog,  savedState: null mCurrentDialog: com.android.systemui.biometrics.FingerprintDialogView{560c06e V.E...... ......I. 0,0-1080,2274} newDialog: com.android.systemui.biometrics.FingerprintDialogView{44c0e1d V.E...... ......I. 0,0-0,0} type: 1
+11-28 09:57:10.957  1734  7467 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 9826304
+11-28 09:57:11.058  1734  7467 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 9826304
+11-28 09:57:11.101  2128  2351 D EGL_emulation: eglMakeCurrent: 0x71f66fd9a6e0: ver 3 1 (tinfo 0x71f66fe20900)
+11-28 09:57:11.106  1734  7467 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 9826304
+11-28 09:57:11.317  2128  2351 D EGL_emulation: eglMakeCurrent: 0x71f66fd9a6e0: ver 3 1 (tinfo 0x71f66fe20900)
+11-28 09:57:11.657  2128  2351 I chatty  : uid=10115(com.android.systemui) RenderThread identical 2 lines
+11-28 09:57:11.959  2128  2351 D EGL_emulation: eglMakeCurrent: 0x71f66fd9a6e0: ver 3 1 (tinfo 0x71f66fe20900)
+11-28 09:57:12.007  2448  7699 I Vision  : Requesting optional module download of ocr.
+11-28 09:57:12.031  2448  7700 I ChimeraConfigurator: Starting update, reason: 4 urgentFeatures: vision.ocr:-1
+11-28 09:57:12.053  2448  7699 I Vision  : Checking for download completion for 142098 -- ocr
+11-28 09:57:12.094  2128  2351 D EGL_emulation: eglMakeCurrent: 0x71f66fd9a6e0: ver 3 1 (tinfo 0x71f66fe20900)
+11-28 09:57:12.162  2128  2351 I OpenGLRenderer: Davey! duration=754ms; Flags=0, IntendedVsync=131318672736, Vsync=131718672720, OldestInputEvent=9223372036854775807, NewestInputEvent=0, HandleInputStart=131726140853, AnimationStart=131726223383, PerformTraversalsStart=131733315433, DrawStart=132015921303, SyncQueued=132016032593, SyncStart=132150522863, IssueDrawCommandsStart=132150582233, SwapBuffers=132175070323, FrameCompleted=132208147433, DequeueBufferDuration=6306000, QueueBufferDuration=615000, 
+11-28 09:57:12.333  2105  3390 W Conscrypt: Could not set socket write timeout: java.net.SocketException: Socket closed
+11-28 09:57:12.350  2105  3390 W Conscrypt: 	at com.google.android.gms.org.conscrypt.Platform.setSocketWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):2)
+11-28 09:57:12.350  2105  3390 W Conscrypt: 	at com.google.android.gms.org.conscrypt.ConscryptFileDescriptorSocket.setSoWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:57:12.392  2105  3390 W Conscrypt: Could not set socket write timeout: java.net.SocketException: Socket closed
+11-28 09:57:12.392  2105  3390 W Conscrypt: 	at com.google.android.gms.org.conscrypt.Platform.setSocketWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):2)
+11-28 09:57:12.392  2105  3390 W Conscrypt: 	at com.google.android.gms.org.conscrypt.ConscryptFileDescriptorSocket.setSoWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:57:12.559  2128  2351 D EGL_emulation: eglMakeCurrent: 0x71f66fd9a6e0: ver 3 1 (tinfo 0x71f66fe20900)
+11-28 09:57:12.878  7704  7704 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 0 <<<<<<
+11-28 09:57:12.880  7704  7704 I AndroidRuntime: Using default boot image
+11-28 09:57:12.880  7704  7704 I AndroidRuntime: Leaving lock profiling enabled
+11-28 09:57:12.882  7704  7704 I app_process: Core platform API reporting enabled, enforcing=false
+11-28 09:57:13.173  7704  7704 D ICU     : Time zone APEX file found: /apex/com.android.tzdata/etc/icu/icu_tzdata.dat
+11-28 09:57:13.187  7704  7704 W app_process: Unexpected CPU variant for X86 using defaults: x86_64
+11-28 09:57:13.211  7704  7704 I app_process: The ClassLoaderContext is a special shared library.
+11-28 09:57:13.351  7704  7704 I app_process: The ClassLoaderContext is a special shared library.
+11-28 09:57:13.787  7704  7704 W app_process: JNI RegisterNativeMethods: attempt to register 0 native methods for android.media.AudioAttributes
+11-28 09:57:13.805  7704  7704 D AndroidRuntime: Calling main entry com.android.commands.uiautomator.Launcher
+11-28 09:57:13.844  1947  1947 V SettingsProvider: Notifying for 0: content://settings/secure/accessibility_enabled
+11-28 09:57:13.849  2105  3390 I aopq    : Scheduling Phenotype for a PhenotypeSyncImmediately(13, com.google.android.gms) one off with window [1, 2] in seconds [CONTEXT service_id=51 ]
+11-28 09:57:13.911  2594  2594 I PhenotypeUpdate: onReceive() urgent = false
+11-28 09:57:13.983  4703  6892 I Bugle   : BuglePhenotypeBroadcastReceiver.onReceive
+11-28 09:57:14.493  2105  2118 I .gms.persisten: Background young concurrent copying GC freed 92375(4965KB) AllocSpace objects, 7(316KB) LOS objects, 23% free, 11MB/14MB, paused 595us total 293.847ms
+11-28 09:57:14.655  4703  4703 I BugleRcs: RcsAvailability: updating
+11-28 09:57:14.665  4703  7723 I BugleRcs: RcsAvailability: No minimum Cs.apk version is set, not checking Cs.apk version
+11-28 09:57:14.710  4703  7724 I BugleRcs: MCCMNC is NOT RCS enabled
+11-28 09:57:14.710  4703  7724 I BugleRcs: Prod Fi device disabled - Not a Fi device
+11-28 09:57:14.714  4703  7723 I BugleRcs: RcsAvailability: config server url unavailable - Carrier is not RCS enabled
+11-28 09:57:14.966  7704  7704 I AccessibilityNodeInfoDumper: Skipping invisible child: android.view.accessibility.AccessibilityNodeInfo@e2df8; boundsInParent: Rect(0, 0 - 0, 854); boundsInScreen: Rect(0, 1420 - 0, 2274); packageName: com.android.systemui; className: android.view.View; text: null; error: null; maxTextLength: -1; contentDescription: null; tooltipText: null; viewIdResName: com.android.systemui:id/left_space; checkable: false; checked: false; focusable: true; focused: false; selected: false; clickable: true; longClickable: false; contextClickable: false; enabled: true; password: false; scrollable: false; importantForAccessibility: true; visible: false; actions: [AccessibilityAction: ACTION_FOCUS - null, AccessibilityAction: ACTION_SELECT - null, AccessibilityAction: ACTION_CLEAR_SELECTION - null, AccessibilityAction: ACTION_CLICK - null, AccessibilityAction: ACTION_ACCESSIBILITY_FOCUS - null, AccessibilityAction: ACTION_SHOW_ON_SCREEN - null]
+11-28 09:57:14.966  7704  7704 I AccessibilityNodeInfoDumper: Skipping invisible child: android.view.accessibility.AccessibilityNodeInfo@e6286; boundsInParent: Rect(0, 0 - 0, 854); boundsInScreen: Rect(1080, 1420 - 1080, 2274); packageName: com.android.systemui; className: android.view.View; text: null; error: null; maxTextLength: -1; contentDescription: null; tooltipText: null; viewIdResName: com.android.systemui:id/right_space; checkable: false; checked: false; focusable: true; focused: false; selected: false; clickable: true; longClickable: false; contextClickable: false; enabled: true; password: false; scrollable: false; importantForAccessibility: true; visible: false; actions: [AccessibilityAction: ACTION_FOCUS - null, AccessibilityAction: ACTION_SELECT - null, AccessibilityAction: ACTION_CLEAR_SELECTION - null, AccessibilityAction: ACTION_CLICK - null, AccessibilityAction: ACTION_ACCESSIBILITY_FOCUS - null, AccessibilityAction: ACTION_SHOW_ON_SCREEN - null]
+11-28 09:57:14.971  7704  7704 W AccessibilityNodeInfoDumper: Fetch time: 14ms
+11-28 09:57:14.972  1947  2246 W WindowManager: removeWindowToken: Attempted to remove non-existing token: android.os.Binder@db09921
+11-28 09:57:14.981  1947  1947 V SettingsProvider: Notifying for 0: content://settings/secure/accessibility_enabled
+11-28 09:57:15.000  7704  7704 D AndroidRuntime: Shutting down VM
+11-28 09:57:15.414  7727  7727 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 0 <<<<<<
+11-28 09:57:15.415  7727  7727 I AndroidRuntime: Using default boot image
+11-28 09:57:15.415  7727  7727 I AndroidRuntime: Leaving lock profiling enabled
+11-28 09:57:15.416  7727  7727 I app_process: Core platform API reporting enabled, enforcing=false
+11-28 09:57:15.483  7727  7727 D ICU     : Time zone APEX file found: /apex/com.android.tzdata/etc/icu/icu_tzdata.dat
+11-28 09:57:15.485  7727  7727 W app_process: Unexpected CPU variant for X86 using defaults: x86_64
+11-28 09:57:15.489  7727  7727 I app_process: The ClassLoaderContext is a special shared library.
+11-28 09:57:15.613  7727  7727 W app_process: JNI RegisterNativeMethods: attempt to register 0 native methods for android.media.AudioAttributes
+11-28 09:57:15.615  7727  7727 D AndroidRuntime: Calling main entry com.android.commands.input.Input
+11-28 09:57:15.635  7727  7727 D AndroidRuntime: Shutting down VM
+11-28 09:57:15.661  2128  2128 D BiometricDialogImpl: handleHideDialog, userCanceled: false
+11-28 09:57:15.662  1947  1947 V FingerprintService: Stopping client com.example.deviceauth.cred, fromClient: false
+11-28 09:57:15.662  1842  1842 D FingerprintHal: ----------------> fingerprint_cancel ----------------->
+11-28 09:57:15.662  1842  1842 D android.hardware.biometrics.fingerprint@2.1-service: onError(5)
+11-28 09:57:15.663  1947  1947 W FingerprintService: client com.example.deviceauth.cred is no longer authenticating
+11-28 09:57:15.663  1947  1947 V FingerprintService: handleError(client=com.example.deviceauth.cred, error = 5)
+11-28 09:57:15.663  1947  1947 V FingerprintService: Done with client: com.example.deviceauth.cred
+11-28 09:57:15.665  1947  1947 D BiometricService: Error: 5 cookie: 1891380489
+11-28 09:57:15.668  7670  7694 I nsh     : js: NSHDEVAUTH result no
+11-28 09:57:15.702  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 136885 , only wrote 136827
+11-28 09:57:15.737  1709  6489 W audio_hw_generic: Hardware backing HAL too slow, could only write 0 of 661 frames
+11-28 09:57:15.809  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 141548 , only wrote 141454
+11-28 09:57:15.827  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 142251 , only wrote 141454
+11-28 09:57:15.850  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 142455 , only wrote 142115
+11-28 09:57:15.854  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 142317 , only wrote 142115
+11-28 09:57:15.912  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 144645 , only wrote 144098
+11-28 09:57:15.917  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 144346 , only wrote 144098
+11-28 09:57:15.964  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 146153 , only wrote 144759
+11-28 09:57:15.964  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 144768 , only wrote 144759
+11-28 09:57:16.045  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 148311 , only wrote 148064
+11-28 09:57:16.068  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 149106 , only wrote 148725
+11-28 09:57:16.107  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 150435 , only wrote 149386
+11-28 09:57:16.135  1947  1981 E memtrack: Couldn't load memtrack module
+11-28 09:57:16.135  1947  1981 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:57:16.147  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 151144 , only wrote 149386
+11-28 09:57:16.167  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 150285 , only wrote 150047
+11-28 09:57:16.172  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 150249 , only wrote 150047
+11-28 09:57:16.194  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 151027 , only wrote 150708
+11-28 09:57:16.201  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 150987 , only wrote 150708
+11-28 09:57:16.216  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 151403 , only wrote 151369
+11-28 09:57:16.233  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 152117 , only wrote 152030
+11-28 09:57:16.250  1947  1947 W Looper  : Slow dispatch took 106ms main h=com.android.server.AlarmManagerService$AlarmHandler c=android.app.PendingIntent$FinishedDispatcher@b7e3de8 m=0
+11-28 09:57:16.252  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 152872 , only wrote 152691
+11-28 09:57:16.256  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 152865 , only wrote 152691
+11-28 09:57:16.285  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 153945 , only wrote 153352
+11-28 09:57:16.320  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 154882 , only wrote 154674
+11-28 09:57:16.386  1947  3203 W ActivityManager: Slow operation: 63ms so far, now at getContentProviderImpl: after updateOomAdj
+11-28 09:57:16.386  1947  3203 W ActivityManager: Slow operation: 63ms so far, now at getContentProviderImpl: done!
+11-28 09:57:16.391  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 157829 , only wrote 155996
+11-28 09:57:16.469  2128  2351 D EGL_emulation: eglMakeCurrent: 0x71f66fd9a6e0: ver 3 1 (tinfo 0x71f66fe20900)
+11-28 09:57:16.470  2128  2351 D OpenGLRenderer: endAllActiveAnimators on 0x71f66c155c00 (RippleDrawable) with handle 0x71f66fbe69c0
+11-28 09:57:16.471  2128  2128 E FingerprintDialogView: Animation not found, 1 -> 0
+11-28 09:57:16.474  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 159630 , only wrote 159301
+11-28 09:57:16.474  1734  7467 D gralloc_ranchu: gralloc_alloc: Creating ashmem region of size 9826304
+11-28 09:57:16.495  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 160264 , only wrote 159962
+11-28 09:57:16.548  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 162297 , only wrote 161945
+11-28 09:57:16.568  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 162818 , only wrote 162606
+11-28 09:57:16.586  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 163396 , only wrote 163267
+11-28 09:57:16.596  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 163705 , only wrote 163267
+11-28 09:57:16.600  2105  7584 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:57:16.612  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 163970 , only wrote 163928
+11-28 09:57:16.683  2105  7744 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:57:16.729  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 169093 , only wrote 168555
+11-28 09:57:16.729  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 168560 , only wrote 168555
+11-28 09:57:16.748  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 169388 , only wrote 169216
+11-28 09:57:16.829  2105  7622 I LogUtils: [Places]: ?: PlacesBleScanner stop() [CONTEXT service_id=253 ]
+11-28 09:57:16.834  2105  2105 I BeaconBle: Scan : No clients left, canceling alarm. [CONTEXT service_id=111 ]
+11-28 09:57:16.834  2105  2105 I BeaconBle: Scan canceled successfully. [CONTEXT service_id=111 ]
+11-28 09:57:16.845  2105  7622 I PlacesLogger: [PlaceInferenceEngine]: [anon] Changed inference mode: 0 [CONTEXT service_id=253 ]
+11-28 09:57:16.882  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 175117 , only wrote 174504
+11-28 09:57:16.911  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 175799 , only wrote 175165
+11-28 09:57:16.941  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 176471 , only wrote 175165
+11-28 09:57:16.954  2105  3439 W GCoreFlp: No location to return for getLastLocation()
+11-28 09:57:16.958  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 175917 , only wrote 175826
+11-28 09:57:16.959  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 175876 , only wrote 175826
+11-28 09:57:16.976  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 176552 , only wrote 176487
+11-28 09:57:17.028  2105  7746 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:57:17.029  2105  7744 I LogUtils: [Places]: ?: Couldn't find platform key file. [CONTEXT service_id=253 ]
+11-28 09:57:17.133  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 183444 , only wrote 183097
+11-28 09:57:17.134  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 183104 , only wrote 183097
+11-28 09:57:17.147  2105  2105 I GeofencerStateMachine: removeGeofences: removeRequest=RemoveGeofencingRequest[REMOVE_BY_PENDING_INTENT pendingIntent=PendingIntent[creatorPackage=com.google.android.gms], packageName=com.google.android.gms]
+11-28 09:57:17.150  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 183843 , only wrote 183758
+11-28 09:57:17.287  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 189799 , only wrote 189707
+11-28 09:57:17.401  2105  2118 I .gms.persisten: Background concurrent copying GC freed 90858(4503KB) AllocSpace objects, 21(1016KB) LOS objects, 39% free, 9239KB/15MB, paused 515us total 180.193ms
+11-28 09:57:17.408  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 195022 , only wrote 194995
+11-28 09:57:17.490  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 198592 , only wrote 198300
+11-28 09:57:17.498  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 198673 , only wrote 198300
+11-28 09:57:17.532  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 199795 , only wrote 199622
+11-28 09:57:17.595  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 202407 , only wrote 202266
+11-28 09:57:17.778  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 210332 , only wrote 210198
+11-28 09:57:17.778  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 210213 , only wrote 210198
+11-28 09:57:17.801  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 211202 , only wrote 210859
+11-28 09:57:18.026  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 220789 , only wrote 220774
+11-28 09:57:18.043  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 221486 , only wrote 221435
+11-28 09:57:18.139  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 225679 , only wrote 225401
+11-28 09:57:18.221  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 229042 , only wrote 228706
+11-28 09:57:18.296  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 232001 , only wrote 230689
+11-28 09:57:18.297  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 230710 , only wrote 230689
+11-28 09:57:18.319  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 231672 , only wrote 231350
+11-28 09:57:18.382  2105  3417 W Conscrypt: Could not set socket write timeout: java.net.SocketException: Socket closed
+11-28 09:57:18.382  2105  3417 W Conscrypt: 	at com.google.android.gms.org.conscrypt.Platform.setSocketWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):2)
+11-28 09:57:18.382  2105  3417 W Conscrypt: 	at com.google.android.gms.org.conscrypt.ConscryptFileDescriptorSocket.setSoWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:57:18.411  2105  3417 W Conscrypt: Could not set socket write timeout: java.net.SocketException: Socket closed
+11-28 09:57:18.411  2105  3417 W Conscrypt: 	at com.google.android.gms.org.conscrypt.Platform.setSocketWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):2)
+11-28 09:57:18.411  2105  3417 W Conscrypt: 	at com.google.android.gms.org.conscrypt.ConscryptFileDescriptorSocket.setSoWriteTimeout(:com.google.android.gms@202414023@20.24.14 (040800-319035315):0)
+11-28 09:57:18.442  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 236777 , only wrote 236638
+11-28 09:57:18.443  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 236674 , only wrote 236638
+11-28 09:57:18.584  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 242872 , only wrote 242587
+11-28 09:57:18.584  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 242597 , only wrote 242587
+11-28 09:57:18.602  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 243364 , only wrote 243248
+11-28 09:57:18.663  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 245938 , only wrote 245892
+11-28 09:57:18.678  1709  6489 W audio_hw_generic: Not supplying enough data to HAL, expected position 246555 , only wrote 246553
+11-28 09:57:18.858  1709  1874 W audio_hw_generic: Not supplying enough data to HAL, expected position 261988 , only wrote 254485
+11-28 09:57:19.196  2105  3417 I aopq    : Scheduling adaptive one off task with window [14400, 604800] in seconds [CONTEXT service_id=51 ]
+11-28 09:57:19.203  1947  1981 E memtrack: Couldn't load memtrack module
+11-28 09:57:19.203  1947  1981 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:57:19.222  1947  1981 E memtrack: Couldn't load memtrack module
+11-28 09:57:19.222  1947  1981 W android.os.Debug: failed to get memory consumption info: -1
+11-28 09:57:20.791  3146  3386 I WorkerManager: dispose()
+11-28 09:57:20.792  3146  3386 W ThreadPoolDumper: Queue length for executor EventBus is now 11. Perhaps some tasks are too long, or the pool is too small.

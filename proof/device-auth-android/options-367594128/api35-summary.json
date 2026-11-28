@@ -1,0 +1,29 @@
+[
+  {
+    "row": "cred-pin",
+    "app": "cred",
+    "action": "pin",
+    "availability": "biometric",
+    "result": "yes",
+    "crash": false,
+    "expected": "yes"
+  },
+  {
+    "row": "cred-dismiss-back",
+    "app": "cred",
+    "action": "cancel",
+    "availability": "biometric",
+    "result": "cancelled",
+    "crash": false,
+    "expected": "cancelled"
+  },
+  {
+    "row": "match",
+    "app": "bio",
+    "action": "match",
+    "availability": "biometric",
+    "result": "yes",
+    "crash": false,
+    "expected": "yes"
+  }
+]
