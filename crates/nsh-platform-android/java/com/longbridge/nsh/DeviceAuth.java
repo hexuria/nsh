@@ -2,12 +2,9 @@ package com.longbridge.nsh;
 
 import android.app.Activity;
 import android.content.Context;
-import android.content.Intent;
 import android.os.Build;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
 
 /**
  * Device-authentication prompts ({@code nsh_core::element::device_auth}). The first implementation is Android's
@@ -90,10 +87,6 @@ final class DeviceAuth {
             answerOnce(answered, null, null, mounter, id, "notAvailable");
             return;
         }
-        if (allowDeviceCredential && Build.VERSION.SDK_INT == 29 && availabilityUnchecked(context) == 2) {
-            confirmCredential(activity, reason, mounter, id, answered, null, null);
-            return;
-        }
         java.util.concurrent.Executor executor = command -> new Handler(Looper.getMainLooper()).post(command);
         Handler handler = new Handler(Looper.getMainLooper());
         Runnable[] timeout = new Runnable[1];
@@ -108,24 +101,13 @@ final class DeviceAuth {
                 authenticators |= android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL;
             }
             builder.setAllowedAuthenticators(authenticators);
+        } else if (Build.VERSION.SDK_INT == 29 && allowDeviceCredential) {
+            builder.setDeviceCredentialAllowed(true);
         }
-        // API 29's setDeviceCredentialAllowed handoff reports the biometric sheet's
-        // dismissal as a terminal error before the credential result on emulator
-        // builds. Use the same visible flow explicitly: biometric first, then the
-        // negative action opens the platform credential confirmation whose result
-        // this fragment-owned request answers.
-        boolean manualCredential = allowDeviceCredential && Build.VERSION.SDK_INT == 29;
         boolean credentialOffered = allowDeviceCredential && Build.VERSION.SDK_INT >= 29;
-        if (!credentialOffered || manualCredential) {
+        if (!credentialOffered) {
             builder.setNegativeButton("Use PIN", executor,
-                    (dialog, which) -> {
-                        if (manualCredential) {
-                            cancellation.cancel();
-                            confirmCredential(activity, reason, mounter, id, answered, handler, timeout[0]);
-                        } else {
-                            answerOnce(answered, handler, timeout[0], mounter, id, "no");
-                        }
-                    });
+                    (dialog, which) -> answerOnce(answered, handler, timeout[0], mounter, id, "no"));
         }
         android.hardware.biometrics.BiometricPrompt prompt = builder.build();
         if (!credentialOffered) {
@@ -151,10 +133,10 @@ final class DeviceAuth {
                         break;
                     default:
                         // API 29 reports ERROR_CANCELED (and on some builds the hidden
-                        // negative-button error 13) when its sheet closes for the explicit
-                        // credential confirmation. Those are not final answers: the fragment's
-                        // activity result settles the request. Real user cancellation keeps
-                        // ERROR_USER_CANCELED and answers cancelled.
+                        // negative-button error 13) while the system is only moving from the
+                        // biometric sheet to the device-credential screen. Those are not final
+                        // answers: the same callback still receives the credential result. Real
+                        // user cancellation keeps ERROR_USER_CANCELED and answers cancelled.
                         boolean credentialTransition = errorCode
                                 == android.hardware.biometrics.BiometricPrompt.BIOMETRIC_ERROR_CANCELED
                                 || errorCode == 13;
@@ -174,92 +156,6 @@ final class DeviceAuth {
             }
                 });
         if (!credentialOffered) handler.postDelayed(timeout[0], 30_000);
-    }
-
-    private static final String TAG = "nsh-device-auth";
-    private static final String RESULT_FRAGMENT = "nsh-device-auth-results";
-
-    /** One API 29 device-credential confirmation held by {@link CredentialResults}. */
-    private static final class CredentialRequest {
-        final Mounter mounter;
-        final int id;
-        final boolean[] answered;
-        final Handler timeoutHandler;
-        final Runnable timeout;
-
-        CredentialRequest(Mounter mounter, int id, boolean[] answered,
-                Handler timeoutHandler, Runnable timeout) {
-            this.mounter = mounter;
-            this.id = id;
-            this.answered = answered;
-            this.timeoutHandler = timeoutHandler;
-            this.timeout = timeout;
-        }
-    }
-
-    /** Starts credential confirmation and hears its result without the activity forwarding it. */
-    @SuppressWarnings("deprecation")
-    public static final class CredentialResults extends android.app.Fragment {
-        private final android.util.SparseArray<CredentialRequest> pending = new android.util.SparseArray<>();
-        private int next = 0x4d00;
-
-        @Override
-        public void onCreate(Bundle state) {
-            super.onCreate(state);
-            setRetainInstance(true);
-        }
-
-        void start(Intent intent, CredentialRequest request) {
-            int code = next++;
-            if (next > 0x4dff) next = 0x4d00;
-            pending.put(code, request);
-            try {
-                startActivityForResult(intent, code);
-            } catch (RuntimeException e) {
-                Log.w(TAG, "cannot show the device credential prompt", e);
-                pending.remove(code);
-                answerOnce(request.answered, request.timeoutHandler, request.timeout,
-                        request.mounter, request.id, "notAvailable");
-            }
-        }
-
-        @Override
-        public void onActivityResult(int code, int result, Intent data) {
-            CredentialRequest request = pending.get(code);
-            if (request == null) {
-                super.onActivityResult(code, result, data);
-                return;
-            }
-            pending.remove(code);
-            answerOnce(request.answered, request.timeoutHandler, request.timeout,
-                    request.mounter, request.id, result == Activity.RESULT_OK ? "yes" : "cancelled");
-        }
-    }
-
-    private static void confirmCredential(Activity activity, String reason, Mounter mounter, int id,
-            boolean[] answered, Handler timeoutHandler, Runnable timeout) {
-        try {
-            android.app.KeyguardManager keyguard =
-                    (android.app.KeyguardManager) activity.getSystemService(Context.KEYGUARD_SERVICE);
-            Intent intent = keyguard == null ? null
-                    : keyguard.createConfirmDeviceCredentialIntent("Unlock", reason);
-            if (intent == null) {
-                answerOnce(answered, timeoutHandler, timeout, mounter, id, "notAvailable");
-                return;
-            }
-            android.app.FragmentManager manager = activity.getFragmentManager();
-            CredentialResults results = (CredentialResults) manager.findFragmentByTag(RESULT_FRAGMENT);
-            if (results == null) {
-                results = new CredentialResults();
-                manager.beginTransaction().add(results, RESULT_FRAGMENT).commitNow();
-            }
-            results.start(intent, new CredentialRequest(mounter, id, answered, timeoutHandler, timeout));
-        } catch (RuntimeException e) {
-            Log.w(TAG, "cannot show the device credential prompt", e);
-            answerOnce(answered, timeoutHandler, timeout, mounter, id, "notAvailable");
-        } catch (Error e) {
-            answerOnce(answered, timeoutHandler, timeout, mounter, id, "notAvailable");
-        }
     }
 
     private static void answerOnce(boolean[] answered, Handler timeoutHandler, Runnable timeout,
