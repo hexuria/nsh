@@ -15,4 +15,4 @@ Per-API tables are in `apiNN-README.md`; recordings, prompt screenshots and logc
 
 ## Options-object rerun
 
-The rerun rows for commit 3675941284d2c8cf36c12abfee65dd98e369ce64 are under `options-367594128/`: API 29 6/6, API 28 regression 1/1, and API 35 3/3 exact passes. Taffy remains 0.15.0.
+The rerun rows for commit 021543a64216817e5b408204458e8bc089814391 are under `options-367594128/`: API 29 6/6, API 28 regression 1/1, and API 35 3/3 exact passes. Taffy remains 0.15.0.
