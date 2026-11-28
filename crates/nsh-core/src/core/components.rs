@@ -726,6 +726,9 @@ pub(super) struct Components {
         FxHashMap<u32, AnswerSlot<Result<crate::share::ShareOutcome, crate::share::ShareError>>>,
     /// The web sign-in session waiting for its callback, if any.
     auth_session: Option<AuthSession>,
+    /// Device-authentication prompts waiting for the platform, by request.
+    device_auths: FxHashMap<u32, AnswerSlot<crate::element::DeviceAuthResult>>,
+    next_device_auth: u32,
     /// Requests on local paths (`pick_paths`, `open_path`, ...), by
     /// request id: their answers.
     file_requests: FxHashMap<u32, FileAnswer>,
@@ -858,6 +861,8 @@ impl Default for Components {
             next_screen_color: 1,
             shares: FxHashMap::default(),
             auth_session: None,
+            device_auths: FxHashMap::default(),
+            next_device_auth: 1,
             file_requests: FxHashMap::default(),
             next_file_request: 1,
             next_clipboard_read: 1,
@@ -6515,6 +6520,24 @@ impl<M: TextEngine> Core<M> {
                 answer.borrow_mut().deliver(available);
             }
             Action::AuthSession(request, answer) => self.start_auth_session(request, answer),
+            Action::DeviceAuth {
+                reason,
+                allow_device_credential,
+                answer,
+            } => {
+                let id = self.components.next_device_auth;
+                self.components.next_device_auth =
+                    self.components.next_device_auth.wrapping_add(1).max(1);
+                self.components.device_auths.insert(id, answer);
+                let _ = self.apply_op(Op::Command {
+                    id: crate::ROOT_ID,
+                    command: Command::DeviceAuth {
+                        id,
+                        reason,
+                        allow_device_credential,
+                    },
+                });
+            }
             Action::CloseAuthSession => self.close_auth_session(),
             Action::RenderCanvas(request, answer) => self.start_canvas_render(*request, answer),
             Action::FileRequest(request, answer) => {
@@ -7401,6 +7424,17 @@ impl<M: TextEngine> Core<M> {
                     return false;
                 };
                 self.end_auth_session(Some(request), result);
+                true
+            }
+            EventKind::DeviceAuth if id == crate::ROOT_ID => {
+                let Some((request, result)) =
+                    crate::element::device_auth::answer_from_payload(payload)
+                else {
+                    return false;
+                };
+                if let Some(answer) = self.components.device_auths.remove(&request) {
+                    answer.borrow_mut().deliver(result);
+                }
                 true
             }
             EventKind::CanvasImage if id == crate::ROOT_ID => self.answer_canvas_render(payload),

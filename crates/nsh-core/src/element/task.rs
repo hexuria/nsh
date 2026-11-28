@@ -148,6 +148,14 @@ pub(crate) enum Action {
     /// Closes the app's waiting web sign-in session, answering it as
     /// cancelled ([`crate::element::close_auth_session`]).
     CloseAuthSession,
+    /// Shows the device-authentication prompt; its result resolves the slot.
+    DeviceAuth {
+        /// Why the app asks, shown by the system.
+        reason: String,
+        /// Whether the device credential may be offered besides biometrics.
+        allow_device_credential: bool,
+        answer: AnswerSlot<crate::element::DeviceAuthResult>,
+    },
     /// Renders a drawing offscreen into an image
     /// ([`crate::canvas::render`]); the image's bytes, or why not, resolve
     /// the slot.

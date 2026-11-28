@@ -898,6 +898,7 @@ public class NshView extends FrameLayout {
             lifecycle,
             // 24-hour time: the user's setting, else the locale's.
             android.text.format.DateFormat.is24HourFormat(getContext()) ? 1 : 0,
+            DeviceAuth.availability(getContext()),
         }, dark, locale.toLanguageTag(), timeZone,
                 // The user's list (an app's own language first, Android 13's
                 // per-app language included), after the embedding app's own.

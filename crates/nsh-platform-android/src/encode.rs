@@ -778,6 +778,18 @@ pub(crate) fn encode(batch: MountBatch, web_generation: u64) -> Encoded {
                         e.int(61);
                         e.int(id as i32);
                     }
+                    // `DeviceAuth.java`: the request, the reason and whether
+                    // the device credential may be offered.
+                    Command::DeviceAuth {
+                        id,
+                        reason,
+                        allow_device_credential,
+                    } => {
+                        e.int(62);
+                        e.int(id as i32);
+                        e.string(reason);
+                        e.bool(allow_device_credential);
+                    }
                     // Answered by the sink (`host::answer_clipboard_reads`);
                     // images are not written to Android's clipboard.
                     Command::ReadClipboardImage { .. }

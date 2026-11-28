@@ -646,8 +646,9 @@ mod tests {
     #[cfg(feature = "agent")]
     #[test]
     fn snapshots_answer_locally_and_remotely_and_reject_bad_replies() {
-        use crate::agent::{Model, RemoteScene, answer};
         use nsh_dev::protocol::{SceneQuery, TestStep};
+
+        use crate::agent::{Model, RemoteScene, answer};
         let model = Arc::new(Model::default());
         let expected = model.screen(Screen::snapshot);
         assert_eq!(expected.views.len(), 1);

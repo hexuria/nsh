@@ -42,6 +42,7 @@ pub(crate) mod class;
 mod component;
 pub mod description;
 pub mod desktop;
+pub mod device_auth;
 mod element_ref;
 mod engine_context;
 pub(crate) mod env;
@@ -142,6 +143,7 @@ pub use self::{
         HOST_PROPS, Method, MethodSpec, Methods, NoEvent, Param, PropDecode, PropKind, PropSpec,
         Props, Registry, Root, ScrollbarSource, declarations,
     },
+    device_auth::{DeviceAuthKind, DeviceAuthResult, device_auth, device_auth_available},
     element_ref::{
         ComponentRef, ElementRef, ElementTarget, EvaluateOptions, Evaluation, FollowTarget,
     },

@@ -255,6 +255,9 @@ pub(crate) struct Apk<'a> {
     /// (`webview.media`): `RECORD_AUDIO` and `CAMERA` are declared.
     pub(crate) microphone: bool,
     pub(crate) camera: bool,
+    /// The app may ask the user to unlock with biometrics:
+    /// `USE_BIOMETRIC` is declared.
+    pub(crate) biometric: bool,
     /// URL schemes that open the app (nsh.json `schemes`): one
     /// `VIEW` intent filter.
     pub(crate) schemes: &'a [String],
@@ -558,13 +561,20 @@ fn manifest_xml(apk: &Apk<'_>) -> String {
     } else {
         ""
     };
-    let media: String = [(apk.microphone, "RECORD_AUDIO"), (apk.camera, "CAMERA")]
-        .iter()
-        .filter(|(declared, _)| *declared)
-        .map(|(_, name)| {
-            format!("\n    <uses-permission android:name=\"android.permission.{name}\" />")
-        })
-        .collect();
+    let media: String = [
+        (apk.microphone, "RECORD_AUDIO"),
+        (apk.camera, "CAMERA"),
+        (apk.biometric, "USE_BIOMETRIC"),
+    ]
+    .iter()
+    .filter(|(declared, _)| *declared)
+    .map(|(_, name)| {
+        format!(
+            "
+    <uses-permission android:name=\"android.permission.{name}\" />"
+        )
+    })
+    .collect();
     // A link opens the running app (`onNewIntent`), not another activity in
     // the caller's task.
     let launch_mode = if apk.schemes.is_empty() {
@@ -1017,6 +1027,7 @@ mod tests {
             notifications,
             microphone: false,
             camera: false,
+            biometric: false,
             schemes: &[],
             rust,
             dark: false,
@@ -1204,6 +1215,17 @@ mod tests {
         assert!(manifest.contains("android.permission.RECORD_AUDIO"));
         assert!(!manifest.contains("android.permission.CAMERA"));
         assert!(!super::manifest_xml(&apk(false, false)).contains("RECORD_AUDIO"));
+    }
+
+    #[test]
+    fn only_an_app_granted_biometrics_declares_their_permission() {
+        let permission = "android.permission.USE_BIOMETRIC";
+        assert!(!super::manifest_xml(&apk(false, false)).contains(permission));
+        let manifest = super::manifest_xml(&super::Apk {
+            biometric: true,
+            ..apk(false, false)
+        });
+        assert!(manifest.contains(permission), "{manifest}");
     }
 
     #[test]

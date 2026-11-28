@@ -1344,7 +1344,8 @@ extern "system" fn Java_com_longbridge_nsh_Native_resize(
 /// `values`: safe area top, right, bottom, left, keyboard height, keyboard
 /// animation duration, font scale, right to left (1), reduce motion (1),
 /// density, screen reader (1), API level, idiom (0 phone, 1 pad, 3 TV),
-/// app state (0 resumed, 1 paused, 2 stopped), 24-hour time (1).
+/// app state (0 resumed, 1 paused, 2 stopped), 24-hour time (1), device
+/// authentication (0 none, 1 biometric, 2 device credential only).
 /// `locale`: `Locale.getDefault()`'s language tag; `regional`: the format
 /// locale's, with Android 14's regional preferences as its extension.
 #[unsafe(no_mangle)]
@@ -1361,7 +1362,7 @@ extern "system" fn Java_com_longbridge_nsh_Native_environment(
 ) {
     // SAFETY: Java passes its live handle.
     let host = unsafe { host(handle) };
-    let mut v = [0f32; 15];
+    let mut v = [0f32; 16];
     if env.get_float_array_region(&values, 0, &mut v).is_err() {
         return;
     }
@@ -1402,6 +1403,13 @@ extern "system" fn Java_com_longbridge_nsh_Native_environment(
         environment.locale = Locale::parse(&String::from(tag)).unwrap_or_default();
     }
     let locale = environment.locale;
+    if let Some(kind) = v.get(15) {
+        environment.device_auth = match *kind as u8 {
+            1 => nsh_core::element::DeviceAuthKind::Biometric,
+            2 => nsh_core::element::DeviceAuthKind::DeviceCredentialOnly,
+            _ => nsh_core::element::DeviceAuthKind::None,
+        };
+    }
     let settings = &mut environment.locale_settings;
     if let Ok(name) = env.get_string(&time_zone) {
         settings.time_zone = TimeZone::parse(&String::from(name)).unwrap_or_default();
@@ -1994,6 +2002,7 @@ extern "system" fn Java_com_longbridge_nsh_Native_eventMap(
                 "shown" => "shown",
                 "pressed" => "pressed",
                 "reason" => "reason",
+                "result" => "result",
                 "composing" => "composing",
                 "caretX" => "caretX",
                 "caretY" => "caretY",

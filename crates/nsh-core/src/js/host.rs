@@ -1109,6 +1109,7 @@ pub const INTERNAL_EVENTS: &[EventKind] = &[
     EventKind::ScreenColor,
     EventKind::Share,
     EventKind::AuthSession,
+    EventKind::DeviceAuth,
     EventKind::CanvasImage,
     EventKind::FileRequest,
     EventKind::Speech,

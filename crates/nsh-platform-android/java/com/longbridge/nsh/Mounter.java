@@ -2681,6 +2681,14 @@ final class Mounter {
                 // `encode.rs` `Command::CloseAuthSession`: the request the app closed.
                 AuthSession.close(b.getInt());
                 break;
+            case 62: {
+                // `encode.rs` `Command::DeviceAuth`: the request, the reason, whether the device credential may be offered.
+                int request = b.getInt();
+                String reason = (String) objects[b.getInt()];
+                boolean allowDeviceCredential = b.getInt() != 0;
+                DeviceAuth.prompt(context, this, request, reason, allowDeviceCredential);
+                break;
+            }
             case 26: {
                 int request = b.getInt();
                 String url = (String) objects[b.getInt()];

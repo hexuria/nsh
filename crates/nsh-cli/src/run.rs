@@ -864,6 +864,7 @@ pub(crate) fn install_android_host(
                 // The host runs any app: its pages may capture media.
                 microphone: true,
                 camera: true,
+                biometric: true,
                 schemes: &[],
                 rust: false,
                 dark: false,

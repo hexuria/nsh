@@ -207,6 +207,10 @@ pub struct Screen {
     auth_sessions: Vec<nsh_core::auth_session::AuthSessionPage>,
     /// The sign-in sessions to answer.
     auth_session_answers: Vec<u32>,
+    /// Device-authentication prompts, in order: `(id, reason, credential allowed)`.
+    device_auths: Vec<(u32, String, bool)>,
+    /// Those to answer.
+    device_auth_answers: Vec<u32>,
     /// The sign-in session showing: not answered, closed by the app nor
     /// replaced yet.
     auth_session_showing: Option<u32>,
@@ -1077,6 +1081,15 @@ impl Screen {
                 self.auth_session_showing = Some(*id);
             }
             Command::CloseAuthSession(id) => self.auth_session_ended(*id),
+            Command::DeviceAuth {
+                id,
+                reason,
+                allow_device_credential,
+            } => {
+                self.device_auths
+                    .push((*id, reason.clone(), *allow_device_credential));
+                self.device_auth_answers.push(*id);
+            }
             // Recorded, never carried out: a test's machine opens, shows
             // and trashes nothing.
             Command::FileRequest { id, request } => {
@@ -2106,6 +2119,16 @@ impl Screen {
         std::mem::take(&mut self.auth_session_answers)
     }
 
+    /// The device-authentication prompts the app asked for.
+    pub fn device_auths(&self) -> &[(u32, String, bool)] {
+        &self.device_auths
+    }
+
+    /// The device-authentication prompts to answer since the last call.
+    pub(crate) fn take_device_auth_answers(&mut self) -> Vec<u32> {
+        std::mem::take(&mut self.device_auth_answers)
+    }
+
     /// The share requests to answer since the last call.
     pub(crate) fn take_share_answers(&mut self) -> Vec<u32> {
         std::mem::take(&mut self.share_answers)
@@ -2119,6 +2142,12 @@ impl Screen {
     /// The `openUrl` requests to answer since the last call.
     pub(crate) fn take_url_opens(&mut self) -> Vec<(u32, String)> {
         std::mem::take(&mut self.url_opens)
+    }
+
+    /// A device-authentication prompt had no scripted answer.
+    pub(crate) fn unsupported_device_auth(&mut self) {
+        self.unsupported
+            .push("answering a device-authentication prompt");
     }
 
     pub(crate) fn take_unsupported(&mut self) -> Vec<&'static str> {

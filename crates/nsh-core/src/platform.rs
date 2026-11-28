@@ -368,6 +368,8 @@ pub struct Environment {
     /// a session opens the system browser and waits for a link of a scheme
     /// the app claims ([`crate::auth_session`]).
     pub auth_session: bool,
+    /// What the device can unlock with.
+    pub device_auth: crate::element::DeviceAuthKind,
     /// The platform handles file requests ([`crate::Command::FileRequest`]).
     /// Desktops implement the full set; mobile platforms answer the open
     /// dialog and reject operations they do not support. Without it, all
@@ -523,6 +525,7 @@ impl Default for Environment {
             canvas_render: false,
             share: false,
             auth_session: false,
+            device_auth: crate::element::DeviceAuthKind::None,
             file_requests: false,
             speech: false,
             notifications: false,

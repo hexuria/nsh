@@ -287,7 +287,7 @@ pub(super) fn executor() -> Rc<Executor> {
     with_data(|d| d.ambient.executor.clone()).expect("the core sets the executor")
 }
 
-fn act(action: Action) {
+pub(super) fn act(action: Action) {
     executor().act(action);
 }
 
@@ -474,6 +474,13 @@ pub(crate) fn has_tab_bar() -> bool {
     with_data(|d| d.ambient.env.as_ref().map(|e| e.env))
         .expect("the core sets the environment")
         .with_untracked(|e| matches!(e.os, Os::Ios | Os::Android) && e.tab_bar)
+}
+
+/// What the device can unlock with now, without subscribing.
+pub(crate) fn device_auth_available() -> crate::element::DeviceAuthKind {
+    with_data(|d| d.ambient.env.as_ref().map(|e| e.env))
+        .expect("the core sets the environment")
+        .with_untracked(|e| e.device_auth)
 }
 
 /// [`os`] where an engine runs (its thread, while it runs Rust code),
