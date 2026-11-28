@@ -2206,7 +2206,7 @@ impl Headless {
     /// The step `paste(<selector>, <content>)`: the user pastes `content`
     /// into the input `selector` names, as a paste with it on the clipboard
     /// does: the input takes the focus, `onPaste` reports it, then, while
-    /// `pasteBehavior` inserts, its text is inserted at the end (a single
+    /// `pasteBehavior` inserts, its text replaces the selection (a single
     /// line takes line breaks as spaces; within `maxLength`): one edit
     /// (`onChange`), no keys.
     pub fn paste(&mut self, selector: &str, content: &nsh_core::PasteEvent) -> Result<(), String> {
@@ -2234,9 +2234,10 @@ impl Headless {
     }
 
     /// `text` goes into input `id` as the user's edit (a paste, the app's
-    /// `insertText`): at the end, where the caret is here (a single line
-    /// takes line breaks as spaces; within `maxLength`), one `onChange`,
-    /// no keys.
+    /// `insertText`): over the selection, where the caret is here (a single
+    /// line takes line breaks as spaces; within `maxLength`, the replaced
+    /// selection making room), one `onChange`, no keys. The caret collapses
+    /// after the inserted text, as the platform fields leave it.
     pub(crate) fn insert_text(&mut self, id: NodeId, text: &str) {
         let Some(input) = self.screen.input_mut(id) else {
             return;
@@ -2245,14 +2246,24 @@ impl Headless {
             return;
         }
         let mut text = nsh_core::text_edit::pasted(text, input.config.multiline);
+        // The selection is in UTF-16 units, the text indexed in bytes.
+        let selection = input.selection;
+        let text_units = input.text.encode_utf16().count() as u32;
+        let start_units = selection.0.min(selection.1).min(text_units);
+        let end_units = selection.0.max(selection.1).min(text_units);
+        let start = nsh_core::text_edit::utf16_to_byte(&input.text, start_units);
+        let end = nsh_core::text_edit::utf16_to_byte(&input.text, end_units);
         if let Some(max) = input.config.max_length {
-            let room = (max as usize).saturating_sub(char_len(&input.text));
+            let replaced = char_len(&input.text[start..end]);
+            let room = (max as usize).saturating_sub(char_len(&input.text) - replaced);
             text.truncate(clip_chars(&text, room).len());
         }
         if text.is_empty() {
             return;
         }
-        input.text.push_str(&text);
+        input.text.replace_range(start..end, &text);
+        let caret = start_units + text.encode_utf16().count() as u32;
+        input.selection = (caret, caret);
         input.count += 1;
         let payload = EventPayload::Text {
             text: input.text.clone(),
@@ -3862,6 +3873,33 @@ mod tests {
                 .unwrap_err()
                 .starts_with("no input matches `id:none`")
         );
+    }
+
+    #[test]
+    fn paste_replaces_the_selection_and_counts_it_against_max_length() {
+        let mut app = Headless::start(EngineConfig::new(Root::of::<Form>())).unwrap();
+        app.first_render().unwrap();
+        app.type_text("id:name", "abcde").unwrap();
+        app.select("id:name", 1, 4).unwrap();
+        app.paste("id:name", &nsh_core::PasteEvent::new("xyz"))
+            .unwrap();
+        assert_eq!(app.screen().input_text("id:name"), Ok(Some("axyze")));
+        assert_eq!(app.screen().input_selection("id:name"), Ok(Some((4, 4))));
+    }
+
+    #[test]
+    fn paste_after_a_clear_leaves_the_caret_after_it() {
+        let mut app = Headless::start(EngineConfig::new(Root::of::<Form>())).unwrap();
+        app.first_render().unwrap();
+        app.type_text("id:name", "Ada").unwrap();
+        app.clear("id:name").unwrap();
+        app.paste("id:name", &nsh_core::PasteEvent::new("xy"))
+            .unwrap();
+        assert_eq!(app.screen().input_text("id:name"), Ok(Some("xy")));
+        assert_eq!(app.screen().input_selection("id:name"), Ok(Some((2, 2))));
+        app.type_text("id:name", "z").unwrap();
+        assert_eq!(app.screen().input_text("id:name"), Ok(Some("xyz")));
+        assert_eq!(app.screen().input_selection("id:name"), Ok(Some((3, 3))));
     }
 
     /// A chat composer: a multiline input that submits on return, and a
