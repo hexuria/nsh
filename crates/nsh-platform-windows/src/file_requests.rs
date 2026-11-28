@@ -81,7 +81,7 @@ fn dialog_owner(surface: &Surface) -> HWND {
 }
 
 /// Runs `f` in a single-threaded COM apartment of this thread.
-fn with_com<T>(f: impl FnOnce() -> T) -> windows::core::Result<T> {
+pub(crate) fn with_com<T>(f: impl FnOnce() -> T) -> windows::core::Result<T> {
     // SAFETY: COM is initialized for this thread and uninitialized after
     // `f`, which released every interface it made.
     unsafe {
@@ -233,7 +233,7 @@ pub(crate) fn pick_files(surface: &Rc<Surface>, id: u32, request: &FilePickReque
 /// A picked or saved file's name stays out of the shell's recent items (Quick
 /// Access, the app's Jump List): a name can say whose file it is, and the
 /// next person at a shared computer would see it there.
-const NOT_RECENT: FILEOPENDIALOGOPTIONS = FOS_DONTADDTORECENT;
+pub(crate) const NOT_RECENT: FILEOPENDIALOGOPTIONS = FOS_DONTADDTORECENT;
 
 /// The open dialog's options over the dialog's own `base`.
 fn open_options(base: FILEOPENDIALOGOPTIONS, request: &OpenDialog) -> FILEOPENDIALOGOPTIONS {

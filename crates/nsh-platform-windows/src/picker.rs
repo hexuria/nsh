@@ -17,8 +17,9 @@ use windows::{
             CoTaskMemFree, CoUninitialize,
         },
         UI::Shell::{
-            Common::COMDLG_FILTERSPEC, FOS_ALLOWMULTISELECT, FOS_FILEMUSTEXIST,
-            FOS_FORCEFILESYSTEM, FileOpenDialog, IFileOpenDialog, SIGDN_FILESYSPATH,
+            Common::COMDLG_FILTERSPEC, FILEOPENDIALOGOPTIONS, FOS_ALLOWMULTISELECT,
+            FOS_FILEMUSTEXIST, FOS_FORCEFILESYSTEM, FileOpenDialog, IFileOpenDialog,
+            SIGDN_FILESYSPATH,
         },
     },
     core::{HSTRING, PCWSTR},
@@ -49,6 +50,18 @@ pub(crate) fn pick_images(surface: &Rc<Surface>, id: u32, request: PickRequest) 
     }
 }
 
+/// The dialog's options over its own `base`: the picked files exist in the
+/// filesystem, and their names stay out of the shell's recent items, as for
+/// the file dialogs (`file_requests::NOT_RECENT`).
+fn pick_options(base: FILEOPENDIALOGOPTIONS, request: &PickRequest) -> FILEOPENDIALOGOPTIONS {
+    let mut options =
+        base | FOS_FILEMUSTEXIST | FOS_FORCEFILESYSTEM | crate::file_requests::NOT_RECENT;
+    if request.multiple() {
+        options |= FOS_ALLOWMULTISELECT;
+    }
+    options
+}
+
 /// The paths picked in the dialog; none when it was cancelled.
 fn open(owner: HWND, request: &PickRequest) -> windows::core::Result<Vec<PathBuf>> {
     // SAFETY: COM initialized for this thread, which owns the dialog until
@@ -58,11 +71,7 @@ fn open(owner: HWND, request: &PickRequest) -> windows::core::Result<Vec<PathBuf
         let result = (|| {
             let dialog: IFileOpenDialog =
                 CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER)?;
-            let mut options = dialog.GetOptions()? | FOS_FILEMUSTEXIST | FOS_FORCEFILESYSTEM;
-            if request.multiple() {
-                options |= FOS_ALLOWMULTISELECT;
-            }
-            dialog.SetOptions(options)?;
+            dialog.SetOptions(pick_options(dialog.GetOptions()?, request))?;
             // No label of NSH's own: the filter shows its patterns.
             let pattern = nsh_core::picker::dialog_extensions(request)
                 .iter()
@@ -93,5 +102,44 @@ fn open(owner: HWND, request: &PickRequest) -> windows::core::Result<Vec<PathBuf
         })();
         CoUninitialize();
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use windows::Win32::UI::Shell::FOS_DONTADDTORECENT;
+
+    /// The image picker's real dialog keeps the recent-items flag after
+    /// `SetOptions` (read back with `GetOptions`), for one image and for
+    /// several, which alone carry the multiselect flag.
+    #[test]
+    fn the_image_picker_adds_no_file_to_recent_items() {
+        crate::file_requests::with_com(|| {
+            // SAFETY: COM calls on a dialog this thread creates and drops; it is never shown.
+            unsafe {
+                let dialog: IFileOpenDialog =
+                    CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER).unwrap();
+                let base = dialog.GetOptions().unwrap();
+                for request in [PickRequest::new(false, 1), PickRequest::new(true, 0)] {
+                    dialog.SetOptions(pick_options(base, &request)).unwrap();
+                    let read = dialog.GetOptions().unwrap();
+                    assert!(
+                        read.contains(FOS_DONTADDTORECENT),
+                        "picker {request:?}: {read:?}"
+                    );
+                    assert!(
+                        read.contains(FOS_FORCEFILESYSTEM),
+                        "picker {request:?}: {read:?}"
+                    );
+                    assert_eq!(
+                        read.contains(FOS_ALLOWMULTISELECT),
+                        request.multiple(),
+                        "picker {request:?}: {read:?}"
+                    );
+                }
+            }
+        })
+        .unwrap();
     }
 }
