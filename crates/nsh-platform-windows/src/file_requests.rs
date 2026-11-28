@@ -1,6 +1,6 @@
 //! Local paths ([`nsh_core::file_dialog`]): the shell's file dialogs
 //! (`IFileOpenDialog`, with `FOS_PICKFOLDERS` for folders, and
-//! `IFileSaveDialog`) owned by the surface's window, opening a file in its
+//! `IFileSaveDialog`, both with `FOS_DONTADDTORECENT`) owned by the surface's window, opening a file in its
 //! app (`ShellExecuteW`), showing it selected in File Explorer
 //! (`SHOpenFolderAndSelectItems`) and the Recycle Bin (`IFileOperation`
 //! with `FOFX_RECYCLEONDELETE`). Each request runs on a thread of its own
@@ -26,12 +26,13 @@ use windows::{
         },
         UI::{
             Shell::{
-                Common::COMDLG_FILTERSPEC, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI,
-                FOF_SILENT, FOFX_RECYCLEONDELETE, FOS_ALLOWMULTISELECT, FOS_FILEMUSTEXIST,
-                FOS_FORCEFILESYSTEM, FOS_PICKFOLDERS, FileOpenDialog, FileOperation,
-                FileSaveDialog, IFileDialog, IFileOpenDialog, IFileOperation, IFileSaveDialog,
-                ILCreateFromPathW, ILFree, IShellItem, SHCreateItemFromParsingName,
-                SHOpenFolderAndSelectItems, SIGDN_FILESYSPATH, ShellExecuteW,
+                Common::COMDLG_FILTERSPEC, FILEOPENDIALOGOPTIONS, FOF_ALLOWUNDO,
+                FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FOFX_RECYCLEONDELETE,
+                FOS_ALLOWMULTISELECT, FOS_DONTADDTORECENT, FOS_FILEMUSTEXIST, FOS_FORCEFILESYSTEM,
+                FOS_PICKFOLDERS, FileOpenDialog, FileOperation, FileSaveDialog, IFileDialog,
+                IFileOpenDialog, IFileOperation, IFileSaveDialog, ILCreateFromPathW, ILFree,
+                IShellItem, SHCreateItemFromParsingName, SHOpenFolderAndSelectItems,
+                SIGDN_FILESYSPATH, ShellExecuteW,
             },
             WindowsAndMessaging::SW_SHOWNORMAL,
         },
@@ -229,6 +230,30 @@ pub(crate) fn pick_files(surface: &Rc<Surface>, id: u32, request: &FilePickReque
     }
 }
 
+/// A picked or saved file's name stays out of the shell's recent items (Quick
+/// Access, the app's Jump List): a name can say whose file it is, and the
+/// next person at a shared computer would see it there.
+const NOT_RECENT: FILEOPENDIALOGOPTIONS = FOS_DONTADDTORECENT;
+
+/// The open dialog's options over the dialog's own `base`.
+fn open_options(base: FILEOPENDIALOGOPTIONS, request: &OpenDialog) -> FILEOPENDIALOGOPTIONS {
+    let mut options = base | FOS_FORCEFILESYSTEM | NOT_RECENT;
+    options |= if request.picks_files() {
+        FOS_FILEMUSTEXIST
+    } else {
+        FOS_PICKFOLDERS
+    };
+    if request.multiple {
+        options |= FOS_ALLOWMULTISELECT;
+    }
+    options
+}
+
+/// The save dialog's options over the dialog's own `base`.
+fn save_options(base: FILEOPENDIALOGOPTIONS) -> FILEOPENDIALOGOPTIONS {
+    base | FOS_FORCEFILESYSTEM | NOT_RECENT
+}
+
 /// The paths picked in the dialog; none when it was cancelled. The
 /// shell's dialog picks files or folders, not both: files and folders pick
 /// files.
@@ -237,17 +262,8 @@ fn pick_paths(owner: HWND, request: &OpenDialog) -> windows::core::Result<Vec<Pa
     unsafe {
         let dialog: IFileOpenDialog =
             CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER)?;
-        let mut options = dialog.GetOptions()? | FOS_FORCEFILESYSTEM;
+        dialog.SetOptions(open_options(dialog.GetOptions()?, request))?;
         let folders = !request.picks_files();
-        options |= if folders {
-            FOS_PICKFOLDERS
-        } else {
-            FOS_FILEMUSTEXIST
-        };
-        if request.multiple {
-            options |= FOS_ALLOWMULTISELECT;
-        }
-        dialog.SetOptions(options)?;
         let filters: &[FileFilter] = if folders { &[] } else { &request.filters };
         configure(
             &dialog,
@@ -275,7 +291,7 @@ fn pick_save_path(owner: HWND, request: &SaveDialog) -> windows::core::Result<Op
     unsafe {
         let dialog: IFileSaveDialog =
             CoCreateInstance(&FileSaveDialog, None, CLSCTX_INPROC_SERVER)?;
-        dialog.SetOptions(dialog.GetOptions()? | FOS_FORCEFILESYSTEM)?;
+        dialog.SetOptions(save_options(dialog.GetOptions()?))?;
         if let Some(name) = &request.file_name {
             dialog.SetFileName(&HSTRING::from(name.as_str()))?;
         }
@@ -349,4 +365,47 @@ fn trash(path: &Path) -> windows::core::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Both real shell dialogs keep the recent-items flag after `SetOptions`
+    /// (read back with `GetOptions`), for files, folders and several files.
+    #[test]
+    fn no_dialog_adds_its_file_to_recent_items() {
+        with_com(|| {
+            // SAFETY: COM calls on dialogs this thread creates and drops; none is shown.
+            unsafe {
+                let open: IFileOpenDialog =
+                    CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER).unwrap();
+                let base = open.GetOptions().unwrap();
+                for request in [
+                    OpenDialog::files(),
+                    OpenDialog::files().multiple(true),
+                    OpenDialog::folders(),
+                ] {
+                    open.SetOptions(open_options(base, &request)).unwrap();
+                    let read = open.GetOptions().unwrap();
+                    assert!(
+                        read.contains(FOS_DONTADDTORECENT),
+                        "open {request:?}: {read:?}"
+                    );
+                    assert!(
+                        read.contains(FOS_FORCEFILESYSTEM),
+                        "open {request:?}: {read:?}"
+                    );
+                }
+                let save: IFileSaveDialog =
+                    CoCreateInstance(&FileSaveDialog, None, CLSCTX_INPROC_SERVER).unwrap();
+                save.SetOptions(save_options(save.GetOptions().unwrap()))
+                    .unwrap();
+                let read = save.GetOptions().unwrap();
+                assert!(read.contains(FOS_DONTADDTORECENT), "save: {read:?}");
+                assert!(read.contains(FOS_FORCEFILESYSTEM), "save: {read:?}");
+            }
+        })
+        .unwrap();
+    }
 }
