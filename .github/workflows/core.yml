@@ -32,7 +32,8 @@ on:
       - "examples/gallery/**"
       - "examples/bench/**"
       - "tests/compat/cases/layout/fonts/**"
-      - "crates/nsh-platform-android/java/com/longbridge/nsh/Native.java"
+      - "crates/nsh-platform-android/java/**"
+      - "crates/nsh-platform-android/tests/java/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -91,6 +92,12 @@ jobs:
       - name: Install clang
         run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -102,6 +109,18 @@ jobs:
         uses: ./.github/actions/cargo
         with:
           cache: core
+
+      # The platform Android runtime is Java inside an Android view tree, so it
+      # has no JVM unit harness upstream. Pure input/layout decisions do have
+      # one: compile only those classes and run their main-method assertions.
+      - name: Test pure Android Java decisions
+        shell: bash
+        run: |
+          mkdir -p target/java-tests
+          javac -d target/java-tests \
+            crates/nsh-platform-android/java/com/longbridge/nsh/Composition.java \
+            crates/nsh-platform-android/tests/java/com/longbridge/nsh/CompositionTest.java
+          java -cp target/java-tests com.longbridge.nsh.CompositionTest
 
       - name: Clippy
         run: cargo clippy --all-targets $PACKAGES -- -D warnings
