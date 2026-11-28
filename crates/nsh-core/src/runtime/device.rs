@@ -94,10 +94,11 @@ impl Device {
         options: Option<DeviceAuthOptions>,
     ) -> Later<DeviceAuthResult> {
         Later::new(async move {
-            let mut rust = crate::prelude::DeviceAuthOptions::default();
-            rust.allow_device_credential = options
-                .and_then(|options| options.allow_device_credential)
-                .unwrap_or(false);
+            let rust = crate::prelude::DeviceAuthOptions {
+                allow_device_credential: options
+                    .and_then(|options| options.allow_device_credential)
+                    .unwrap_or(false),
+            };
             Ok::<_, JsError>(crate::prelude::device_auth(&reason, rust).await.into())
         })
     }
